@@ -4,13 +4,19 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-actions";
+import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
+import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
 
 export async function getPollingUnits(tenantId: string, filters?: { lga?: string; ward?: string; search?: string }) {
   const supabase = await createClient();
   let q = supabase.from("polling_units").select("*").eq("tenant_id", tenantId).order("lga").order("ward").order("name");
   if (filters?.lga) q = q.eq("lga", filters.lga);
   if (filters?.ward) q = q.eq("ward", filters.ward);
-  if (filters?.search) q = q.or(`code.ilike.%${filters.search}%,name.ilike.%${filters.search}%`);
+  if (filters?.search) {
+    q = q.or(
+      `code.ilike.%${filters.search}%,name.ilike.%${filters.search}%,pu_code.ilike.%${filters.search}%,ward.ilike.%${filters.search}%,lga.ilike.%${filters.search}%`
+    );
+  }
   const { data } = await q;
   return data ?? [];
 }
@@ -56,6 +62,10 @@ export async function createPollingUnit(formData: FormData) {
     ward: formData.get("ward") as string,
     lga: formData.get("lga") as string,
     state: (formData.get("state") as string) || "Edo",
+    state_code: (formData.get("state_code") as string) || null,
+    lg_code: (formData.get("lg_code") as string) || null,
+    ward_code: (formData.get("ward_code") as string) || null,
+    pu_code: (formData.get("pu_code") as string) || null,
     registered_voters: formData.get("registered_voters") ? Number(formData.get("registered_voters")) : 0,
     latitude: lat,
     longitude: lng,
@@ -86,6 +96,10 @@ export async function updatePollingUnit(id: string, formData: FormData) {
       ward: formData.get("ward"),
       lga: formData.get("lga"),
       state: formData.get("state") || "Edo",
+      state_code: formData.get("state_code") || null,
+      lg_code: formData.get("lg_code") || null,
+      ward_code: formData.get("ward_code") || null,
+      pu_code: formData.get("pu_code") || null,
       registered_voters: formData.get("registered_voters") ? Number(formData.get("registered_voters")) : 0,
       latitude: lat,
       longitude: lng,
@@ -124,38 +138,9 @@ export async function getCampaignLocations(tenantId: string) {
 export async function importPollingUnitsCsv(csvText: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const lines = csvText.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith("#"));
-  const header = lines[0]?.split(",").map((h) => h.trim().toLowerCase()) ?? [];
+  const rows = parsePollingUnitsCsv(csvText);
   const supabase = await createClient();
-  let imported = 0;
-  for (const line of lines.slice(1)) {
-    const vals = line.split(",");
-    const row: Record<string, string> = {};
-    header.forEach((h, i) => {
-      row[h] = (vals[i] ?? "").trim();
-    });
-    if (!row.code || !row.name) continue;
-    const lat = row.latitude ? parseFloat(row.latitude) : null;
-    const lng = row.longitude ? parseFloat(row.longitude) : null;
-    const { error } = await supabase.from("polling_units").upsert(
-      {
-        tenant_id: user.profile.tenant_id,
-        code: row.code,
-        name: row.name,
-        ward: row.ward || "",
-        lga: row.lga || "",
-        state: "Edo",
-        registered_voters: row.registered_voters ? parseInt(row.registered_voters, 10) : 0,
-        latitude: lat,
-        longitude: lng,
-        address: row.address || null,
-        geocode_status: lat && lng ? "done" : "pending",
-        risk_level: "low",
-      },
-      { onConflict: "tenant_id,code" }
-    );
-    if (!error) imported++;
-  }
+  const { imported } = await upsertPollingUnitRows(supabase, user.profile.tenant_id, rows);
   revalidatePath("/polling-units");
   revalidatePath("/maps");
   return { success: true, imported };

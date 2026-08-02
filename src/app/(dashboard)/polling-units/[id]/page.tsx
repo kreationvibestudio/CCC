@@ -40,9 +40,14 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
           <form action={saveAction} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1"><Label htmlFor="code">PU Code</Label><Input id="code" name="code" defaultValue={pu.code as string} required /></div>
-              <div className="space-y-1"><Label htmlFor="name">Name</Label><Input id="name" name="name" defaultValue={pu.name as string} required /></div>
-              <div className="space-y-1"><Label htmlFor="ward">Ward</Label><Input id="ward" name="ward" defaultValue={pu.ward as string} /></div>
-              <div className="space-y-1"><Label htmlFor="lga">LGA</Label><Input id="lga" name="lga" defaultValue={pu.lga as string} /></div>
+              <div className="space-y-1"><Label htmlFor="pu_code">PU code (INEC)</Label><Input id="pu_code" name="pu_code" defaultValue={(pu.pu_code as string) ?? ""} /></div>
+              <div className="space-y-1"><Label htmlFor="name">Location</Label><Input id="name" name="name" defaultValue={pu.name as string} required /></div>
+              <div className="space-y-1"><Label htmlFor="state">State</Label><Input id="state" name="state" defaultValue={(pu.state as string) ?? "Edo"} /></div>
+              <div className="space-y-1"><Label htmlFor="state_code">State code</Label><Input id="state_code" name="state_code" defaultValue={(pu.state_code as string) ?? ""} /></div>
+              <div className="space-y-1"><Label htmlFor="lg_code">LGA code</Label><Input id="lg_code" name="lg_code" defaultValue={(pu.lg_code as string) ?? ""} /></div>
+              <div className="space-y-1"><Label htmlFor="ward_code">Ward code</Label><Input id="ward_code" name="ward_code" defaultValue={(pu.ward_code as string) ?? ""} /></div>
+              <div className="space-y-1"><Label htmlFor="ward">Ward (ward_des)</Label><Input id="ward" name="ward" defaultValue={pu.ward as string} /></div>
+              <div className="space-y-1"><Label htmlFor="lga">LGA (lg_des)</Label><Input id="lga" name="lga" defaultValue={pu.lga as string} /></div>
               <div className="space-y-1"><Label htmlFor="registered_voters">Registered voters</Label><Input id="registered_voters" name="registered_voters" type="number" defaultValue={String(pu.registered_voters ?? 0)} /></div>
               <div className="space-y-1">
                 <Label htmlFor="risk_level">Risk</Label>

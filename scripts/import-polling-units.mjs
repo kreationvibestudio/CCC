@@ -3,8 +3,7 @@
  * Import INEC polling units from CSV into Supabase.
  * Usage: node scripts/import-polling-units.mjs [csv-path] [--tenant-id=UUID]
  *
- * Requires: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY in env
- * CSV columns: code, name, ward, lga, registered_voters, latitude, longitude, address
+ * INEC columns: state, lg, ward, state_code, lg_code, ward_code, pu_code, code, location, ward_des, lg_des
  */
 
 import { readFileSync, existsSync } from "fs";
@@ -18,17 +17,75 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_CSV = join(ROOT, "supabase/data/edo-esan-polling-units.csv");
 const DEFAULT_TENANT = "a0000000-0000-0000-0000-000000000001";
 
+function parseCsvLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  result.push(current.trim());
+  return result.map((v) => v.replace(/^"|"$/g, ""));
+}
+
+function normalizeRow(raw) {
+  const state = raw.state?.trim() || "Edo";
+  const stateCode = raw.state_code?.trim() || null;
+  const lgCode = raw.lg_code?.trim() || raw.lg?.trim() || null;
+  const wardCode = raw.ward_code?.trim() || null;
+  const puCode = raw.pu_code?.trim() || null;
+
+  let code = raw.code?.trim();
+  if (!code && stateCode && lgCode && wardCode && puCode) {
+    code = `${stateCode}/${lgCode}/${wardCode}/${puCode}`;
+  }
+  if (!code) return null;
+
+  const location = raw.location?.trim() || raw.name?.trim() || code;
+  return {
+    tenant_id: null,
+    code,
+    name: location,
+    ward: raw.ward_des?.trim() || raw.ward?.trim() || "",
+    lga: raw.lg_des?.trim() || raw.lga?.trim() || raw.lg?.trim() || "",
+    state,
+    state_code: stateCode,
+    lg_code: lgCode,
+    ward_code: wardCode || raw.ward?.trim() || null,
+    pu_code: puCode,
+    registered_voters: raw.registered_voters ? parseInt(raw.registered_voters, 10) : 0,
+    latitude: raw.latitude ? parseFloat(raw.latitude) : null,
+    longitude: raw.longitude ? parseFloat(raw.longitude) : null,
+    address: raw.address?.trim() || location,
+    geocode_status: raw.latitude && raw.longitude ? "done" : "pending",
+    risk_level: "low",
+  };
+}
+
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith("#"));
-  const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
-  return lines.slice(1).map((line) => {
-    const vals = line.split(",");
-    const row = {};
+  const header = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const rows = [];
+  for (const line of lines.slice(1)) {
+    const vals = parseCsvLine(line);
+    const raw = {};
     header.forEach((h, i) => {
-      row[h] = (vals[i] ?? "").trim();
+      raw[h] = (vals[i] ?? "").trim();
     });
-    return row;
-  });
+    const row = normalizeRow(raw);
+    if (row) rows.push(row);
+  }
+  return rows;
 }
 
 async function main() {
@@ -56,23 +113,7 @@ async function main() {
   let fail = 0;
 
   for (const row of rows) {
-    const lat = row.latitude ? parseFloat(row.latitude) : null;
-    const lng = row.longitude ? parseFloat(row.longitude) : null;
-    const body = {
-      tenant_id: tenantId,
-      code: row.code,
-      name: row.name,
-      ward: row.ward,
-      lga: row.lga,
-      state: "Edo",
-      registered_voters: row.registered_voters ? parseInt(row.registered_voters, 10) : 0,
-      latitude: lat,
-      longitude: lng,
-      address: row.address || null,
-      geocode_status: lat && lng ? "done" : "pending",
-      risk_level: "low",
-    };
-
+    const body = { ...row, tenant_id: tenantId };
     const res = await fetch(`${url}/rest/v1/polling_units?on_conflict=tenant_id,code`, {
       method: "POST",
       headers: {

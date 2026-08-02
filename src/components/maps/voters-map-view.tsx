@@ -20,6 +20,7 @@ type PU = {
   id: string;
   name: string;
   code: string;
+  pu_code?: string | null;
   ward: string;
   lga: string;
   state: string;
@@ -58,7 +59,13 @@ export function VotersMapView({ units, lgas }: { units: PU[]; lgas: string[] }) 
     return units.filter((u) => {
       if (lga && u.lga !== lga) return false;
       if (ward && u.ward !== ward) return false;
-      if (q && !u.code.toLowerCase().includes(q) && !u.name.toLowerCase().includes(q) && !u.ward.toLowerCase().includes(q))
+      if (
+        q &&
+        !u.code.toLowerCase().includes(q) &&
+        !(u.pu_code ?? "").toLowerCase().includes(q) &&
+        !u.name.toLowerCase().includes(q) &&
+        !u.ward.toLowerCase().includes(q)
+      )
         return false;
       return u.latitude && u.longitude;
     });

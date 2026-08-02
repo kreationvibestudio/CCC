@@ -57,13 +57,14 @@ Login at http://localhost:3000/login with:
 - `admin@demo.campaign.ng`
 - `DemoPassword123!`
 
-## Step 7 — Polling unit migration (Edo/Esan)
+## Step 7 — Polling unit migrations (Edo/Esan)
 
 1. New SQL query in SQL Editor
-2. Copy **all** of `supabase/migrations/20250201000000_polling_units_geocode.sql`
-3. Paste → **Run**
+2. Run **both** migrations in order:
+   - `supabase/migrations/20250201000000_polling_units_geocode.sql`
+   - `supabase/migrations/20250202000000_polling_units_inec_fields.sql`
 
-This adds `geocode_status`, indexes, and `campaign_locations`.
+This adds `geocode_status`, INEC code columns (`state_code`, `lg_code`, `ward_code`, `pu_code`), indexes, and `campaign_locations`.
 
 ## Step 8 — Import Edo/Esan polling units
 

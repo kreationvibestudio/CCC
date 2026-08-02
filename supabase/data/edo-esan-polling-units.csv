@@ -1,16 +1,14 @@
-code,name,ward,lga,registered_voters,latitude,longitude,address
-ED/ESN/01/001,Uromi Town Hall PU 001,Uromi I,Esan North-East,892,6.7102,6.3301,Uromi Town Hall Esan North-East Edo
-ED/ESN/01/002,Uromi Market Square PU 002,Uromi I,Esan North-East,756,6.7088,6.3285,Uromi Market Esan North-East Edo
-ED/ESN/02/001,Irrua General Hospital PU 001,Irrua,Irrua Esan North-East,1024,6.7456,6.2234,Irrua General Hospital Edo
-ED/ESN/02/002,Irrua Grammar School PU 002,Irrua,Irrua Esan North-East,678,6.7441,6.2210,Irrua Grammar School Edo
-ED/ESN/03/001,Ewu Primary School PU 001,Ewu,Ewu Esan North-East,534,6.6890,6.4123,Ewu Primary School Edo
-ED/ESN/04/001,Ubiaja Community Hall PU 001,Ubiaja,Ubiaja Esan North-East,445,6.5123,6.3890,Ubiaja Community Hall Edo
-ED/ESS/01/001,Ugboha Town Hall PU 001,Ugboha,Ugboha Esan South-East,623,6.4567,6.2345,Ugboha Town Hall Edo
-ED/ESS/01/002,Ugboha Market PU 002,Ugboha,Ugboha Esan South-East,512,6.4550,6.2320,Ugboha Market Edo
-ED/ESS/02/001,Ewohimi Central School PU 001,Ewohimi,Ewohimi Esan South-East,789,6.4234,6.1789,Ewohimi Central School Edo
-ED/ESS/02/002,Ewohimi Health Centre PU 002,Ewohimi,Ewohimi Esan South-East,567,6.4220,6.1775,Ewohimi Health Centre Edo
-ED/ESS/03/001,Opoji Community Hall PU 001,Opoji,Opoji Esan South-East,434,6.3890,6.1456,Opoji Community Hall Edo
-ED/ESS/04/001,Illushi Waterfront PU 001,Illushi,Illushi Esan South-East,398,6.3012,6.5678,Illushi Waterfront Edo
-ED/ESS/05/001,Ifeku Island PU 001,Ifeku,Ifeku Esan South-East,276,6.2789,6.6012,Ifeku Island Edo
-ED/ESN/05/001,Opoji Esan North PU 001,Opoji North,Esan North-East,345,6.5012,6.3789,Opoji North Edo
-ED/ESN/06/001,Emuhu Primary School PU 001,Emuhu,Emuhu Esan North-East,412,6.6234,6.3567,Emuhu Primary School Edo
+state,lg,ward,state_code,lg_code,ward_code,pu_code,code,location,ward_des,lg_des
+EDO,12,01,12,04,01,001,12/04/01/001,Uromi Town Hall,Uromi I,Esan North-East
+EDO,12,01,12,04,01,002,12/04/01/002,Uromi Market Square,Uromi I,Esan North-East
+EDO,12,02,12,04,02,001,12/04/02/001,Irrua General Hospital,Irrua,Esan North-East
+EDO,12,02,12,04,02,002,12/04/02/002,Irrua Grammar School,Irrua,Esan North-East
+EDO,12,03,12,04,03,001,12/04/03/001,Ewu Primary School,Ewu,Esan North-East
+EDO,12,04,12,04,04,001,12/04/04/001,Ubiaja Community Hall,Ubiaja,Esan North-East
+EDO,12,05,12,05,01,001,12/05/01/001,Ugboha Town Hall,Ugboha,Esan South-East
+EDO,12,05,12,05,01,002,12/05/01/002,Ugboha Market,Ugboha,Esan South-East
+EDO,12,06,12,05,02,001,12/05/02/001,Ewohimi Central School,Ewohimi,Esan South-East
+EDO,12,06,12,05,02,002,12/05/02/002,Ewohimi Health Centre,Ewohimi,Esan South-East
+EDO,12,07,12,05,03,001,12/05/03/001,Opoji Community Hall,Opoji,Esan South-East
+EDO,12,08,12,05,04,001,12/05/04/001,Illushi Waterfront,Illushi,Esan South-East
+EDO,12,09,12,05,05,001,12/05/05/001,Ifeku Island,Ifeku,Esan South-East

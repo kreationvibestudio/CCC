@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { ExternalLink, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
+import { importPollingUnitsClient } from "@/lib/polling-units/import-client";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
   ssr: false,
@@ -23,9 +25,12 @@ type PU = {
   id: string;
   name: string;
   code: string;
+  pu_code?: string | null;
   ward: string;
   lga: string;
   state: string;
+  ward_code?: string | null;
+  lg_code?: string | null;
   registered_voters: number | null;
   latitude: number | null;
   longitude: number | null;
@@ -35,11 +40,20 @@ type PU = {
   geocode_status?: string | null;
 };
 
-export function PollingUnitsView({ units, lgas }: { units: PU[]; lgas: string[] }) {
+export function PollingUnitsView({
+  units,
+  lgas,
+  tenantId,
+}: {
+  units: PU[];
+  lgas: string[];
+  tenantId: string;
+}) {
   const router = useRouter();
   const [lga, setLga] = useState("");
   const [ward, setWard] = useState("");
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState("");
 
   const wards = useMemo(() => {
     const src = lga ? units.filter((u) => u.lga === lga) : units;
@@ -60,21 +74,32 @@ export function PollingUnitsView({ units, lgas }: { units: PU[]; lgas: string[] 
     const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
+    setImportProgress("");
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/polling-units/import", { method: "POST", body: formData });
-      const result = await res.json();
-      if (!res.ok || result.error) {
-        toast.error(result.error ?? "Import failed");
-      } else {
-        toast.success(`Imported ${result.imported} polling units`);
-        router.refresh();
+      const rows = parsePollingUnitsCsv(await file.text());
+      if (rows.length === 0) {
+        toast.error("No valid rows found in CSV");
+        return;
       }
+
+      const { imported, failed } = await importPollingUnitsClient(
+        tenantId,
+        rows,
+        (done, total) => setImportProgress(`${done}/${total}`)
+      );
+
+      if (imported === 0 && failed > 0) {
+        toast.error(`Import failed — ${failed} rows rejected. Check database migration is applied.`);
+        return;
+      }
+
+      toast.success(`Imported ${imported} polling units${failed ? ` (${failed} failed)` : ""}`);
+      router.refresh();
     } catch {
-      toast.error("Import failed");
+      toast.error("Import failed — check your connection and try again");
     } finally {
       setImporting(false);
+      setImportProgress("");
       e.target.value = "";
     }
   }
@@ -86,7 +111,7 @@ export function PollingUnitsView({ units, lgas }: { units: PU[]; lgas: string[] 
           <Button variant="outline" asChild>
             <label className="cursor-pointer">
               <Upload className="mr-2 h-4 w-4" />
-              {importing ? "Importing…" : "Import CSV"}
+              {importing ? (importProgress ? `Importing ${importProgress}…` : "Importing…") : "Import CSV"}
               <input type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
             </label>
           </Button>
@@ -129,12 +154,13 @@ export function PollingUnitsView({ units, lgas }: { units: PU[]; lgas: string[] 
 
       <DataTable
         data={filtered}
-        searchKeys={["code", "name", "ward", "lga"]}
-        searchPlaceholder="Search by code, name, ward…"
+        searchKeys={["code", "pu_code", "name", "ward", "lga"]}
+        searchPlaceholder="Search by code, PU code, location, ward…"
         onRowClick={(row) => router.push(`/polling-units/${row.id}`)}
         columns={[
           { key: "code", header: "Code" },
-          { key: "name", header: "Name" },
+          { key: "pu_code", header: "PU" },
+          { key: "name", header: "Location" },
           { key: "ward", header: "Ward" },
           { key: "lga", header: "LGA" },
           {

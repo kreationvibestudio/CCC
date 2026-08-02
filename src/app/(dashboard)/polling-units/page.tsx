@@ -10,5 +10,5 @@ export default async function PollingUnitsPage() {
     getPollingUnitsWithStatus(tenantId),
     getDistinctLgasFromPUs(tenantId),
   ]);
-  return <PollingUnitsView units={units} lgas={lgas} />;
+  return <PollingUnitsView units={units} lgas={lgas} tenantId={tenantId} />;
 }

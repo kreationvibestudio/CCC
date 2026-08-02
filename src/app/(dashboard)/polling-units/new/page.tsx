@@ -16,17 +16,29 @@ export default function NewPollingUnitPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <PageHeader title="Add Polling Unit" description="Register a new polling unit in Edo/Esan" />
+      <PageHeader title="Add Polling Unit" description="Register a polling unit using INEC fields" />
       <Card>
         <CardContent className="pt-6">
           <form action={action} className="space-y-4">
-            <div className="space-y-1"><Label htmlFor="code">PU Code</Label><Input id="code" name="code" placeholder="ED/ESN/01/001" required /></div>
-            <div className="space-y-1"><Label htmlFor="name">Name</Label><Input id="name" name="name" required /></div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1"><Label htmlFor="ward">Ward</Label><Input id="ward" name="ward" /></div>
-              <div className="space-y-1"><Label htmlFor="lga">LGA</Label><Input id="lga" name="lga" placeholder="Esan North-East" /></div>
+            <div className="space-y-1">
+              <Label htmlFor="code">PU Code</Label>
+              <Input id="code" name="code" placeholder="12/04/01/001" required />
             </div>
-            <input type="hidden" name="state" value="Edo" />
+            <div className="space-y-1">
+              <Label htmlFor="name">Location</Label>
+              <Input id="name" name="name" placeholder="School or venue name" required />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1"><Label htmlFor="state_code">State code</Label><Input id="state_code" name="state_code" placeholder="12" /></div>
+              <div className="space-y-1"><Label htmlFor="lg_code">LGA code</Label><Input id="lg_code" name="lg_code" placeholder="04" /></div>
+              <div className="space-y-1"><Label htmlFor="ward_code">Ward code</Label><Input id="ward_code" name="ward_code" placeholder="01" /></div>
+              <div className="space-y-1"><Label htmlFor="pu_code">PU code</Label><Input id="pu_code" name="pu_code" placeholder="001" /></div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1"><Label htmlFor="ward">Ward (ward_des)</Label><Input id="ward" name="ward" placeholder="Uromi I" /></div>
+              <div className="space-y-1"><Label htmlFor="lga">LGA (lg_des)</Label><Input id="lga" name="lga" placeholder="Esan North-East" /></div>
+            </div>
+            <div className="space-y-1"><Label htmlFor="state">State</Label><Input id="state" name="state" defaultValue="Edo" /></div>
             <div className="space-y-1"><Label htmlFor="registered_voters">Registered voters</Label><Input id="registered_voters" name="registered_voters" type="number" /></div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1"><Label htmlFor="latitude">Latitude</Label><Input id="latitude" name="latitude" type="number" step="any" /></div>

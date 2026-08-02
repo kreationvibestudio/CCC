@@ -1,0 +1,31 @@
+---
+description: Always commit and push after every code change in this project
+alwaysApply: true
+---
+
+# Auto commit and push
+
+After **every** change or modification to the codebase, **always** commit and push to GitHub before ending your turn — unless the user explicitly says not to.
+
+## Workflow
+
+1. Complete the requested change (fix, feature, refactor, docs, config).
+2. Run a quick sanity check when relevant (`typecheck`, `build`, or targeted test).
+3. **Commit** with a clear message focused on *why* (1–2 sentences).
+4. **Push** to `origin` on the current branch (`git push origin HEAD` or `git push origin main`).
+5. If production deploy is part of the task (Vercel), deploy after push when appropriate.
+
+## Git safety (still apply)
+
+- Never commit `.env.local`, secrets, or credentials.
+- Never force-push to `main` unless the user explicitly requests it.
+- Never skip hooks unless the user explicitly requests it.
+- Do not amend unless user rules for amend are fully satisfied.
+
+## When to skip (rare)
+
+Only skip commit/push if the user says **"don't commit"**, **"no push"**, or the change was question-only with **zero** file edits.
+
+## Example
+
+User asks to fix a bug → fix it → `git add` relevant files → commit → push → report commit hash and remote branch in the summary.

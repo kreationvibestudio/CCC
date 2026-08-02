@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ExternalLink, Plus, Upload } from "lucide-react";
-import { importPollingUnitsCsv } from "@/lib/polling-units/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -61,13 +60,22 @@ export function PollingUnitsView({ units, lgas }: { units: PU[]; lgas: string[] 
     const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
-    const text = await file.text();
-    const result = await importPollingUnitsCsv(text);
-    setImporting(false);
-    if (result.error) toast.error(result.error);
-    else {
-      toast.success(`Imported ${result.imported} polling units`);
-      router.refresh();
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/polling-units/import", { method: "POST", body: formData });
+      const result = await res.json();
+      if (!res.ok || result.error) {
+        toast.error(result.error ?? "Import failed");
+      } else {
+        toast.success(`Imported ${result.imported} polling units`);
+        router.refresh();
+      }
+    } catch {
+      toast.error("Import failed");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
     }
   }
 

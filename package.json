@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "secrets:backup": "node scripts/secrets.mjs backup",
+    "secrets:restore": "node scripts/secrets.mjs restore",
+    "secrets:github": "node scripts/secrets.mjs github",
+    "secrets:vercel-pull": "node scripts/secrets.mjs vercel-pull",
+    "secrets:list": "node scripts/secrets.mjs list"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

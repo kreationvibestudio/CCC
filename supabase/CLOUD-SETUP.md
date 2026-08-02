@@ -56,3 +56,33 @@ npm run dev
 Login at http://localhost:3000/login with:
 - `admin@demo.campaign.ng`
 - `DemoPassword123!`
+
+## Step 7 — Polling unit migration (Edo/Esan)
+
+1. New SQL query in SQL Editor
+2. Copy **all** of `supabase/migrations/20250201000000_polling_units_geocode.sql`
+3. Paste → **Run**
+
+This adds `geocode_status`, indexes, and `campaign_locations`.
+
+## Step 8 — Import Edo/Esan polling units
+
+**Option A — Dashboard UI:** Polling Units → **Import CSV** (upload `supabase/data/edo-esan-polling-units.csv`).
+
+**Option B — CLI** (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`):
+
+```bash
+npm run pu:import
+npm run pu:geocode -- --limit=20
+```
+
+See [docs/PU-IMPORT.md](../docs/PU-IMPORT.md) for CSV format.
+
+## Step 9 — Storage bucket (agent result photos)
+
+1. **Storage → New bucket** → name: `election-media`
+2. Set **Public** or add RLS policy so authenticated agents can upload to their tenant folder
+
+## Step 10 — Termii SMS (optional)
+
+Add `TERMII_API_KEY` and `TERMII_SENDER_ID` to Vercel env vars. See [docs/TERMII-SETUP.md](../docs/TERMII-SETUP.md).

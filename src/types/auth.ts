@@ -36,6 +36,7 @@ export type Permission =
   | "situation_room.view"
   | "situation_room.manage"
   | "election_results.submit"
+  | "agent.portal"
   | "communications.view"
   | "communications.send"
   | "analytics.view"
@@ -69,6 +70,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "crm.manage", "events.view", "events.manage", "polling_units.view",
     "polling_units.manage", "maps.view", "maps.voter_lookup",
     "situation_room.view", "situation_room.manage", "election_results.submit",
+    "agent.portal",
     "communications.view", "communications.send", "analytics.view",
     "reports.view", "reports.generate", "admin.users", "admin.tenants", "admin.audit",
   ],
@@ -83,6 +85,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "volunteers.view", "volunteers.manage", "crm.view", "crm.manage",
     "events.view", "events.manage", "polling_units.view", "polling_units.manage",
     "maps.view", "situation_room.view", "situation_room.manage",
+    "agent.portal",
     "communications.view", "communications.send", "analytics.view",
     "reports.view", "reports.generate",
   ],
@@ -112,11 +115,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   polling_unit_supervisor: [
     "dashboard.view", "polling_units.view", "polling_units.manage",
     "situation_room.view", "situation_room.manage", "maps.view",
-    "election_results.submit",
+    "election_results.submit", "agent.portal",
   ],
   polling_agent: [
     "polling_units.view", "situation_room.view", "election_results.submit",
-    "maps.view",
+    "maps.view", "agent.portal",
   ],
   data_analyst: [
     "dashboard.view", "social.view", "comments.view", "sentiment.view",

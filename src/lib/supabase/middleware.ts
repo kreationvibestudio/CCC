@@ -37,9 +37,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/forgot-password");
 
   const isAgentRoute = request.nextUrl.pathname.startsWith("/agent");
-  const isPublicRoute = request.nextUrl.pathname === "/" || isAuthRoute;
+  const isCheckInRoute = /^\/events\/[^/]+\/checkin/.test(request.nextUrl.pathname);
+  const isPublicRoute = request.nextUrl.pathname === "/" || isAuthRoute || isCheckInRoute;
 
-  if (!user && !isPublicRoute && !isAgentRoute) {
+  if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", request.nextUrl.pathname);

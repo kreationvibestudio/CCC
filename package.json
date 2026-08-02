@@ -13,7 +13,9 @@
     "secrets:github": "node scripts/secrets.mjs github",
     "secrets:vercel-pull": "node scripts/secrets.mjs vercel-pull",
     "secrets:list": "node scripts/secrets.mjs list",
-    "secrets": "bash scripts/secrets.sh"
+    "secrets": "bash scripts/secrets.sh",
+    "pu:import": "node scripts/import-polling-units.mjs",
+    "pu:geocode": "node scripts/geocode-polling-units.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -36,6 +38,7 @@
     "@react-pdf/renderer": "^4.3.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.50.0",
+    "@types/leaflet.markercluster": "^1.5.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -43,6 +46,7 @@
     "exceljs": "^4.4.0",
     "framer-motion": "^12.16.0",
     "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.513.0",
     "next": "^15.3.3",
     "next-themes": "^0.4.6",

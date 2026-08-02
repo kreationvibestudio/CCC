@@ -1,0 +1,162 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-actions";
+
+export async function getPollingUnits(tenantId: string, filters?: { lga?: string; ward?: string; search?: string }) {
+  const supabase = await createClient();
+  let q = supabase.from("polling_units").select("*").eq("tenant_id", tenantId).order("lga").order("ward").order("name");
+  if (filters?.lga) q = q.eq("lga", filters.lga);
+  if (filters?.ward) q = q.eq("ward", filters.ward);
+  if (filters?.search) q = q.or(`code.ilike.%${filters.search}%,name.ilike.%${filters.search}%`);
+  const { data } = await q;
+  return data ?? [];
+}
+
+export async function getPollingUnitsWithStatus(tenantId: string) {
+  const supabase = await createClient();
+  const { data: units } = await supabase.from("polling_units").select("*").eq("tenant_id", tenantId);
+  const { data: statuses } = await supabase
+    .from("polling_unit_status")
+    .select("polling_unit_id, status, turnout")
+    .eq("tenant_id", tenantId);
+  const statusMap = new Map((statuses ?? []).map((s) => [s.polling_unit_id, s]));
+  return (units ?? []).map((u) => ({
+    ...u,
+    live_status: statusMap.get(u.id)?.status ?? "not_active",
+    turnout: statusMap.get(u.id)?.turnout ?? 0,
+  }));
+}
+
+export async function getPollingUnitStatuses(tenantId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("polling_unit_status")
+    .select("*, polling_units(name, ward, lga, latitude, longitude, registered_voters, code)")
+    .eq("tenant_id", tenantId);
+  return data ?? [];
+}
+
+export async function getPollingUnit(id: string) {
+  return getRecord<Record<string, unknown>>("polling_units", id);
+}
+
+export async function createPollingUnit(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Unauthorized" };
+  const supabase = await createClient();
+  const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
+  const lng = formData.get("longitude") ? Number(formData.get("longitude")) : null;
+  const { error } = await supabase.from("polling_units").insert({
+    tenant_id: user.profile.tenant_id,
+    code: formData.get("code") as string,
+    name: formData.get("name") as string,
+    ward: formData.get("ward") as string,
+    lga: formData.get("lga") as string,
+    state: (formData.get("state") as string) || "Edo",
+    registered_voters: formData.get("registered_voters") ? Number(formData.get("registered_voters")) : 0,
+    latitude: lat,
+    longitude: lng,
+    address: (formData.get("address") as string) || null,
+    risk_level: (formData.get("risk_level") as string) || "low",
+    security_notes: (formData.get("security_notes") as string) || null,
+    logistics: (formData.get("logistics") as string) || null,
+    assigned_agent_id: (formData.get("assigned_agent_id") as string) || null,
+    geocode_status: lat && lng ? "done" : "pending",
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/polling-units");
+  revalidatePath("/maps");
+  return { success: true };
+}
+
+export async function updatePollingUnit(id: string, formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Unauthorized" };
+  const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
+  const lng = formData.get("longitude") ? Number(formData.get("longitude")) : null;
+  return updateRecord(
+    "polling_units",
+    id,
+    {
+      code: formData.get("code"),
+      name: formData.get("name"),
+      ward: formData.get("ward"),
+      lga: formData.get("lga"),
+      state: formData.get("state") || "Edo",
+      registered_voters: formData.get("registered_voters") ? Number(formData.get("registered_voters")) : 0,
+      latitude: lat,
+      longitude: lng,
+      address: formData.get("address") || null,
+      risk_level: formData.get("risk_level") || "low",
+      security_notes: formData.get("security_notes") || null,
+      logistics: formData.get("logistics") || null,
+      assigned_agent_id: formData.get("assigned_agent_id") || null,
+      geocode_status: lat && lng ? "done" : "pending",
+    },
+    "/polling-units"
+  );
+}
+
+export async function deletePollingUnit(id: string) {
+  revalidatePath("/maps");
+  return deleteRecord("polling_units", id, "/polling-units");
+}
+
+export async function getTeamForAssignment(tenantId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, full_name, role")
+    .eq("tenant_id", tenantId)
+    .in("role", ["polling_agent", "polling_unit_supervisor", "ward_coordinator"]);
+  return data ?? [];
+}
+
+export async function getCampaignLocations(tenantId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase.from("campaign_locations").select("*").eq("tenant_id", tenantId);
+  return data ?? [];
+}
+
+export async function importPollingUnitsCsv(csvText: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Unauthorized" };
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith("#"));
+  const header = lines[0]?.split(",").map((h) => h.trim().toLowerCase()) ?? [];
+  const supabase = await createClient();
+  let imported = 0;
+  for (const line of lines.slice(1)) {
+    const vals = line.split(",");
+    const row: Record<string, string> = {};
+    header.forEach((h, i) => {
+      row[h] = (vals[i] ?? "").trim();
+    });
+    if (!row.code || !row.name) continue;
+    const lat = row.latitude ? parseFloat(row.latitude) : null;
+    const lng = row.longitude ? parseFloat(row.longitude) : null;
+    const { error } = await supabase.from("polling_units").upsert(
+      {
+        tenant_id: user.profile.tenant_id,
+        code: row.code,
+        name: row.name,
+        ward: row.ward || "",
+        lga: row.lga || "",
+        state: "Edo",
+        registered_voters: row.registered_voters ? parseInt(row.registered_voters, 10) : 0,
+        latitude: lat,
+        longitude: lng,
+        address: row.address || null,
+        geocode_status: lat && lng ? "done" : "pending",
+        risk_level: "low",
+      },
+      { onConflict: "tenant_id,code" }
+    );
+    if (!error) imported++;
+  }
+  revalidatePath("/polling-units");
+  revalidatePath("/maps");
+  return { success: true, imported };
+}

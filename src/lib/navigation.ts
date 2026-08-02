@@ -37,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Polling Units", href: "/polling-units", icon: MapPin, permission: "polling_units.view" },
   { title: "Voter Maps", href: "/maps", icon: Map, permission: "maps.view" },
   { title: "Situation Room", href: "/situation-room", icon: Radio, permission: "situation_room.view", badge: "Live" },
+  { title: "Agent Portal", href: "/agent", icon: MapPin, permission: "agent.portal" },
   { title: "Communications", href: "/communications", icon: Send, permission: "communications.view" },
   { title: "Analytics", href: "/analytics", icon: BarChart3, permission: "analytics.view" },
   { title: "Reports", href: "/reports", icon: FileText, permission: "reports.view" },

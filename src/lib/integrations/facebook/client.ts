@@ -45,6 +45,18 @@ export class FacebookApiError extends Error {
   }
 }
 
+export const FACEBOOK_TOKEN_REFRESH_HELP = `Facebook access token expired or invalid. Fix:
+1. Go to developers.facebook.com/tools/explorer/
+2. Select app "campaign commander center"
+3. Add permissions: pages_show_list, pages_read_engagement, pages_read_user_content, pages_manage_engagement
+4. Generate Access Token → log in as the page admin
+5. Update FACEBOOK_USER_ACCESS_TOKEN (and FACEBOOK_PAGE_ACCESS_TOKEN if set) in:
+   • .env.local (local dev)
+   • Vercel → Project ccc → Settings → Environment Variables (production)
+6. Redeploy or restart dev server, then sync again
+
+Tip: Copy the page token from GET /me/accounts for page 671649942702174 — page tokens last longer.`;
+
 export const FACEBOOK_PERMISSION_HELP = `Facebook token is missing required permissions. Fix:
 1. Go to developers.facebook.com → your app → Tools → Graph API Explorer
 2. Select your app "campaign commander center"
@@ -56,7 +68,15 @@ export const FACEBOOK_PERMISSION_HELP = `Facebook token is missing required perm
 5. Copy the new token into .env.local as FACEBOOK_USER_ACCESS_TOKEN
 6. Restart npm run dev`;
 
-function wrapFacebookError(error: { message: string; code?: number; type?: string }): FacebookApiError {
+function wrapFacebookError(error: { message: string; code?: number; type?: string; error_subcode?: number }): FacebookApiError {
+  if (error.code === 190 || /session has expired|invalid oauth/i.test(error.message)) {
+    return new FacebookApiError(
+      `${error.message}\n\n${FACEBOOK_TOKEN_REFRESH_HELP}`,
+      error.code,
+      error.type,
+      "https://developers.facebook.com/tools/explorer/"
+    );
+  }
   if (error.code === 10 || error.code === 210) {
     return new FacebookApiError(
       `${error.message}\n\n${FACEBOOK_PERMISSION_HELP}`,

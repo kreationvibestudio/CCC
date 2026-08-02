@@ -40,6 +40,23 @@ Social Media → **Sync Facebook Now**
 
 ---
 
+## Token expired? (Error 190 / "Session has expired")
+
+Graph API Explorer tokens expire in **1–2 hours**. If you see this on production:
+
+1. Regenerate token (steps 1–4 above)
+2. Get the **page token** (recommended — lasts longer):
+   ```
+   https://graph.facebook.com/v21.0/me/accounts?access_token=YOUR_NEW_USER_TOKEN
+   ```
+   Copy `access_token` for page `671649942702174`
+3. Update **both** places:
+   - `.env.local` → `FACEBOOK_USER_ACCESS_TOKEN` and `FACEBOOK_PAGE_ACCESS_TOKEN`
+   - **Vercel** → [ccc project Settings → Environment Variables](https://vercel.com/kreation-vibe-studios-projects/ccc/settings/environment-variables)
+4. Redeploy: `npx vercel --prod --yes` (or push to GitHub if connected)
+
+---
+
 ## Still not working?
 
 - Make sure you're an **Admin** on the Facebook page

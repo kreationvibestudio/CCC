@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export function useRealtime<T extends Record<string, unknown>>(
   table: string,
@@ -9,10 +10,21 @@ export function useRealtime<T extends Record<string, unknown>>(
   onEvent?: (payload: { eventType: string; new: T; old: T }) => void
 ) {
   const [connected, setConnected] = useState(false);
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+
+  const enabled = Boolean(table && (!filter || filter.value));
 
   useEffect(() => {
+    if (!enabled) {
+      setConnected(false);
+      return;
+    }
+
     const supabase = createClient();
-    let channel = supabase.channel(`${table}-changes`);
+    const channelName = filter
+      ? `rt:${table}:${filter.column}=${filter.value}`
+      : `rt:${table}:all`;
 
     const config: {
       event: "*";
@@ -21,28 +33,28 @@ export function useRealtime<T extends Record<string, unknown>>(
       filter?: string;
     } = { event: "*", schema: "public", table };
 
-    if (filter) {
+    if (filter?.value) {
       config.filter = `${filter.column}=eq.${filter.value}`;
     }
 
-    channel = channel.on(
-      "postgres_changes",
-      config,
-      (payload) => {
-        onEvent?.({
+    const channel: RealtimeChannel = supabase
+      .channel(channelName)
+      .on("postgres_changes", config, (payload) => {
+        onEventRef.current?.({
           eventType: payload.eventType,
           new: payload.new as T,
           old: payload.old as T,
         });
-      }
-    ).subscribe((status) => {
-      setConnected(status === "SUBSCRIBED");
-    });
+      })
+      .subscribe((status) => {
+        setConnected(status === "SUBSCRIBED");
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      setConnected(false);
+      void supabase.removeChannel(channel);
     };
-  }, [table, filter?.column, filter?.value, onEvent]);
+  }, [enabled, table, filter?.column, filter?.value]);
 
   return { connected };
 }
@@ -72,7 +84,7 @@ export function useNotifications(userId?: string) {
   useRealtime(
     "notifications",
     userId ? { column: "user_id", value: userId } : undefined,
-    handleEvent
+    userId ? handleEvent : undefined
   );
 
   const unreadCount = notifications.filter((n) => !n.read).length;

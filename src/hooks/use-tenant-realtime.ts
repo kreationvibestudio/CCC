@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useRealtime } from "@/hooks/use-realtime";
 
 export function useTenantRealtime<T extends Record<string, unknown>>(
@@ -8,12 +8,22 @@ export function useTenantRealtime<T extends Record<string, unknown>>(
   tenantId: string,
   onChange: () => void
 ) {
-  const handler = useCallback(() => onChange(), [onChange]);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const handler = useCallback(
+    () => {
+      onChangeRef.current();
+    },
+    []
+  );
+
   const { connected } = useRealtime<T>(
     table,
     tenantId ? { column: "tenant_id", value: tenantId } : undefined,
-    handler
+    tenantId ? handler : undefined
   );
+
   return { connected };
 }
 

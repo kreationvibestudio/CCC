@@ -37,7 +37,14 @@ else
 fi
 
 echo "==> [install] Installing Node dependencies"
-npm install
+# `npm ci` installs exactly what package-lock.json pins and never rewrites it,
+# which keeps the environment reproducible. Fall back to `npm install` only if
+# the lockfile is unavailable.
+if [ -f package-lock.json ]; then
+  npm ci
+else
+  npm install
+fi
 
 echo "==> [install] Pre-fetching the Supabase CLI"
 npx --yes "$SUPABASE_CLI" --version >/dev/null 2>&1 || true

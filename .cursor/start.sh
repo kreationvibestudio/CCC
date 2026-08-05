@@ -39,7 +39,23 @@ echo "==> [start] Making the Docker socket usable without sudo"
 sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
 
 echo "==> [start] Starting local Supabase"
-npx --yes "$SUPABASE_CLI" start
+# On a cold first boot `supabase start` can fail once transiently (e.g. a
+# container losing the race during schema init right after the bridge comes
+# up). Retry a few times, cleaning up partial state between attempts, so the
+# environment comes up unattended instead of requiring a manual re-run.
+start_supabase() {
+  local attempt
+  for attempt in 1 2 3; do
+    if npx --yes "$SUPABASE_CLI" start; then
+      return 0
+    fi
+    echo "    supabase start failed (attempt ${attempt}); cleaning up and retrying..."
+    npx --yes "$SUPABASE_CLI" stop --no-backup >/dev/null 2>&1 || true
+    sleep 5
+  done
+  return 1
+}
+start_supabase || { echo "supabase failed to start after retries"; exit 1; }
 
 echo "==> [start] Bootstrapping the database"
 bash "$REPO_ROOT/.cursor/dev-bootstrap.sh"

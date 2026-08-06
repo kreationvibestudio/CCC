@@ -2,6 +2,31 @@
 
 Your `.env.local` is already configured for project `ffccfeodymiwwqshphmh`.
 
+## Automated setup (recommended)
+
+With cloud credentials in `.env.local`:
+
+```bash
+npm run cloud:setup
+```
+
+Requires `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`, plus **one** of:
+
+- `SUPABASE_DB_PASSWORD` — Supabase Dashboard → **Project Settings → Database → Database password**
+- `SUPABASE_ACCESS_TOKEN` — [Account tokens](https://supabase.com/dashboard/account/tokens) (also enables disabling email confirmation)
+
+Audit without changes:
+
+```bash
+npm run cloud:audit
+```
+
+The script is idempotent: it applies only missing schema, seed, migrations, admin user, storage bucket, and polling-unit import.
+
+---
+
+## Manual setup (if you prefer the dashboard)
+
 ## Step 1 — Run the schema (fixed for Cloud)
 
 1. Open: https://supabase.com/dashboard/project/ffccfeodymiwwqshphmh/sql/new

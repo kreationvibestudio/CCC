@@ -39,6 +39,11 @@ echo "==> [start] Making the Docker socket usable without sudo"
 sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
 
 echo "==> [start] Starting local Supabase"
+# Docker may leave root-owned files in supabase/.temp after a partial start; fix
+# ownership so the CLI can clean up and retry on cold boot.
+if [ -d supabase/.temp ]; then
+  sudo chown -R "$(whoami)" supabase/.temp 2>/dev/null || true
+fi
 # On a cold first boot `supabase start` can fail once transiently (e.g. a
 # container losing the race during schema init right after the bridge comes
 # up). Retry a few times, cleaning up partial state between attempts, so the

@@ -13,6 +13,14 @@ npm run dev
 
 Open **http://localhost:3000**
 
+Demo geography is **Edo / Esan**. Expand polling units with:
+
+```bash
+npm run pu:import
+```
+
+(see `docs/PU-IMPORT.md` and `supabase/data/edo-esan-polling-units.csv`).
+
 ### Step 2 — Facebook is already configured
 
 Your Facebook page **Hon Akhakon Annenih** is set up in `.env.local`. No action needed.
@@ -34,6 +42,10 @@ Comments need one extra Facebook permission. To enable:
 3. Add permission: `pages_read_user_content`
 4. Generate a new token and update `FACEBOOK_USER_ACCESS_TOKEN` in `.env.local`
 5. Restart the app (`npm run dev`) and sync again
+
+### Communications (SMS)
+
+Set `TERMII_API_KEY` / `TERMII_SENDER_ID` (see `docs/TERMII-SETUP.md`), then use **Communications → Send** on a draft campaign.
 
 ---
 
@@ -65,4 +77,4 @@ The app automatically converts your user token into a page token — you don't n
 
 ## Tech Stack
 
-Next.js 15 · TypeScript · Supabase · Tailwind · Meta Graph API
+Next.js 15 · TypeScript · Supabase · Tailwind · Meta Graph API · Termii SMS

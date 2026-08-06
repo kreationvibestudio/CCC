@@ -62,6 +62,19 @@ npm install
 npm run dev
 ```
 
+## Production checklist (CCC)
+
+| Variable | Required for |
+|----------|----------------|
+| `NEXT_PUBLIC_SUPABASE_URL` / anon / `SUPABASE_SERVICE_ROLE_KEY` | App + Admin invite |
+| `NEXT_PUBLIC_APP_URL` | Auth redirects, QR check-in links |
+| `TERMII_API_KEY` / `TERMII_SENDER_ID` | Communications SMS send |
+| `FACEBOOK_*` | Social sync / comments |
+| `OPENAI_API_KEY` | AI assistant (optional) |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional Maps SDK |
+
+After setting keys locally, mirror them to **GitHub Secrets** and **Vercel**. Confirm with Admin → Secrets readiness (booleans only).
+
 ## Rules
 
 - Never `git add .env.local` or `secrets/`

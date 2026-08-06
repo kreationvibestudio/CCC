@@ -1,9 +1,13 @@
-﻿import { getCurrentUser } from "@/lib/auth/session";
+﻿import { requirePermission } from "@/lib/auth/session";
 import { getAdminData } from "@/lib/admin/data";
+import { getSecretsStatus } from "@/lib/admin/actions";
 import { AdminView } from "@/components/admin/admin-view";
 
 export default async function AdminPage() {
-  const user = await getCurrentUser();
-  const { profiles, auditCount } = await getAdminData(user!.profile.tenant_id);
-  return <AdminView profiles={profiles} auditCount={auditCount} />;
+  const user = await requirePermission("admin.users");
+  const [{ profiles, auditCount }, secrets] = await Promise.all([
+    getAdminData(user.profile.tenant_id),
+    getSecretsStatus(),
+  ]);
+  return <AdminView profiles={profiles} auditCount={auditCount} secrets={secrets} />;
 }

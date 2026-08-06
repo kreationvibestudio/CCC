@@ -70,6 +70,8 @@ export interface Profile {
   phone?: string;
   role: import("./auth").UserRole;
   mfa_enabled: boolean;
+  ward?: string | null;
+  lga?: string | null;
   created_at: string;
 }
 

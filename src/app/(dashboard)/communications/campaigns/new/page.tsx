@@ -4,9 +4,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/forms/submit-button";
-import { createCampaign } from "@/lib/communications/actions";
+import { createCampaign, getTemplates } from "@/lib/communications/actions";
+import { getCurrentUser } from "@/lib/auth/session";
 
-export default function NewCampaignPage() {
+export default async function NewCampaignPage() {
+  const user = await getCurrentUser();
+  const templates = (await getTemplates(user!.profile.tenant_id)).filter(
+    (t: { channel: string }) => t.channel === "sms"
+  );
+
   async function action(formData: FormData) {
     "use server";
     const result = await createCampaign(formData);
@@ -16,15 +22,42 @@ export default function NewCampaignPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <PageHeader title="New SMS Campaign" description="Create a draft Termii campaign" />
-      <Card><CardContent className="pt-6">
-        <form action={action} className="space-y-4">
-          <div className="space-y-1"><Label>Campaign name</Label><Input name="name" required /></div>
-          <input type="hidden" name="channel" value="sms" />
-          <SubmitButton label="Create campaign" />
-        </form>
-        <p className="mt-4 text-xs text-muted-foreground">After creating, use the send API or admin tools to dispatch via Termii.</p>
-      </CardContent></Card>
+      <PageHeader
+        title="New SMS Campaign"
+        description="Create a draft Termii campaign, then send it from Communications"
+      />
+      <Card>
+        <CardContent className="pt-6">
+          <form action={action} className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="name">Campaign name</Label>
+              <Input id="name" name="name" required />
+            </div>
+            <input type="hidden" name="channel" value="sms" />
+            <div className="space-y-1">
+              <Label htmlFor="template_id">Default SMS template (optional)</Label>
+              <select
+                id="template_id"
+                name="template_id"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                defaultValue=""
+              >
+                <option value="">Choose when sending</option>
+                {templates.map((t: { id: string; name: string }) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <SubmitButton label="Create campaign" />
+          </form>
+          <p className="mt-4 text-xs text-muted-foreground">
+            After creating, open the campaign’s Send button on the Communications page to
+            dispatch via Termii.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

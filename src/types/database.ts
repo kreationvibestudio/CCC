@@ -160,6 +160,7 @@ export interface MessageCampaign {
   tenant_id: string;
   name: string;
   channel: "whatsapp" | "sms" | "email" | "push";
+  template_id?: string | null;
   status: string;
   sent_count?: number;
   created_at: string;

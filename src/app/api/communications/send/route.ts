@@ -11,6 +11,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  if (!process.env.TERMII_API_KEY) {
+    return NextResponse.json(
+      { error: "TERMII_API_KEY is not configured. Add it in Vercel env or .env.local." },
+      { status: 503 }
+    );
+  }
+
   const body = await req.json();
   const { templateId, phone, message, campaignId, ward, supportLevel } = body as {
     templateId?: string;
@@ -25,42 +32,128 @@ export async function POST(req: NextRequest) {
   const tenantId = user.profile.tenant_id;
 
   if (campaignId && !phone) {
-    let q = supabase.from("contacts").select("phone, full_name").eq("tenant_id", tenantId).not("phone", "is", null);
+    const { data: campaign, error: campaignError } = await supabase
+      .from("message_campaigns")
+      .select("id, status, channel, template_id, tenant_id")
+      .eq("id", campaignId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (campaignError || !campaign) {
+      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+    if (campaign.channel !== "sms") {
+      return NextResponse.json({ error: "Only SMS campaigns can be sent" }, { status: 400 });
+    }
+    if (campaign.status !== "draft") {
+      return NextResponse.json(
+        { error: `Campaign is already ${campaign.status}` },
+        { status: 400 }
+      );
+    }
+
+    let q = supabase
+      .from("contacts")
+      .select("phone, full_name")
+      .eq("tenant_id", tenantId)
+      .not("phone", "is", null);
     if (ward) q = q.eq("ward", ward);
     if (supportLevel) q = q.eq("support_level", supportLevel);
     const { data: contacts } = await q.limit(100);
 
+    if (!contacts?.length) {
+      return NextResponse.json(
+        { error: "No contacts with phone numbers match these audience filters" },
+        { status: 400 }
+      );
+    }
+
+    const resolvedTemplateId = templateId || campaign.template_id || undefined;
     let templateBody = message ?? "";
-    if (templateId) {
-      const { data: tpl } = await supabase.from("message_templates").select("body").eq("id", templateId).single();
-      templateBody = tpl?.body ?? templateBody;
+    if (resolvedTemplateId) {
+      const { data: tpl } = await supabase
+        .from("message_templates")
+        .select("body, channel")
+        .eq("id", resolvedTemplateId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (!tpl) {
+        return NextResponse.json({ error: "Template not found" }, { status: 404 });
+      }
+      templateBody = tpl.body;
+    }
+
+    if (!templateBody.trim()) {
+      return NextResponse.json(
+        { error: "Select an SMS template (or provide a message) before sending" },
+        { status: 400 }
+      );
     }
 
     let sent = 0;
-    for (const c of contacts ?? []) {
+    let failed = 0;
+    for (const c of contacts) {
       if (!c.phone) continue;
-      const text = renderTemplate(templateBody, { name: c.full_name.split(" ")[0] });
+      const text = renderTemplate(templateBody, {
+        name: (c.full_name ?? "Friend").split(" ")[0],
+      });
       try {
         const result = await sendTermiiSms(c.phone, text);
+        const ok = Boolean(result.message_id);
         await supabase.from("messages").insert({
           tenant_id: tenantId,
           campaign_id: campaignId,
           recipient_phone: c.phone,
           channel: "sms",
           body: text,
-          status: result.message_id ? "sent" : "failed",
-          sent_at: result.message_id ? new Date().toISOString() : null,
+          status: ok ? "sent" : "failed",
+          sent_at: ok ? new Date().toISOString() : null,
         });
-        if (result.message_id) sent++;
+        if (ok) sent++;
+        else failed++;
       } catch {
-        /* continue batch */
+        failed++;
+        await supabase.from("messages").insert({
+          tenant_id: tenantId,
+          campaign_id: campaignId,
+          recipient_phone: c.phone,
+          channel: "sms",
+          body: text,
+          status: "failed",
+        });
       }
     }
-    await supabase.from("message_campaigns").update({ sent_count: sent, status: "sent" }).eq("id", campaignId);
-    return NextResponse.json({ success: true, sent });
+
+    await supabase
+      .from("message_campaigns")
+      .update({
+        sent_count: sent,
+        status: sent > 0 ? "sent" : "draft",
+        ...(resolvedTemplateId ? { template_id: resolvedTemplateId } : {}),
+      })
+      .eq("id", campaignId)
+      .eq("tenant_id", tenantId);
+
+    if (sent === 0) {
+      return NextResponse.json(
+        {
+          error:
+            failed > 0
+              ? `All ${failed} SMS sends failed. Check TERMII_API_KEY / sender ID.`
+              : "No messages were sent",
+          sent: 0,
+          failed,
+        },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({ success: true, sent, failed, recipients: contacts.length });
   }
 
-  if (!phone || !message) return NextResponse.json({ error: "phone and message required" }, { status: 400 });
+  if (!phone || !message) {
+    return NextResponse.json({ error: "phone and message required" }, { status: 400 });
+  }
 
   try {
     const result = await sendTermiiSms(phone, message);

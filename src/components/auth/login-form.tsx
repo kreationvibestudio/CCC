@@ -14,15 +14,17 @@ import { toast } from "sonner";
 export function LoginForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!email.trim() || !password) {
+      toast.error("Email and password are required");
+      return;
+    }
     setLoading(true);
-    const formData = new FormData(e.currentTarget);
-    const result = await signIn(
-      formData.get("email") as string,
-      formData.get("password") as string
-    );
+    const result = await signIn(email.trim(), password);
     setLoading(false);
 
     if (result.error) {
@@ -44,14 +46,32 @@ export function LoginForm() {
         <CardDescription>Sign in to your campaign war room</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" placeholder="admin@demo.campaign.ng" required />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="admin@demo.campaign.ng"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" placeholder="••••••••" required />
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

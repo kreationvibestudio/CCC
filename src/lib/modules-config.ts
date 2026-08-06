@@ -69,8 +69,8 @@ export const MODULES: Record<string, ModuleConfig> = {
   communications: {
     slug: "communications",
     title: "Communication Center",
-    description: "WhatsApp, SMS, email, and push notification campaigns.",
-    features: ["Message templates", "Group broadcasts", "Scheduled sends", "Individual messages", "Delivery tracking", "Audience filters"],
+    description: "Termii SMS templates and CRM contact broadcasts.",
+    features: ["SMS templates", "Draft campaigns", "Termii dispatch", "Audience filters (ward / support)", "Delivery logging", "Send from UI"],
   },
   analytics: {
     slug: "analytics",

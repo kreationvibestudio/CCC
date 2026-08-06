@@ -1,8 +1,18 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-shell";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { inviteUser, updateUserRole } from "@/lib/admin/actions";
+import { ROLE_LABELS, type UserRole } from "@/types/auth";
 
-type Profile = {
+type ProfileRow = {
   id: string;
   full_name: string;
   email: string;
@@ -11,27 +21,210 @@ type Profile = {
   created_at: string;
 };
 
-export function AdminView({ profiles, auditCount }: { profiles: Profile[]; auditCount: number }) {
+type SecretsStatus = Record<string, boolean>;
+
+const ROLE_OPTIONS = Object.entries(ROLE_LABELS) as [UserRole, string][];
+
+const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boolean }[] = [
+  { key: "supabaseUrl", label: "Supabase URL", critical: true },
+  { key: "supabaseAnon", label: "Supabase anon key", critical: true },
+  { key: "supabaseServiceRole", label: "Supabase service role", critical: true },
+  { key: "appUrl", label: "App URL", critical: true },
+  { key: "termiiApiKey", label: "Termii API key", critical: true },
+  { key: "termiiSenderId", label: "Termii sender ID", critical: true },
+  { key: "facebookPageId", label: "Facebook page ID" },
+  { key: "facebookUserToken", label: "Facebook user token" },
+  { key: "facebookPageToken", label: "Facebook page token" },
+  { key: "openaiApiKey", label: "OpenAI API key" },
+  { key: "googleMapsKey", label: "Google Maps key" },
+];
+
+export function AdminView({
+  profiles,
+  auditCount,
+  secrets,
+}: {
+  profiles: ProfileRow[];
+  auditCount: number;
+  secrets: SecretsStatus;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [invitePassword, setInvitePassword] = useState<string | null>(null);
+
+  function handleInvite(formData: FormData) {
+    startTransition(async () => {
+      const result = await inviteUser(formData);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if ("temporaryPassword" in result && result.temporaryPassword) {
+        setInvitePassword(result.temporaryPassword);
+        toast.success(result.message ?? "User invited");
+      } else {
+        toast.success("User invited");
+      }
+      router.refresh();
+    });
+  }
+
+  function handleRoleChange(formData: FormData) {
+    startTransition(async () => {
+      const result = await updateUserRole(formData);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Role updated");
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Administration" description="Team members, roles and audit overview" />
+      <PageHeader
+        title="Administration"
+        description="Invite team members, assign roles, and check production secrets"
+      />
+
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card><CardContent className="py-6"><p className="text-sm text-muted-foreground">Team members</p><p className="text-2xl font-bold">{profiles.length}</p></CardContent></Card>
-        <Card><CardContent className="py-6"><p className="text-sm text-muted-foreground">Audit log entries</p><p className="text-2xl font-bold">{auditCount}</p></CardContent></Card>
+        <Card>
+          <CardContent className="py-6">
+            <p className="text-sm text-muted-foreground">Team members</p>
+            <p className="text-2xl font-bold">{profiles.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-6">
+            <p className="text-sm text-muted-foreground">Audit log entries</p>
+            <p className="text-2xl font-bold">{auditCount}</p>
+          </CardContent>
+        </Card>
       </div>
-      <div className="space-y-2">
-        {profiles.map((p) => (
-          <Card key={p.id}>
-            <CardContent className="flex flex-wrap items-center justify-between gap-2 py-3">
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Invite team member</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={handleInvite} className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="full_name">Full name</Label>
+              <Input id="full_name" name="full_name" required disabled={pending} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" required disabled={pending} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="role">Role</Label>
+              <select
+                id="role"
+                name="role"
+                defaultValue="supporter"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                disabled={pending}
+              >
+                {ROLE_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="ward">Ward</Label>
+                <Input id="ward" name="ward" disabled={pending} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="lga">LGA</Label>
+                <Input id="lga" name="lga" disabled={pending} />
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <Button type="submit" disabled={pending}>
+                {pending ? "Working…" : "Invite user"}
+              </Button>
+            </div>
+          </form>
+          {invitePassword && (
+            <p className="mt-3 rounded-md border border-border bg-muted/40 p-3 text-sm">
+              Temporary password (copy now):{" "}
+              <code className="font-mono text-foreground">{invitePassword}</code>
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Team members</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {profiles.map((p) => (
+            <div
+              key={p.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+            >
               <div>
                 <p className="font-medium">{p.full_name}</p>
-                <p className="text-xs text-muted-foreground">{p.email}{p.ward ? ` · ${p.ward}` : ""}</p>
+                <p className="text-xs text-muted-foreground">
+                  {p.email}
+                  {p.ward ? ` · ${p.ward}` : ""}
+                </p>
               </div>
-              <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              <form action={handleRoleChange} className="flex items-center gap-2">
+                <input type="hidden" name="user_id" value={p.id} />
+                <select
+                  name="role"
+                  defaultValue={p.role}
+                  className="flex h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+                  disabled={pending}
+                >
+                  {ROLE_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <Button type="submit" size="sm" variant="secondary" disabled={pending}>
+                  Save
+                </Button>
+                <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
+              </form>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Secrets readiness</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-2">
+          {SECRET_LABELS.map(({ key, label, critical }) => {
+            const ok = Boolean(secrets[key]);
+            return (
+              <div
+                key={String(key)}
+                className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
+              >
+                <span>
+                  {label}
+                  {critical ? " *" : ""}
+                </span>
+                <Badge variant={ok ? "default" : "outline"}>{ok ? "set" : "missing"}</Badge>
+              </div>
+            );
+          })}
+          <p className="sm:col-span-2 text-xs text-muted-foreground">
+            Values are never shown here. Set missing keys in `.env.local`, then
+            `npm run secrets:backup` + Vercel/GitHub. See docs/SECRETS.md and docs/TERMII-SETUP.md.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

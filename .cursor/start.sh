@@ -38,12 +38,17 @@ sudo iptables-legacy -P FORWARD ACCEPT 2>/dev/null \
 echo "==> [start] Making the Docker socket usable without sudo"
 sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
 
+# Docker stages container secrets under supabase/.temp as root. If a previous
+# attempt left those files behind, the non-root CLI cannot remove them and
+# `supabase start` fails with EACCES. Clear them before every attempt.
+clear_supabase_temp() {
+  sudo rm -rf "$REPO_ROOT/supabase/.temp/start-secrets" \
+    "$REPO_ROOT/supabase/snippets" 2>/dev/null || true
+  sudo mkdir -p "$REPO_ROOT/supabase/.temp"
+  sudo chown -R "$(id -u):$(id -g)" "$REPO_ROOT/supabase/.temp" 2>/dev/null || true
+}
+
 echo "==> [start] Starting local Supabase"
-# Docker may leave root-owned files in supabase/.temp after a partial start; fix
-# ownership so the CLI can clean up and retry on cold boot.
-if [ -d supabase/.temp ]; then
-  sudo chown -R "$(whoami)" supabase/.temp 2>/dev/null || true
-fi
 # On a cold first boot `supabase start` can fail once transiently (e.g. a
 # container losing the race during schema init right after the bridge comes
 # up). Retry a few times, cleaning up partial state between attempts, so the
@@ -51,11 +56,13 @@ fi
 start_supabase() {
   local attempt
   for attempt in 1 2 3; do
+    clear_supabase_temp
     if npx --yes "$SUPABASE_CLI" start; then
       return 0
     fi
     echo "    supabase start failed (attempt ${attempt}); cleaning up and retrying..."
     npx --yes "$SUPABASE_CLI" stop --no-backup >/dev/null 2>&1 || true
+    clear_supabase_temp
     sleep 5
   done
   return 1

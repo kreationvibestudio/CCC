@@ -93,7 +93,15 @@ This adds `geocode_status`, INEC code columns (`state_code`, `lg_code`, `ward_co
 
 ## Step 8 — Import Edo/Esan polling units
 
-**Option A — Dashboard UI:** Polling Units → **Import CSV** (upload `supabase/data/edo-esan-polling-units.csv`).
+**Option A — Dashboard UI:** Polling Units → **Import CSV** (upload `supabase/data/edo-polling-units.csv` — all Edo LGAs including Esan Central).
+
+**Option B — CLI:**
+
+```bash
+npm run pu:import
+```
+
+Uses `supabase/data/edo-polling-units.csv` by default (4,711 PUs).
 
 **Option B — CLI** (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`):
 

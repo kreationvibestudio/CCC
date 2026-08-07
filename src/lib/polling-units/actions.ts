@@ -55,6 +55,14 @@ export async function getPollingUnitsWithStatus(tenantId: string) {
     ward: string;
     lga: string;
     state: string;
+    registered_voters: number | null;
+    latitude: number | null;
+    longitude: number | null;
+    risk_level: string | null;
+    pu_code?: string | null;
+    ward_code?: string | null;
+    lg_code?: string | null;
+    geocode_status?: string | null;
     [key: string]: unknown;
   };
   const [units, statuses] = await Promise.all([

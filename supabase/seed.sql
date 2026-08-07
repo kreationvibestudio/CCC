@@ -26,7 +26,7 @@ INSERT INTO wards (id, lga_id, code, name) VALUES
   ('d0000000-0000-0000-0000-000000000004', 'c0000000-0000-0000-0000-000000000002', 'W01', 'Ugboha'),
   ('d0000000-0000-0000-0000-000000000005', 'c0000000-0000-0000-0000-000000000002', 'W02', 'Ewohimi');
 
--- Sample Esan polling units (expand with: npm run pu:import -- supabase/data/edo-esan-polling-units.csv)
+-- Sample Esan polling units (full Edo State: npm run pu:import → supabase/data/edo-polling-units.csv)
 INSERT INTO polling_units (tenant_id, ward_id, code, name, ward, lga, state, registered_voters, latitude, longitude, address, risk_level) VALUES
   ('a0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001', '12/04/01/001', 'Uromi Town Hall', 'Uromi I', 'Esan North-East', 'Edo', 1320, 6.7200, 6.3300, 'Uromi Town Hall, Esan North-East', 'low'),
   ('a0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001', '12/04/01/002', 'Uromi Market Square', 'Uromi I', 'Esan North-East', 'Edo', 1180, 6.7185, 6.3312, 'Uromi Market Square', 'low'),

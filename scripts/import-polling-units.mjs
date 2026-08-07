@@ -14,7 +14,7 @@ import { loadEnvLocal } from "./load-env.mjs";
 loadEnvLocal();
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_CSV = join(ROOT, "supabase/data/edo-esan-polling-units.csv");
+const DEFAULT_CSV = join(ROOT, "supabase/data/edo-polling-units.csv");
 const DEFAULT_TENANT = "a0000000-0000-0000-0000-000000000001";
 
 function parseCsvLine(line) {
@@ -109,29 +109,47 @@ async function main() {
   const rows = parseCsv(readFileSync(csvPath, "utf8"));
   console.log(`Importing ${rows.length} polling units for tenant ${tenantId}…`);
 
+  const BATCH = 100;
   let ok = 0;
   let fail = 0;
 
-  for (const row of rows) {
-    const body = { ...row, tenant_id: tenantId };
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const chunk = rows.slice(i, i + BATCH).map((row) => ({ ...row, tenant_id: tenantId }));
     const res = await fetch(`${url}/rest/v1/polling_units?on_conflict=tenant_id,code`, {
       method: "POST",
       headers: {
         apikey: key,
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates",
+        Prefer: "resolution=merge-duplicates,return=minimal",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(chunk),
     });
 
     if (res.ok) {
-      ok++;
-      console.log(`  ✓ ${row.code}`);
+      ok += chunk.length;
+      console.log(`  ✓ ${Math.min(i + BATCH, rows.length)}/${rows.length}`);
     } else {
-      fail++;
+      // Fall back to per-row so one bad record doesn't block the batch
       const err = await res.text();
-      console.error(`  ✗ ${row.code}: ${err.slice(0, 120)}`);
+      console.warn(`  batch failed (${err.slice(0, 100)}); retrying row-by-row…`);
+      for (const body of chunk) {
+        const one = await fetch(`${url}/rest/v1/polling_units?on_conflict=tenant_id,code`, {
+          method: "POST",
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify(body),
+        });
+        if (one.ok) ok++;
+        else {
+          fail++;
+          console.error(`  ✗ ${body.code}: ${(await one.text()).slice(0, 120)}`);
+        }
+      }
     }
   }
 

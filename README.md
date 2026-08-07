@@ -19,7 +19,7 @@ Demo geography is **Edo / Esan**. Expand polling units with:
 npm run pu:import
 ```
 
-(see `docs/PU-IMPORT.md` and `supabase/data/edo-esan-polling-units.csv`).
+(see `docs/PU-IMPORT.md` and `supabase/data/edo-polling-units.csv` — full Edo State, 4,711 PUs).
 
 ### Step 2 — Facebook is already configured
 

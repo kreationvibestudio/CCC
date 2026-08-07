@@ -48,8 +48,17 @@ export async function getPollingUnits(tenantId: string, filters?: { lga?: string
 
 export async function getPollingUnitsWithStatus(tenantId: string) {
   const supabase = await createClient();
+  type UnitRow = {
+    id: string;
+    name: string;
+    code: string;
+    ward: string;
+    lga: string;
+    state: string;
+    [key: string]: unknown;
+  };
   const [units, statuses] = await Promise.all([
-    fetchAllRows<Record<string, unknown>>(() =>
+    fetchAllRows<UnitRow>(() =>
       supabase
         .from("polling_units")
         .select("*")
@@ -68,8 +77,8 @@ export async function getPollingUnitsWithStatus(tenantId: string) {
   const statusMap = new Map(statuses.map((s) => [s.polling_unit_id, s]));
   return units.map((u) => ({
     ...u,
-    live_status: statusMap.get(u.id as string)?.status ?? "not_active",
-    turnout: statusMap.get(u.id as string)?.turnout ?? 0,
+    live_status: statusMap.get(u.id)?.status ?? "not_active",
+    turnout: statusMap.get(u.id)?.turnout ?? 0,
   }));
 }
 

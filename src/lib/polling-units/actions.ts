@@ -7,32 +7,69 @@ import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-action
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
 
+/** Supabase caps each response at 1,000 rows — page until exhausted. */
+async function fetchAllRows<T>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  buildQuery: () => any,
+  pageSize = 1000
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const { data, error } = await buildQuery().range(from, to);
+    if (error) throw error;
+    const chunk = (data ?? []) as T[];
+    rows.push(...chunk);
+    if (chunk.length < pageSize) break;
+  }
+  return rows;
+}
+
 export async function getPollingUnits(tenantId: string, filters?: { lga?: string; ward?: string; search?: string }) {
   const supabase = await createClient();
-  let q = supabase.from("polling_units").select("*").eq("tenant_id", tenantId).order("lga").order("ward").order("name");
-  if (filters?.lga) q = q.eq("lga", filters.lga);
-  if (filters?.ward) q = q.eq("ward", filters.ward);
-  if (filters?.search) {
-    q = q.or(
-      `code.ilike.%${filters.search}%,name.ilike.%${filters.search}%,pu_code.ilike.%${filters.search}%,ward.ilike.%${filters.search}%,lga.ilike.%${filters.search}%`
-    );
-  }
-  const { data } = await q;
-  return data ?? [];
+  return fetchAllRows(() => {
+    let q = supabase
+      .from("polling_units")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("lga")
+      .order("ward")
+      .order("name");
+    if (filters?.lga) q = q.eq("lga", filters.lga);
+    if (filters?.ward) q = q.eq("ward", filters.ward);
+    if (filters?.search) {
+      q = q.or(
+        `code.ilike.%${filters.search}%,name.ilike.%${filters.search}%,pu_code.ilike.%${filters.search}%,ward.ilike.%${filters.search}%,lga.ilike.%${filters.search}%`
+      );
+    }
+    return q;
+  });
 }
 
 export async function getPollingUnitsWithStatus(tenantId: string) {
   const supabase = await createClient();
-  const { data: units } = await supabase.from("polling_units").select("*").eq("tenant_id", tenantId);
-  const { data: statuses } = await supabase
-    .from("polling_unit_status")
-    .select("polling_unit_id, status, turnout")
-    .eq("tenant_id", tenantId);
-  const statusMap = new Map((statuses ?? []).map((s) => [s.polling_unit_id, s]));
-  return (units ?? []).map((u) => ({
+  const [units, statuses] = await Promise.all([
+    fetchAllRows<Record<string, unknown>>(() =>
+      supabase
+        .from("polling_units")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("lga")
+        .order("ward")
+        .order("name")
+    ),
+    fetchAllRows<{ polling_unit_id: string; status: string; turnout: number | null }>(() =>
+      supabase
+        .from("polling_unit_status")
+        .select("polling_unit_id, status, turnout")
+        .eq("tenant_id", tenantId)
+    ),
+  ]);
+  const statusMap = new Map(statuses.map((s) => [s.polling_unit_id, s]));
+  return units.map((u) => ({
     ...u,
-    live_status: statusMap.get(u.id)?.status ?? "not_active",
-    turnout: statusMap.get(u.id)?.turnout ?? 0,
+    live_status: statusMap.get(u.id as string)?.status ?? "not_active",
+    turnout: statusMap.get(u.id as string)?.turnout ?? 0,
   }));
 }
 

@@ -13,6 +13,16 @@ Secrets are **never committed to git**. They live in GitHub Secrets and a local 
 
 Use **Git Bash** (not PowerShell) for all commands below.
 
+## Windows local copy
+
+Canonical path on the campaign PC:
+
+```text
+D:\CCC
+```
+
+In Git Bash: `cd /d/CCC` — see [LOCAL-WINDOWS.md](./LOCAL-WINDOWS.md) for clone, secrets restore, and `npm run dev`.
+
 ## Git Bash commands
 
 ```bash

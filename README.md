@@ -4,6 +4,8 @@ AI-powered political campaign management for Nigerian elections.
 
 ## Quick Start (for beginners)
 
+**Windows local copy:** `D:\CCC` (Git Bash: `cd /d/CCC`). Full steps: [docs/LOCAL-WINDOWS.md](docs/LOCAL-WINDOWS.md).
+
 ### Step 1 — Install and start
 
 ```bash

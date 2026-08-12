@@ -32,9 +32,10 @@ const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boole
   { key: "appUrl", label: "App URL", critical: true },
   { key: "termiiApiKey", label: "Termii API key", critical: true },
   { key: "termiiSenderId", label: "Termii sender ID", critical: true },
-  { key: "facebookPageId", label: "Facebook page ID" },
+  { key: "facebookPageId", label: "Facebook page ID", critical: true },
   { key: "facebookUserToken", label: "Facebook user token" },
-  { key: "facebookPageToken", label: "Facebook page token" },
+  { key: "facebookPageToken", label: "Facebook page token", critical: true },
+  { key: "facebookAppCredentials", label: "Facebook app ID + secret (auto-refresh)" },
   { key: "openaiApiKey", label: "OpenAI API key" },
   { key: "googleMapsKey", label: "Google Maps key" },
 ];

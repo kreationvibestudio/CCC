@@ -1,80 +1,79 @@
-# Fix Facebook Permission Error (#10)
+# Facebook sync setup (reliable / always-on)
 
-If you see: **"requires pages_read_engagement permission"**
+CCC syncs the **Hon Akhakon Annenih** page into Social + Comments.
 
-Your token needs to be regenerated with the correct permissions.
+Goal: a **never-expiring page token** stored in Vercel, plus optional App ID/Secret so short-lived user tokens can be refreshed automatically.
 
-## Fix in 5 minutes
+Hard-coded page ID used in docs: `671649942702174`
 
-### 1. Open Graph API Explorer
+---
+
+## One-time: create a never-expiring page token
+
+### 1. Graph API Explorer
 https://developers.facebook.com/tools/explorer/
 
-### 2. Select your app
-Top dropdown → **campaign commander center** (or your app name)
+1. Select app **campaign commander center**
+2. Add permissions:
+   - `pages_show_list`
+   - `pages_read_engagement`
+   - `pages_read_user_content`
+   - `pages_manage_engagement` (for replies)
+3. **Generate Access Token** → log in as a **page admin**
 
-### 3. Add permissions
-Click **Add a Permission** and add ALL of these:
-- `pages_show_list`
-- `pages_read_engagement`
-- `pages_read_user_content`
+### 2. Make the user token long-lived (~60 days)
 
-### 4. Generate token
-- Click **Generate Access Token**
-- Log in with the Facebook account that **manages** the page "Hon Akhakon Annenih"
-- Click **Continue** and allow all permissions
-
-### 5. Copy token to project
-Open `m:\social media tracker\.env.local` and replace the line:
+In a browser (replace placeholders):
 
 ```
-FACEBOOK_USER_ACCESS_TOKEN=paste_your_new_token_here
+https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=APP_ID&client_secret=APP_SECRET&fb_exchange_token=SHORT_LIVED_USER_TOKEN
 ```
 
-### 6. Restart the app
-```bash
-npm run dev
+Copy `access_token` from the JSON response.
+
+### 3. Get the page token (does not expire)
+
+```
+https://graph.facebook.com/v21.0/me/accounts?access_token=LONG_LIVED_USER_TOKEN
 ```
 
-### 7. Sync again
-Social Media → **Sync Facebook Now**
+Find page `671649942702174` and copy its `access_token`.
+
+### 4. Set Vercel env (Production + Preview)
+
+| Variable | Value |
+|----------|--------|
+| `FACEBOOK_PAGE_ID` | `671649942702174` |
+| `FACEBOOK_PAGE_ACCESS_TOKEN` | page token from step 3 |
+| `FACEBOOK_USER_ACCESS_TOKEN` | long-lived user token from step 2 |
+| `FACEBOOK_APP_ID` | Meta app ID (Settings → Basic) |
+| `FACEBOOK_APP_SECRET` | Meta app secret |
+
+Then redeploy.
+
+> **Important:** Do not rely on `vercel env pull` for Facebook tokens. Sensitive values are redacted as `[SENSITIVE]` and will break local sync. Paste real tokens in the Vercel dashboard (and into `.env.local` manually for local dev).
 
 ---
 
-## Token expired? (Error 190 / "Session has expired")
+## What CCC does automatically now
 
-Graph API Explorer tokens expire in **1–2 hours**. If you see this on production:
-
-1. Regenerate token (steps 1–4 above)
-2. Get the **page token** (recommended — lasts longer):
-   ```
-   https://graph.facebook.com/v21.0/me/accounts?access_token=YOUR_NEW_USER_TOKEN
-   ```
-   Copy `access_token` for page `671649942702174`
-3. Update **both** places:
-   - `.env.local` → `FACEBOOK_USER_ACCESS_TOKEN` and `FACEBOOK_PAGE_ACCESS_TOKEN`
-   - **Vercel** → [ccc project Settings → Environment Variables](https://vercel.com/kreation-vibe-studios-projects/ccc/settings/environment-variables)
-4. Redeploy: `npx vercel --prod --yes` (or push to GitHub if connected)
+- Tries **env page token → stored DB token → user token exchange** until one works
+- Retries transient Graph API failures
+- Saves the working page token on `social_accounts` for the next sync
+- Continues posting sync if some comments fail
+- Hourly cron: `/api/cron/facebook-sync` (Vercel Cron)
 
 ---
 
-## Still not working?
+## Permission error (`pages_read_engagement` / `#10`)
 
-- Make sure you're an **Admin** on the Facebook page
-- In developers.facebook.com → your app → **Roles**, add your Facebook account as Administrator
-- App must be in **Development** mode with you as a tester, OR approved for production
+Regenerate the token with the permissions listed above, then update Vercel and redeploy.
 
-## Optional: use page token directly
+---
 
-After generating user token, visit this URL in browser (replace YOUR_TOKEN):
+## Still failing?
 
-```
-https://graph.facebook.com/v21.0/me/accounts?access_token=YOUR_TOKEN
-```
-
-Copy the `access_token` for page `671649942702174` and add to `.env.local`:
-
-```
-FACEBOOK_PAGE_ACCESS_TOKEN=paste_page_token_here
-```
-
-This skips token exchange and often works more reliably.
+- You must be an **Admin** on the Facebook page
+- In developers.facebook.com → app → **Roles**, add your Facebook user
+- App in Development mode needs you as a tester/admin, or use Live mode with approved permissions
+- Open **Admin → Secrets readiness** — Facebook page token should show as set

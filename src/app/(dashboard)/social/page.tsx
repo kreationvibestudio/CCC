@@ -13,7 +13,12 @@ export default async function SocialPage() {
 
   const facebookConfigured = Boolean(
     process.env.FACEBOOK_PAGE_ID &&
-      (process.env.FACEBOOK_PAGE_ACCESS_TOKEN || process.env.FACEBOOK_USER_ACCESS_TOKEN)
+      process.env.FACEBOOK_PAGE_ID.trim() !== "[SENSITIVE]" &&
+      !/^your[_-]/i.test(process.env.FACEBOOK_PAGE_ID.trim()) &&
+      ((process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim().length ?? 0) >= 40 ||
+        (process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim().length ?? 0) >= 40) &&
+      process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() !== "[SENSITIVE]" &&
+      process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() !== "[SENSITIVE]"
   );
 
   return (

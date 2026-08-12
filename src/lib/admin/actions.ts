@@ -125,9 +125,24 @@ export async function getSecretsStatus() {
     appUrl: Boolean(process.env.NEXT_PUBLIC_APP_URL),
     termiiApiKey: Boolean(process.env.TERMII_API_KEY?.trim()),
     termiiSenderId: Boolean(process.env.TERMII_SENDER_ID?.trim()),
-    facebookPageId: Boolean(process.env.FACEBOOK_PAGE_ID?.trim()),
-    facebookUserToken: Boolean(process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim()),
-    facebookPageToken: Boolean(process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim()),
+    facebookPageId: Boolean(
+      process.env.FACEBOOK_PAGE_ID?.trim() &&
+        process.env.FACEBOOK_PAGE_ID.trim() !== "[SENSITIVE]" &&
+        !/^your[_-]/i.test(process.env.FACEBOOK_PAGE_ID.trim())
+    ),
+    facebookUserToken: Boolean(
+      process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() &&
+        process.env.FACEBOOK_USER_ACCESS_TOKEN.trim().length >= 40 &&
+        process.env.FACEBOOK_USER_ACCESS_TOKEN.trim() !== "[SENSITIVE]"
+    ),
+    facebookPageToken: Boolean(
+      process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() &&
+        process.env.FACEBOOK_PAGE_ACCESS_TOKEN.trim().length >= 40 &&
+        process.env.FACEBOOK_PAGE_ACCESS_TOKEN.trim() !== "[SENSITIVE]"
+    ),
+    facebookAppCredentials: Boolean(
+      process.env.FACEBOOK_APP_ID?.trim() && process.env.FACEBOOK_APP_SECRET?.trim()
+    ),
     openaiApiKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
     googleMapsKey: Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()),
   };

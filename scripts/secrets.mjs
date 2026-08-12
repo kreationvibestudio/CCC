@@ -118,7 +118,42 @@ function github() {
 
 function vercelPull() {
   try {
+    const previous = existsSync(ENV_FILE) ? parseEnv(readFileSync(ENV_FILE, "utf8")) : [];
+    const previousMap = new Map(previous.map((e) => [e.key, e.value]));
+
     execSync("npx vercel env pull .env.local --yes", { cwd: ROOT, stdio: "inherit" });
+
+    // Vercel redacts Sensitive values as [SENSITIVE] on pull — keep prior real secrets.
+    if (existsSync(ENV_FILE)) {
+      const pulled = parseEnv(readFileSync(ENV_FILE, "utf8"));
+      const restored = [];
+      const lines = readFileSync(ENV_FILE, "utf8").split(/\r?\n/);
+      const nextLines = lines.map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) return line;
+        const eq = trimmed.indexOf("=");
+        if (eq === -1) return line;
+        const key = trimmed.slice(0, eq).trim();
+        let value = trimmed.slice(eq + 1).trim();
+        if (
+          (!value || value === "[SENSITIVE]" || /^your[_-]/i.test(value)) &&
+          previousMap.get(key) &&
+          previousMap.get(key) !== "[SENSITIVE]" &&
+          !/^your[_-]/i.test(previousMap.get(key) || "")
+        ) {
+          restored.push(key);
+          return `${key}=${previousMap.get(key)}`;
+        }
+        return line;
+      });
+      if (restored.length) {
+        writeFileSync(ENV_FILE, nextLines.join("\n").replace(/\n*$/, "\n"));
+        console.log(`✓ Preserved ${restored.length} local secret(s) that Vercel redacted: ${restored.join(", ")}`);
+      }
+      // silence unused
+      void pulled;
+    }
+
     console.log("✓ Pulled Vercel env vars into .env.local");
     backup();
   } catch {

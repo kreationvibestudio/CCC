@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { analyzeCommentWithAI } from "@/lib/ai/analyze-comment";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { analyzeCommentText } from "@/lib/ai/analyze-comment";
 import {
   fetchPageInfo,
   fetchPostComments,
   fetchPosts,
-  resolvePageAccessToken,
+  getWorkingPageToken,
+  isUsableFacebookToken,
   type FacebookSyncResult,
   FacebookApiError,
 } from "./client";
@@ -12,13 +14,19 @@ import {
 const DEMO_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
 function getFacebookConfig() {
-  const pageId = process.env.FACEBOOK_PAGE_ID;
-  const userToken = process.env.FACEBOOK_USER_ACCESS_TOKEN;
-  const pageToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+  const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
+  const userToken = process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim();
+  const pageToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim();
 
-  if (!pageId || (!userToken && !pageToken)) {
+  if (!pageId || pageId.length < 5 || /^your[_-]/i.test(pageId) || pageId === "[SENSITIVE]") {
     throw new FacebookApiError(
-      "Facebook is not configured. Add FACEBOOK_PAGE_ID and FACEBOOK_USER_ACCESS_TOKEN to .env.local"
+      "FACEBOOK_PAGE_ID is missing or invalid. Set the real page ID in Vercel / .env.local (e.g. 671649942702174)."
+    );
+  }
+
+  if (!isUsableFacebookToken(userToken) && !isUsableFacebookToken(pageToken)) {
+    throw new FacebookApiError(
+      "Facebook tokens are missing or invalid. Set FACEBOOK_PAGE_ACCESS_TOKEN (preferred, never-expiring page token) or FACEBOOK_USER_ACCESS_TOKEN. Note: `vercel env pull` redacts Sensitive values as [SENSITIVE] — paste real tokens in the Vercel dashboard."
     );
   }
 
@@ -30,42 +38,51 @@ function calcEngagementRate(likes: number, comments: number, shares: number, fol
   return Number((((likes + comments + shares) / followers) * 100).toFixed(2));
 }
 
+async function getDbClient() {
+  try {
+    return createServiceClient();
+  } catch {
+    return createClient();
+  }
+}
+
 export async function syncFacebookToDatabase(tenantId: string): Promise<FacebookSyncResult> {
   const { pageId, userToken, pageToken: envPageToken } = getFacebookConfig();
-  const supabase = await createClient();
+  const supabase = await getDbClient();
 
-  // Use page token directly if available — never call /me/accounts with a page token
-  const pageToken = envPageToken
-    ?? (userToken ? await resolvePageAccessToken(userToken, pageId) : null);
-
-  if (!pageToken) {
-    throw new FacebookApiError("No valid Facebook token. Set FACEBOOK_USER_ACCESS_TOKEN or FACEBOOK_PAGE_ACCESS_TOKEN.");
-  }
-  const page = await fetchPageInfo(pageId, pageToken);
-  const posts = await fetchPosts(pageId, pageToken, 25);
-  const followers = page.followers_count ?? page.fan_count ?? 0;
-
-  // Upsert social account
   const { data: existingAccount } = await supabase
     .from("social_accounts")
-    .select("id")
+    .select("id, access_token_encrypted")
     .eq("tenant_id", tenantId)
     .eq("platform", "facebook")
     .eq("account_id", pageId)
     .maybeSingle();
 
+  const { pageToken, source: tokenSource } = await getWorkingPageToken({
+    pageId,
+    envPageToken,
+    envUserToken: userToken,
+    storedPageToken: existingAccount?.access_token_encrypted,
+  });
+
+  const page = await fetchPageInfo(pageId, pageToken);
+  const posts = await fetchPosts(pageId, pageToken, 25);
+  const followers = page.followers_count ?? page.fan_count ?? 0;
+
   let accountId = existingAccount?.id;
 
   if (accountId) {
-    await supabase
+    const { error } = await supabase
       .from("social_accounts")
       .update({
         account_name: page.name,
         is_connected: true,
         followers,
         last_synced_at: new Date().toISOString(),
+        access_token_encrypted: pageToken,
       })
       .eq("id", accountId);
+    if (error) throw new FacebookApiError(`Failed to update social account: ${error.message}`);
   } else {
     const { data: inserted, error } = await supabase
       .from("social_accounts")
@@ -77,6 +94,7 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
         is_connected: true,
         followers,
         last_synced_at: new Date().toISOString(),
+        access_token_encrypted: pageToken,
       })
       .select("id")
       .single();
@@ -87,6 +105,8 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
 
   let postsSynced = 0;
   let commentsSynced = 0;
+  let commentFailures = 0;
+  let skipRemainingComments = false;
   let commentsSkippedReason: string | undefined;
 
   for (const post of posts) {
@@ -119,7 +139,8 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
     };
 
     if (postDbId) {
-      await supabase.from("social_posts").update(postPayload).eq("id", postDbId);
+      const { error } = await supabase.from("social_posts").update(postPayload).eq("id", postDbId);
+      if (error) throw new FacebookApiError(`Failed to update post: ${error.message}`);
     } else {
       const { data: insertedPost, error } = await supabase
         .from("social_posts")
@@ -132,45 +153,63 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
 
     postsSynced++;
 
-    // Try to fetch comments (requires pages_read_user_content permission)
-    if (!commentsSkippedReason) {
-      try {
-        const comments = await fetchPostComments(post.id, pageToken);
+    // Keep going per-post — one comment failure must not abort the whole sync
+    if (skipRemainingComments) continue;
 
-        for (const comment of comments) {
-          const { data: existingComment } = await supabase
+    try {
+      const comments = await fetchPostComments(post.id, pageToken);
+
+      for (const comment of comments) {
+        const { data: existingComment } = await supabase
+          .from("comments")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("platform_comment_id", comment.id)
+          .maybeSingle();
+
+        // Fast local analysis during sync (avoid OpenAI timeouts in serverless)
+        const analysis = analyzeCommentText(comment.message);
+        const commentPayload = {
+          tenant_id: tenantId,
+          platform: "facebook" as const,
+          platform_comment_id: comment.id,
+          post_id: postDbId,
+          author_name: comment.from?.name ?? "Facebook User",
+          content: comment.message,
+          status: "pending" as const,
+          created_at: comment.created_time,
+          ...analysis,
+        };
+
+        if (existingComment) {
+          const { error } = await supabase
             .from("comments")
-            .select("id")
-            .eq("tenant_id", tenantId)
-            .eq("platform_comment_id", comment.id)
-            .maybeSingle();
-
-          const analysis = await analyzeCommentWithAI(comment.message);
-          const commentPayload = {
-            tenant_id: tenantId,
-            platform: "facebook" as const,
-            platform_comment_id: comment.id,
-            post_id: postDbId,
-            author_name: comment.from?.name ?? "Facebook User",
-            content: comment.message,
-            status: "pending" as const,
-            created_at: comment.created_time,
-            ...analysis,
-          };
-
-          if (existingComment) {
-            await supabase.from("comments").update(commentPayload).eq("id", existingComment.id);
-          } else {
-            await supabase.from("comments").insert(commentPayload);
-          }
-          commentsSynced++;
+            .update(commentPayload)
+            .eq("id", existingComment.id);
+          if (error) throw new FacebookApiError(error.message);
+        } else {
+          const { error } = await supabase.from("comments").insert(commentPayload);
+          if (error) throw new FacebookApiError(error.message);
         }
-      } catch (err) {
-        if (err instanceof FacebookApiError) {
-          commentsSkippedReason =
-            "Comments require the pages_read_user_content permission. Posts synced successfully. Re-authorize your token in Meta Developer Console with that permission to sync comments.";
-        }
+        commentsSynced++;
       }
+    } catch (err) {
+      commentFailures++;
+      const permissionDenied =
+        err instanceof FacebookApiError && (err.code === 10 || err.code === 210);
+
+      if (permissionDenied) {
+        commentsSkippedReason =
+          "Comments require pages_read_user_content. Posts synced successfully. Re-authorize the token with that permission.";
+        skipRemainingComments = true;
+      } else if (!commentsSkippedReason) {
+        commentsSkippedReason =
+          err instanceof Error
+            ? `Some comments could not be synced: ${err.message.split("\n")[0]}`
+            : "Some comments could not be synced.";
+      }
+
+      if (commentFailures >= 5) skipRemainingComments = true;
     }
   }
 
@@ -178,10 +217,10 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
     tenant_id: tenantId,
     action: "facebook.sync",
     description: `Synced ${postsSynced} Facebook posts from ${page.name}`,
-    metadata: { postsSynced, commentsSynced },
+    metadata: { postsSynced, commentsSynced, tokenSource, commentFailures },
   });
 
-  return { page, postsSynced, commentsSynced, commentsSkippedReason };
+  return { page, postsSynced, commentsSynced, commentsSkippedReason, tokenSource };
 }
 
 export async function syncFacebookForDemoTenant() {

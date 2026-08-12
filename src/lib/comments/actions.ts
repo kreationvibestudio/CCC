@@ -60,9 +60,25 @@ export async function replyToComment(commentId: string, replyText: string) {
   if (!comment) return { error: "Comment not found" };
 
   if (comment.platform === "facebook") {
-    const pageToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
-    if (!pageToken) return { error: "Facebook page token not configured" };
+    const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
+    if (!pageId) return { error: "FACEBOOK_PAGE_ID not configured" };
+
+    const { data: account } = await supabase
+      .from("social_accounts")
+      .select("access_token_encrypted")
+      .eq("tenant_id", comment.tenant_id)
+      .eq("platform", "facebook")
+      .eq("account_id", pageId)
+      .maybeSingle();
+
     try {
+      const { getWorkingPageToken } = await import("@/lib/integrations/facebook/client");
+      const { pageToken } = await getWorkingPageToken({
+        pageId,
+        envPageToken: process.env.FACEBOOK_PAGE_ACCESS_TOKEN,
+        envUserToken: process.env.FACEBOOK_USER_ACCESS_TOKEN,
+        storedPageToken: account?.access_token_encrypted,
+      });
       await postFacebookCommentReply(comment.platform_comment_id, replyText, pageToken);
     } catch (e) {
       return { error: e instanceof Error ? e.message : "Facebook reply failed" };

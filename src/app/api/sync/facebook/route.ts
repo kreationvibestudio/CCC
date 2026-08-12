@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { syncFacebookToDatabase } from "@/lib/integrations/facebook/sync";
-import { FacebookApiError } from "@/lib/integrations/facebook/client";
+import { FacebookApiError, isUsableFacebookToken } from "@/lib/integrations/facebook/client";
+
+export const maxDuration = 60;
+export const runtime = "nodejs";
 
 export async function POST() {
   try {
@@ -23,9 +26,15 @@ export async function POST() {
       postsSynced: result.postsSynced,
       commentsSynced: result.commentsSynced,
       warning: result.commentsSkippedReason,
+      tokenSource: result.tokenSource,
     });
   } catch (err) {
-    const message = err instanceof FacebookApiError ? err.message : "Sync failed";
+    const message =
+      err instanceof FacebookApiError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Sync failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -37,13 +46,22 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
     const configured = Boolean(
-      process.env.FACEBOOK_PAGE_ID &&
-        (process.env.FACEBOOK_PAGE_ACCESS_TOKEN || process.env.FACEBOOK_USER_ACCESS_TOKEN)
+      pageId &&
+        pageId !== "[SENSITIVE]" &&
+        !/^your[_-]/i.test(pageId) &&
+        (isUsableFacebookToken(process.env.FACEBOOK_PAGE_ACCESS_TOKEN) ||
+          isUsableFacebookToken(process.env.FACEBOOK_USER_ACCESS_TOKEN))
     );
 
-    return NextResponse.json({ configured });
+    return NextResponse.json({
+      configured,
+      hasAppCredentials: Boolean(
+        process.env.FACEBOOK_APP_ID?.trim() && process.env.FACEBOOK_APP_SECRET?.trim()
+      ),
+    });
   } catch {
-    return NextResponse.json({ configured: false });
+    return NextResponse.json({ configured: false, hasAppCredentials: false });
   }
 }

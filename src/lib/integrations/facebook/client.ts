@@ -31,6 +31,7 @@ export interface FacebookSyncResult {
   postsSynced: number;
   commentsSynced: number;
   commentsSkippedReason?: string;
+  tokenSource?: string;
 }
 
 export class FacebookApiError extends Error {
@@ -50,12 +51,10 @@ export const FACEBOOK_TOKEN_REFRESH_HELP = `Facebook access token expired or inv
 2. Select app "campaign commander center"
 3. Add permissions: pages_show_list, pages_read_engagement, pages_read_user_content, pages_manage_engagement
 4. Generate Access Token → log in as the page admin
-5. Update FACEBOOK_USER_ACCESS_TOKEN (and FACEBOOK_PAGE_ACCESS_TOKEN if set) in:
-   • .env.local (local dev)
-   • Vercel → Project ccc → Settings → Environment Variables (production)
-6. Redeploy or restart dev server, then sync again
-
-Tip: Copy the page token from GET /me/accounts for page 671649942702174 — page tokens last longer.`;
+5. Exchange for a long-lived page token (see FACEBOOK-SETUP.md) — page tokens from a long-lived user token do not expire
+6. Update FACEBOOK_USER_ACCESS_TOKEN and FACEBOOK_PAGE_ACCESS_TOKEN in Vercel + .env.local
+7. Optionally set FACEBOOK_APP_ID + FACEBOOK_APP_SECRET so CCC can auto-refresh user tokens
+8. Redeploy / restart, then sync again`;
 
 export const FACEBOOK_PERMISSION_HELP = `Facebook token is missing required permissions. Fix:
 1. Go to developers.facebook.com → your app → Tools → Graph API Explorer
@@ -65,11 +64,38 @@ export const FACEBOOK_PERMISSION_HELP = `Facebook token is missing required perm
    • pages_read_engagement
    • pages_read_user_content
 4. Log in with the Facebook account that manages your page
-5. Copy the new token into .env.local as FACEBOOK_USER_ACCESS_TOKEN
-6. Restart npm run dev`;
+5. Copy the new token into .env.local / Vercel as FACEBOOK_USER_ACCESS_TOKEN
+6. Restart / redeploy`;
 
-function wrapFacebookError(error: { message: string; code?: number; type?: string; error_subcode?: number }): FacebookApiError {
-  if (error.code === 190 || /session has expired|invalid oauth/i.test(error.message)) {
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function isFacebookAuthError(err: unknown): boolean {
+  if (!(err instanceof FacebookApiError)) return false;
+  return (
+    err.code === 190 ||
+    err.code === 102 ||
+    /session has expired|invalid oauth|cannot parse access token|expired/i.test(err.message)
+  );
+}
+
+export function isUsableFacebookToken(value: string | null | undefined): value is string {
+  if (!value) return false;
+  const trimmed = value.trim();
+  if (trimmed.length < 40) return false;
+  if (/^\[SENSITIVE\]$/i.test(trimmed)) return false;
+  if (/^your[_-]/i.test(trimmed)) return false;
+  return true;
+}
+
+function wrapFacebookError(error: {
+  message: string;
+  code?: number;
+  type?: string;
+  error_subcode?: number;
+}): FacebookApiError {
+  if (error.code === 190 || /session has expired|invalid oauth|cannot parse access token/i.test(error.message)) {
     return new FacebookApiError(
       `${error.message}\n\n${FACEBOOK_TOKEN_REFRESH_HELP}`,
       error.code,
@@ -88,21 +114,92 @@ function wrapFacebookError(error: { message: string; code?: number; type?: strin
   return new FacebookApiError(error.message, error.code, error.type);
 }
 
-async function graphGet<T>(path: string, accessToken: string, params: Record<string, string> = {}): Promise<T> {
-  const url = new URL(`${GRAPH_BASE}${path.startsWith("/") ? path : `/${path}`}`);
-  url.searchParams.set("access_token", accessToken);
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, value);
+async function graphGet<T>(
+  path: string,
+  accessToken: string,
+  params: Record<string, string> = {},
+  retries = 3
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const url = new URL(`${GRAPH_BASE}${path.startsWith("/") ? path : `/${path}`}`);
+      url.searchParams.set("access_token", accessToken);
+      for (const [key, value] of Object.entries(params)) {
+        url.searchParams.set(key, value);
+      }
+
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      const json = await res.json();
+
+      if (json.error) {
+        const err = wrapFacebookError(json.error);
+        // Retry transient / rate-limit style failures
+        if (
+          !isFacebookAuthError(err) &&
+          err.code !== 10 &&
+          err.code !== 210 &&
+          attempt < retries - 1
+        ) {
+          await sleep(400 * (attempt + 1));
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+
+      return json as T;
+    } catch (err) {
+      lastError = err;
+      if (isFacebookAuthError(err) || attempt === retries - 1) throw err;
+      await sleep(400 * (attempt + 1));
+    }
   }
 
-  const res = await fetch(url.toString(), { next: { revalidate: 0 } });
+  throw lastError instanceof Error ? lastError : new FacebookApiError("Facebook request failed");
+}
+
+/** Exchange a short-lived user token for a long-lived (~60 day) user token. */
+export async function exchangeLongLivedUserToken(shortLivedUserToken: string): Promise<string> {
+  const appId = process.env.FACEBOOK_APP_ID?.trim();
+  const appSecret = process.env.FACEBOOK_APP_SECRET?.trim();
+  if (!appId || !appSecret) {
+    throw new FacebookApiError(
+      "FACEBOOK_APP_ID and FACEBOOK_APP_SECRET are required to refresh long-lived tokens."
+    );
+  }
+
+  const url = new URL(`${GRAPH_BASE}/oauth/access_token`);
+  url.searchParams.set("grant_type", "fb_exchange_token");
+  url.searchParams.set("client_id", appId);
+  url.searchParams.set("client_secret", appSecret);
+  url.searchParams.set("fb_exchange_token", shortLivedUserToken);
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
   const json = await res.json();
-
-  if (json.error) {
-    throw wrapFacebookError(json.error);
+  if (json.error) throw wrapFacebookError(json.error);
+  if (!json.access_token) {
+    throw new FacebookApiError("Facebook did not return a long-lived user token.");
   }
+  return json.access_token as string;
+}
 
-  return json as T;
+async function probePageToken(pageId: string, token: string): Promise<boolean> {
+  try {
+    await graphGet<{ data: unknown[] }>(`/${pageId}/published_posts`, token, {
+      fields: "id",
+      limit: "1",
+    });
+    return true;
+  } catch (err) {
+    if (isFacebookAuthError(err)) return false;
+    // Permission / empty errors still mean the token was accepted
+    if (err instanceof FacebookApiError && (err.code === 10 || err.code === 210 || err.code === 100)) {
+      return true;
+    }
+    throw err;
+  }
 }
 
 /** Exchange user token → page token. Skips /me/accounts if token is already a page token. */
@@ -110,20 +207,10 @@ export async function resolvePageAccessToken(
   userOrPageToken: string,
   pageId: string
 ): Promise<string> {
-  // 1. If already a page token, /me/accounts will fail — verify via posts endpoint first
-  try {
-    await graphGet<{ data: unknown[] }>(`/${pageId}/published_posts`, userOrPageToken, {
-      fields: "id",
-      limit: "1",
-    });
+  if (await probePageToken(pageId, userOrPageToken)) {
     return userOrPageToken;
-  } catch (err) {
-    if (err instanceof FacebookApiError && err.code !== 10 && err.code !== 210 && err.code !== 100) {
-      throw err;
-    }
   }
 
-  // 2. User token → exchange via /me/accounts
   try {
     const accounts = await graphGet<{
       data: Array<{ id: string; access_token: string }>;
@@ -148,6 +235,78 @@ export async function resolvePageAccessToken(
   throw new FacebookApiError(FACEBOOK_PERMISSION_HELP);
 }
 
+/**
+ * Try env page token → stored token → refreshed user token → user token exchange.
+ * Returns the first working page token.
+ */
+export async function getWorkingPageToken(options: {
+  pageId: string;
+  envPageToken?: string | null;
+  envUserToken?: string | null;
+  storedPageToken?: string | null;
+}): Promise<{ pageToken: string; source: string }> {
+  const { pageId } = options;
+  const candidates: Array<{ token: string; source: string; kind: "page" | "user" }> = [];
+
+  if (isUsableFacebookToken(options.envPageToken)) {
+    candidates.push({ token: options.envPageToken, source: "env_page_token", kind: "page" });
+  }
+  if (isUsableFacebookToken(options.storedPageToken)) {
+    candidates.push({ token: options.storedPageToken, source: "stored_page_token", kind: "page" });
+  }
+  if (isUsableFacebookToken(options.envUserToken)) {
+    candidates.push({ token: options.envUserToken, source: "env_user_token", kind: "user" });
+  }
+
+  if (candidates.length === 0) {
+    throw new FacebookApiError(
+      "Facebook is not configured with usable tokens. Set FACEBOOK_PAGE_ACCESS_TOKEN (preferred) or FACEBOOK_USER_ACCESS_TOKEN. Vercel “Sensitive” values cannot be pulled locally — set them in the Vercel dashboard."
+    );
+  }
+
+  const errors: string[] = [];
+
+  for (const candidate of candidates) {
+    try {
+      if (candidate.kind === "page") {
+        if (await probePageToken(pageId, candidate.token)) {
+          return { pageToken: candidate.token, source: candidate.source };
+        }
+        errors.push(`${candidate.source}: expired or invalid`);
+        continue;
+      }
+
+      // User token: optionally upgrade to long-lived, then resolve page token
+      let userToken = candidate.token;
+      if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
+        try {
+          userToken = await exchangeLongLivedUserToken(candidate.token);
+        } catch (err) {
+          // Keep short-lived token if exchange fails
+          errors.push(
+            `long_lived_exchange: ${err instanceof Error ? err.message.split("\n")[0] : "failed"}`
+          );
+        }
+      }
+
+      const pageToken = await resolvePageAccessToken(userToken, pageId);
+      return { pageToken, source: `${candidate.source}->page` };
+    } catch (err) {
+      errors.push(
+        `${candidate.source}: ${err instanceof Error ? err.message.split("\n")[0] : "failed"}`
+      );
+      if (!isFacebookAuthError(err) && !(err instanceof FacebookApiError && (err.code === 10 || err.code === 210))) {
+        // Unexpected non-auth failure on a candidate — keep trying others, but remember it
+        continue;
+      }
+    }
+  }
+
+  throw new FacebookApiError(
+    `Could not obtain a working Facebook page token.\nTried: ${errors.join(" | ")}\n\n${FACEBOOK_TOKEN_REFRESH_HELP}`
+  );
+}
+
 export async function fetchPageInfo(pageId: string, pageToken: string): Promise<FacebookPageInfo> {
   return graphGet<FacebookPageInfo>(`/${pageId}`, pageToken, {
     fields: "id,name,followers_count,fan_count,picture",
@@ -161,6 +320,7 @@ export async function fetchPosts(pageId: string, pageToken: string, limit = 25):
   ].join(",");
 
   const basicFields = "id,message,created_time,full_picture";
+  let sawAuthError: FacebookApiError | null = null;
 
   for (const [endpoint, fields] of [
     ["published_posts", fullFields],
@@ -174,17 +334,22 @@ export async function fetchPosts(pageId: string, pageToken: string, limit = 25):
         pageToken,
         { fields, limit: String(limit) }
       );
-      if (result.data?.length) return result.data;
+      // Empty feed is valid — do not treat as permission failure
+      return result.data ?? [];
     } catch (err) {
+      if (isFacebookAuthError(err)) {
+        sawAuthError = err instanceof FacebookApiError ? err : new FacebookApiError(String(err));
+        break;
+      }
       if (err instanceof FacebookApiError && err.code !== 10 && err.code !== 210) {
         throw err;
       }
     }
   }
 
-  throw new FacebookApiError(
-    `Could not fetch posts. ${FACEBOOK_PERMISSION_HELP}`
-  );
+  if (sawAuthError) throw sawAuthError;
+
+  throw new FacebookApiError(`Could not fetch posts. ${FACEBOOK_PERMISSION_HELP}`);
 }
 
 export async function fetchPostComments(postId: string, pageToken: string): Promise<FacebookComment[]> {

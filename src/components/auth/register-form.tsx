@@ -30,7 +30,11 @@ export function RegisterForm() {
       toast.error(result.error);
       return;
     }
-    toast.success("Account created! Please check your email to verify.");
+    if (result.requiresEmailConfirmation) {
+      toast.success("Account created. Ask an administrator to activate your account so you can sign in.");
+    } else {
+      toast.success("Account created! You can sign in now.");
+    }
     router.push("/login");
   }
 

@@ -23,7 +23,27 @@ export function Sidebar() {
     setMobileOpen(false);
   }, [pathname]);
 
-  const visibleItems = NAV_ITEMS.filter((item) => can(item.permission));
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => item.href !== "/admin" && can(item.permission)
+  );
+  const showAdmin = can("admin.users");
+  const adminActive = pathname.startsWith("/admin");
+
+  const adminLink = showAdmin ? (
+    <Link
+      href="/admin"
+      className={cn(
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        adminActive
+          ? "bg-primary/10 text-primary font-medium"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        collapsed && "justify-center px-2"
+      )}
+    >
+      <Shield className="h-4 w-4 shrink-0" />
+      {!collapsed && <span className="flex-1">Admin</span>}
+    </Link>
+  ) : null;
 
   const sidebarContent = (
     <div className="flex h-full flex-col">
@@ -81,11 +101,21 @@ export function Sidebar() {
           })}
         </nav>
       </ScrollArea>
-      <div className="hidden border-t border-border p-2 lg:block">
+      <div className="space-y-1 border-t border-border p-2">
+        {showAdmin && (
+          collapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>{adminLink}</TooltipTrigger>
+              <TooltipContent side="right">Admin</TooltipContent>
+            </Tooltip>
+          ) : (
+            adminLink
+          )
+        )}
         <Button
           variant="ghost"
           size="icon"
-          className="w-full"
+          className="hidden w-full lg:inline-flex"
           onClick={() => setCollapsed(!collapsed)}
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}

@@ -15,7 +15,7 @@ export async function signIn(email: string, password: string) {
 
 export async function signUp(email: string, password: string, fullName: string) {
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -27,7 +27,25 @@ export async function signUp(email: string, password: string, fullName: string) 
     },
   });
   if (error) return { error: error.message };
-  return { success: true };
+
+  // Session present ⇒ email confirmation is off and the user can sign in immediately.
+  // Session missing ⇒ Supabase expects a verification email. This app does not send
+  // those emails (no custom SMTP), so confirm the user with the service role instead.
+  let requiresEmailConfirmation = Boolean(data.user && !data.session);
+  if (requiresEmailConfirmation && data.user) {
+    try {
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const admin = createServiceClient();
+      const { error: confirmError } = await admin.auth.admin.updateUserById(data.user.id, {
+        email_confirm: true,
+      });
+      if (!confirmError) requiresEmailConfirmation = false;
+    } catch {
+      // Leave requiresEmailConfirmation true so the UI can avoid a false "check email" claim.
+    }
+  }
+
+  return { success: true, requiresEmailConfirmation };
 }
 
 export async function signOut() {

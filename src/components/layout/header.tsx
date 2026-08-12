@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  Search, Bell, Sun, Moon, Plus, LogOut, User, Settings, Command,
+  Search, Bell, Sun, Moon, Plus, LogOut, User, Settings, Command, Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,6 +149,11 @@ export function Header() {
             <DropdownMenuItem onClick={() => router.push("/settings/security")}>
               <Settings className="mr-2 h-4 w-4" /> Security & 2FA
             </DropdownMenuItem>
+            {can("admin.users") && (
+              <DropdownMenuItem onClick={() => router.push("/admin")}>
+                <Shield className="mr-2 h-4 w-4" /> Admin
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => signOut()}>
               <LogOut className="mr-2 h-4 w-4" /> Sign out

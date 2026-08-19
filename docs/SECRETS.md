@@ -77,7 +77,8 @@ npm run dev
 | Variable | Required for |
 |----------|----------------|
 | `NEXT_PUBLIC_SUPABASE_URL` / anon / `SUPABASE_SERVICE_ROLE_KEY` | App + Admin invite |
-| `NEXT_PUBLIC_APP_URL` | Auth redirects, QR check-in links |
+| `NEXT_PUBLIC_APP_URL` | Auth redirects, QR check-in links (**must be the Vercel URL in production, not localhost**) |
+| `CRON_SECRET` | Daily Facebook sync (`Authorization: Bearer`; set on Vercel so Cron injects it) |
 | `TERMII_API_KEY` / `TERMII_SENDER_ID` | Communications SMS send |
 | `FACEBOOK_*` | Social sync / comments |
 | `OPENAI_API_KEY` | AI assistant (optional) |

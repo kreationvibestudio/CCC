@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Shield, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-export function LoginForm() {
+export function LoginForm({ allowRegister = false }: { allowRegister?: boolean }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -80,8 +80,12 @@ export function LoginForm() {
         </form>
         <div className="mt-4 text-center text-sm text-muted-foreground">
           <Link href="/forgot-password" className="hover:text-primary">Forgot password?</Link>
-          {" · "}
-          <Link href="/register" className="hover:text-primary">Create account</Link>
+          {allowRegister && (
+            <>
+              {" · "}
+              <Link href="/register" className="hover:text-primary">Create account</Link>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -1,29 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncFacebookForDemoTenant } from "@/lib/integrations/facebook/sync";
+import { syncFacebookForCampaignTenant } from "@/lib/integrations/facebook/sync";
 import { FacebookApiError } from "@/lib/integrations/facebook/client";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
 /**
- * Hourly / on-demand Facebook sync for the campaign tenant.
- * Authorized via Vercel Cron header or CRON_SECRET bearer token.
+ * Daily Facebook sync. Vercel Cron sends Authorization: Bearer $CRON_SECRET
+ * when that env var is set. Spoofable x-vercel-cron is not accepted alone.
  */
 export async function GET(request: NextRequest) {
-  const cronHeader = request.headers.get("x-vercel-cron");
-  const auth = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET?.trim();
+  if (!cronSecret || cronSecret === "[SENSITIVE]" || cronSecret.length < 16) {
+    return NextResponse.json(
+      { error: "CRON_SECRET is not configured. Set a long random value on Vercel (Production)." },
+      { status: 503 }
+    );
+  }
 
-  const authorized =
-    Boolean(cronHeader) ||
-    (Boolean(cronSecret) && auth === `Bearer ${cronSecret}`);
-
-  if (!authorized) {
+  const auth = request.headers.get("authorization");
+  if (auth !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const result = await syncFacebookForDemoTenant();
+    const result = await syncFacebookForCampaignTenant();
     return NextResponse.json({
       success: true,
       pageName: result.page.name,

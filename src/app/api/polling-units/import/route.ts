@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
+import { hasPermission } from "@/types/auth";
 import { createClient } from "@/lib/supabase/server";
 import { parsePollingUnitsCsv, type NormalizedPollingUnit } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
@@ -13,6 +14,9 @@ const BATCH_LIMIT = 500;
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasPermission(user.role, "polling_units.manage")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const contentType = req.headers.get("content-type") ?? "";
   let rows: NormalizedPollingUnit[] = [];

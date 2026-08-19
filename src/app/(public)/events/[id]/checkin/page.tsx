@@ -1,23 +1,38 @@
 import { redirect } from "next/navigation";
-import { getEventPublic, checkInAttendee } from "@/lib/events/actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/forms/submit-button";
+import { checkInAttendee, getEventPublic } from "@/lib/events/actions";
 
 export default async function EventCheckInPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ code?: string }>;
+  searchParams: Promise<{ code?: string; success?: string }>;
 }) {
   const { id } = await params;
-  const { code } = await searchParams;
+  const { code, success } = await searchParams;
   const event = await getEventPublic(id);
-  if (!event) redirect("/events");
+
+  if (!event) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md items-center p-4">
+        <Card className="w-full">
+          <CardContent className="pt-6 text-center text-sm text-muted-foreground">
+            This check-in link is invalid or the event was removed.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (code && event.qr_code && code !== event.qr_code) {
-    return <div className="p-8 text-center">Invalid check-in code</div>;
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md items-center p-4">
+        <p className="w-full text-center">Invalid check-in code</p>
+      </div>
+    );
   }
 
   async function action(formData: FormData) {
@@ -25,6 +40,19 @@ export default async function EventCheckInPage({
     const r = await checkInAttendee(id, formData);
     if (r.error) throw new Error(r.error);
     redirect(`/events/${id}/checkin?success=1`);
+  }
+
+  if (success) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md items-center p-4">
+        <Card className="w-full">
+          <CardContent className="space-y-2 pt-6 text-center">
+            <h1 className="text-xl font-bold">You are checked in</h1>
+            <p className="text-sm text-muted-foreground">{event.title}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (

@@ -9,13 +9,13 @@ export const MODULES: Record<string, ModuleConfig> = {
   social: {
     slug: "social",
     title: "Social Media Command Center",
-    description: "Unified inbox across Facebook, Instagram, X, TikTok, and YouTube.",
-    features: ["Platform metrics", "Post performance", "Follower growth", "Engagement rate", "Connect accounts", "Sync schedule"],
+    description: "Facebook page sync, post performance, and comment intake.",
+    features: ["Facebook metrics", "Post performance", "Follower count", "Engagement rate", "Page token", "Daily sync"],
   },
   comments: {
     slug: "comments",
     title: "Unified Comment Management",
-    description: "Every comment from every platform in one dashboard.",
+    description: "Facebook comments in one inbox.",
     features: ["AI sentiment", "Issue classification", "Assign staff", "Reply inline", "Flag misinformation", "Bulk actions"],
   },
   ai: {
@@ -57,8 +57,8 @@ export const MODULES: Record<string, ModuleConfig> = {
   maps: {
     slug: "maps",
     title: "Voter Maps",
-    description: "Google Maps integration for polling unit lookup and directions.",
-    features: ["Search by ward", "Search by PU code", "Driving directions", "Walking directions", "Campaign offices", "Assistance centers"],
+    description: "Leaflet map of polling units with search and Google Maps links for directions.",
+    features: ["Search by ward", "Search by PU code", "Open in Google Maps", "Polling unit pins", "Campaign offices", "Assistance centers"],
   },
   "situation-room": {
     slug: "situation-room",

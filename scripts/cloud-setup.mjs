@@ -32,6 +32,7 @@ const MIGRATIONS = [
   "supabase/migrations/20250101000000_initial_schema.sql",
   "supabase/migrations/20250201000000_polling_units_geocode.sql",
   "supabase/migrations/20250202000000_polling_units_inec_fields.sql",
+  "supabase/migrations/20260820000000_rls_operational_tables.sql",
 ];
 
 loadEnvLocal();
@@ -293,12 +294,19 @@ async function main() {
   }
 
   if (!state.puMigrations && canRunSql) {
-    for (const file of MIGRATIONS.slice(1)) {
+    for (const file of MIGRATIONS.slice(1, 3)) {
       if (dbPassword) runSqlFile(file, ref, dbPassword);
       else await runSqlViaManagement(ref, readFileSync(join(ROOT, file), "utf8"));
     }
     ok("Polling-unit migrations applied");
     state.puMigrations = true;
+  }
+
+  if (canRunSql) {
+    const rlsFile = MIGRATIONS[3];
+    if (dbPassword) runSqlFile(rlsFile, ref, dbPassword);
+    else await runSqlViaManagement(ref, readFileSync(join(ROOT, rlsFile), "utf8"));
+    ok("Operational RLS policies applied");
   }
 
   if (!state.seed) {

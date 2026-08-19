@@ -13,16 +13,23 @@ export async function signIn(email: string, password: string) {
   return { success: true };
 }
 
-export async function signUp(email: string, password: string, fullName: string) {
-  const supabase = await createClient();
-  let role: "super_administrator" | "supporter" = "supporter";
+export async function isRegistrationOpen(): Promise<boolean> {
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const admin = createServiceClient();
-    const { count } = await admin.from("profiles").select("id", { count: "exact", head: true });
-    if (!count) role = "super_administrator";
+    const { count, error } = await admin.from("profiles").select("id", { count: "exact", head: true });
+    if (error) return false;
+    return (count ?? 0) === 0;
   } catch {
-    // Default to supporter if the service role is unavailable.
+    return false;
+  }
+}
+
+export async function signUp(email: string, password: string, fullName: string) {
+  const supabase = await createClient();
+  const open = await isRegistrationOpen();
+  if (!open) {
+    return { error: "Registration is invite-only. Ask a campaign administrator to add you." };
   }
 
   const { data, error } = await supabase.auth.signUp({
@@ -32,7 +39,7 @@ export async function signUp(email: string, password: string, fullName: string) 
       data: {
         full_name: fullName,
         tenant_id: "a0000000-0000-0000-0000-000000000001",
-        role,
+        role: "super_administrator",
       },
     },
   });
@@ -97,5 +104,16 @@ export async function resetPassword(email: string) {
     redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
   });
   if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function updatePassword(password: string) {
+  if (!password || password.length < 8) {
+    return { error: "Password must be at least 8 characters" };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: error.message };
+  await logAudit("auth.password_reset");
   return { success: true };
 }

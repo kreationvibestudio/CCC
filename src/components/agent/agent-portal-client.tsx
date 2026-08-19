@@ -12,10 +12,48 @@ type PU = { id: string; code: string; name: string; ward: string; lga: string };
 
 const OFFLINE_KEY = "ccc-agent-queue";
 
-function queueOffline(action: string, data: Record<string, string>) {
-  const q = JSON.parse(localStorage.getItem(OFFLINE_KEY) ?? "[]");
+const OFFLINE_ACTIONS = {
+  status: updatePuStatus,
+  report: submitAgentReport,
+  results: submitElectionResult,
+  incident: reportIncident,
+} as const;
+
+type OfflineAction = keyof typeof OFFLINE_ACTIONS;
+
+function readQueue(): { action: OfflineAction; data: Record<string, string>; at: number }[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(OFFLINE_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function queueOffline(action: OfflineAction, data: Record<string, string>) {
+  const q = readQueue();
   q.push({ action, data, at: Date.now() });
   localStorage.setItem(OFFLINE_KEY, JSON.stringify(q));
+}
+
+async function flushQueue() {
+  const q = readQueue();
+  if (!q.length) return;
+  const remaining: typeof q = [];
+  let synced = 0;
+  for (const item of q) {
+    const fn = OFFLINE_ACTIONS[item.action];
+    if (!fn) continue;
+    const fd = new FormData();
+    for (const [key, value] of Object.entries(item.data)) fd.set(key, value);
+    const result = await fn(fd);
+    if (result.error) remaining.push(item);
+    else synced += 1;
+  }
+  localStorage.setItem(OFFLINE_KEY, JSON.stringify(remaining));
+  if (synced && !remaining.length) toast.success(`Synced ${synced} offline report(s)`);
+  else if (synced) toast.success(`Synced ${synced}; ${remaining.length} still queued`);
+  else if (remaining.length) toast.error("Could not sync offline reports — will retry when you are back online");
 }
 
 export function AgentPortalClient({ units }: { units: PU[] }) {
@@ -26,9 +64,10 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
 
   useEffect(() => {
     setOnline(navigator.onLine);
+    if (navigator.onLine) void flushQueue();
     const on = () => {
       setOnline(true);
-      toast.success("Back online — sync pending reports");
+      void flushQueue();
     };
     const off = () => setOnline(false);
     window.addEventListener("online", on);
@@ -46,7 +85,11 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
     );
   }
 
-  function runAction(action: (fd: FormData) => Promise<{ error?: string; success?: boolean }>, fd: FormData, offlineLabel: string) {
+  function runAction(
+    action: (fd: FormData) => Promise<{ error?: string; success?: boolean }>,
+    fd: FormData,
+    offlineLabel: OfflineAction
+  ) {
     if (!online) {
       const data: Record<string, string> = {};
       fd.forEach((v, k) => {

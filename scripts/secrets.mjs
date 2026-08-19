@@ -171,7 +171,12 @@ function list(fromBackup = false) {
   const entries = readEnvFile(path);
   console.log("\nConfigured keys:");
   for (const { key, value } of entries) {
-    const status = value && !value.includes("your-") ? "set" : "empty";
+    let status = "empty";
+    if (value && value.trim() && value.trim() !== "[SENSITIVE]" && !/^your[_-]/i.test(value) && !value.includes("your-")) {
+      status = "set";
+    } else if (value?.trim() === "[SENSITIVE]") {
+      status = "redacted — paste the real value from the Vercel dashboard";
+    }
     console.log(`  ${key}: ${status}`);
   }
 }

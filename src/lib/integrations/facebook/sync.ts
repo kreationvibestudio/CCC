@@ -223,6 +223,6 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
   return { page, postsSynced, commentsSynced, commentsSkippedReason, tokenSource };
 }
 
-export async function syncFacebookForDemoTenant() {
+export async function syncFacebookForCampaignTenant() {
   return syncFacebookToDatabase(CAMPAIGN_TENANT_ID);
 }

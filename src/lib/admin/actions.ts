@@ -115,35 +115,32 @@ export async function updateUserRole(formData: FormData) {
   }
 }
 
+function isLiveSecret(value: string | undefined, minLength = 1) {
+  const t = value?.trim() ?? "";
+  if (t.length < minLength) return false;
+  if (t === "[SENSITIVE]") return false;
+  if (/^your[_-]/i.test(t)) return false;
+  return true;
+}
+
 /** Booleans only — never expose secret values to the client. */
 export async function getSecretsStatus() {
   await requirePermission("admin.users");
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() ?? "";
   return {
-    supabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-    supabaseAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-    supabaseServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-    appUrl: Boolean(process.env.NEXT_PUBLIC_APP_URL),
-    termiiApiKey: Boolean(process.env.TERMII_API_KEY?.trim()),
-    termiiSenderId: Boolean(process.env.TERMII_SENDER_ID?.trim()),
-    facebookPageId: Boolean(
-      process.env.FACEBOOK_PAGE_ID?.trim() &&
-        process.env.FACEBOOK_PAGE_ID.trim() !== "[SENSITIVE]" &&
-        !/^your[_-]/i.test(process.env.FACEBOOK_PAGE_ID.trim())
-    ),
-    facebookUserToken: Boolean(
-      process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() &&
-        process.env.FACEBOOK_USER_ACCESS_TOKEN.trim().length >= 40 &&
-        process.env.FACEBOOK_USER_ACCESS_TOKEN.trim() !== "[SENSITIVE]"
-    ),
-    facebookPageToken: Boolean(
-      process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() &&
-        process.env.FACEBOOK_PAGE_ACCESS_TOKEN.trim().length >= 40 &&
-        process.env.FACEBOOK_PAGE_ACCESS_TOKEN.trim() !== "[SENSITIVE]"
-    ),
-    facebookAppCredentials: Boolean(
-      process.env.FACEBOOK_APP_ID?.trim() && process.env.FACEBOOK_APP_SECRET?.trim()
-    ),
-    openaiApiKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
-    googleMapsKey: Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()),
+    supabaseUrl: isLiveSecret(process.env.NEXT_PUBLIC_SUPABASE_URL) && /^https?:\/\//.test(process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""),
+    supabaseAnon: isLiveSecret(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, 20),
+    supabaseServiceRole: isLiveSecret(process.env.SUPABASE_SERVICE_ROLE_KEY, 20),
+    appUrl: isLiveSecret(appUrl),
+    appUrlProduction: isLiveSecret(appUrl) && !/localhost|127\.0\.0\.1/.test(appUrl),
+    termiiApiKey: isLiveSecret(process.env.TERMII_API_KEY),
+    termiiSenderId: isLiveSecret(process.env.TERMII_SENDER_ID),
+    facebookPageId: isLiveSecret(process.env.FACEBOOK_PAGE_ID, 5),
+    facebookUserToken: isLiveSecret(process.env.FACEBOOK_USER_ACCESS_TOKEN, 40),
+    facebookPageToken: isLiveSecret(process.env.FACEBOOK_PAGE_ACCESS_TOKEN, 40),
+    facebookAppCredentials: isLiveSecret(process.env.FACEBOOK_APP_ID) && isLiveSecret(process.env.FACEBOOK_APP_SECRET),
+    openaiApiKey: isLiveSecret(process.env.OPENAI_API_KEY),
+    googleMapsKey: isLiveSecret(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
+    cronSecret: isLiveSecret(process.env.CRON_SECRET, 16),
   };
 }

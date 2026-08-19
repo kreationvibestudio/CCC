@@ -36,6 +36,8 @@ const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boole
   { key: "facebookUserToken", label: "Facebook user token" },
   { key: "facebookPageToken", label: "Facebook page token", critical: true },
   { key: "facebookAppCredentials", label: "Facebook app ID + secret (auto-refresh)" },
+  { key: "cronSecret", label: "Cron secret (Facebook sync)", critical: true },
+  { key: "appUrlProduction", label: "App URL is production (not localhost)", critical: true },
   { key: "openaiApiKey", label: "OpenAI API key" },
   { key: "googleMapsKey", label: "Google Maps key" },
 ];

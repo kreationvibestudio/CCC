@@ -97,6 +97,8 @@ Login at http://localhost:3000/login with the account you created.
 
 This adds `geocode_status`, INEC code columns (`state_code`, `lg_code`, `ward_code`, `pu_code`), indexes, and `campaign_locations`.
 
+Then run `supabase/migrations/20260820000000_rls_operational_tables.sql` so volunteer tasks, SMS logs, agent reports, and related tables are writable under RLS.
+
 ## Step 8 — Import Edo polling units
 
 **Option A — Dashboard UI:** Polling Units → **Import CSV** (upload `supabase/data/edo-polling-units.csv` — all 18 Edo LGAs including Esan Central).

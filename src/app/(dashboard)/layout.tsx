@@ -1,5 +1,8 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
+import { hasPermission } from "@/types/auth";
+import { NAV_ITEMS } from "@/lib/navigation";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 
@@ -10,6 +13,16 @@ export default async function DashboardGroupLayout({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const match = NAV_ITEMS.filter(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+  ).sort((a, b) => b.href.length - a.href.length)[0];
+
+  if (match && !hasPermission(user.role, match.permission)) {
+    const fallback = NAV_ITEMS.find((item) => hasPermission(user.role, item.permission));
+    redirect(fallback?.href ?? "/login");
+  }
 
   return (
     <AuthProvider user={user}>

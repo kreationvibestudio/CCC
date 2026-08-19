@@ -44,8 +44,13 @@ export async function getEvent(id: string) {
 
 /** Public check-in — no auth; scoped by event id only */
 export async function getEventPublic(id: string) {
-  const supabase = await createClient();
-  const { data } = await supabase.from("campaign_events").select("id, title, location, qr_code, tenant_id").eq("id", id).single();
+  const { createServiceClient } = await import("@/lib/supabase/admin");
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("campaign_events")
+    .select("id, title, location, qr_code, tenant_id")
+    .eq("id", id)
+    .maybeSingle();
   return data;
 }
 
@@ -81,15 +86,25 @@ export async function deleteEvent(id: string) {
 }
 
 export async function checkInAttendee(eventId: string, formData: FormData) {
-  const supabase = await createClient();
-  const name = formData.get("name") as string;
-  const phone = formData.get("phone") as string;
-  const { data: attendee, error: aErr } = await supabase.from("event_attendees").insert({
-    event_id: eventId,
-    name,
-    phone,
-    rsvp_status: "checked_in",
-  }).select("id").single();
+  const name = String(formData.get("name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  if (!name || !phone) return { error: "Name and phone are required" };
+
+  const { createServiceClient } = await import("@/lib/supabase/admin");
+  const supabase = createServiceClient();
+  const { data: event } = await supabase.from("campaign_events").select("id").eq("id", eventId).maybeSingle();
+  if (!event) return { error: "Event not found" };
+
+  const { data: attendee, error: aErr } = await supabase
+    .from("event_attendees")
+    .insert({
+      event_id: eventId,
+      name,
+      phone,
+      rsvp_status: "checked_in",
+    })
+    .select("id")
+    .single();
   if (aErr) return { error: aErr.message };
   await supabase.from("event_checkins").insert({ event_id: eventId, attendee_id: attendee.id, method: "qr" });
   revalidatePath(`/events/${eventId}`);
@@ -97,6 +112,8 @@ export async function checkInAttendee(eventId: string, formData: FormData) {
 }
 
 export async function getEventAttendees(eventId: string) {
+  const user = await getCurrentUser();
+  if (!user) return [];
   const supabase = await createClient();
   const { data } = await supabase.from("event_attendees").select("*").eq("event_id", eventId).order("created_at", { ascending: false });
   return data ?? [];

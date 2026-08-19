@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Contact, Plus } from "lucide-react";
-import { PageHeader, EmptyState, StatCard } from "@/components/shared/page-shell";
+import { PageHeader, StatCard } from "@/components/shared/page-shell";
 import { DataTable } from "@/components/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

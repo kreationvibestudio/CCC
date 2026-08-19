@@ -54,7 +54,7 @@ export function LoginForm() {
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="admin@demo.campaign.ng"
+              placeholder="you@campaign.ng"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required

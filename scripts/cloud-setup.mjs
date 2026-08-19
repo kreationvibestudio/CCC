@@ -25,9 +25,7 @@ import { loadEnvLocal } from "./load-env.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SUPABASE_CLI = "supabase@2.111.0";
-const ADMIN_EMAIL = "admin@demo.campaign.ng";
-const ADMIN_PASSWORD = "DemoPassword123!";
-const DEMO_TENANT = "a0000000-0000-0000-0000-000000000001";
+const CAMPAIGN_TENANT = "a0000000-0000-0000-0000-000000000001";
 const BUCKET = "election-media";
 
 const MIGRATIONS = [
@@ -126,8 +124,8 @@ async function audit(admin) {
   const tenants = await admin.from("tenants").select("id").limit(1);
   if (!tenants.error && tenants.data?.length) {
     state.schema = true;
-    const demo = await admin.from("tenants").select("id").eq("id", DEMO_TENANT).maybeSingle();
-    state.seed = !demo.error && demo.data != null;
+    const campaign = await admin.from("tenants").select("id").eq("id", CAMPAIGN_TENANT).maybeSingle();
+    state.seed = !campaign.error && campaign.data != null;
   }
 
   if (state.schema) {
@@ -139,7 +137,10 @@ async function audit(admin) {
   }
 
   const users = await admin.auth.admin.listUsers({ perPage: 200 });
-  const adminUser = users.data?.users?.find((u) => u.email === ADMIN_EMAIL);
+  const adminEmail = process.env.ADMIN_EMAIL?.trim();
+  const adminUser = adminEmail
+    ? users.data?.users?.find((u) => u.email === adminEmail)
+    : users.data?.users?.find((u) => u.email);
   state.adminUser = !!adminUser;
 
   if (adminUser) {
@@ -167,29 +168,36 @@ async function audit(admin) {
 }
 
 async function ensureAdmin(admin) {
+  const adminEmail = process.env.ADMIN_EMAIL?.trim();
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminEmail || !adminPassword) {
+    info("No ADMIN_EMAIL / ADMIN_PASSWORD set — skip creating an admin. First register becomes super administrator.");
+    return;
+  }
+
   let userId;
   const listed = await admin.auth.admin.listUsers({ perPage: 200 });
-  const existing = listed.data?.users?.find((u) => u.email === ADMIN_EMAIL);
+  const existing = listed.data?.users?.find((u) => u.email === adminEmail);
   if (existing) {
     userId = existing.id;
-    ok(`Admin user exists (${ADMIN_EMAIL})`);
+    ok(`Admin user exists (${adminEmail})`);
   } else {
     const created = await admin.auth.admin.createUser({
-      email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
+      email: adminEmail,
+      password: adminPassword,
       email_confirm: true,
     });
     if (created.error) fail(`Create admin user: ${created.error.message}`);
     userId = created.data.user.id;
-    ok(`Created admin user (${ADMIN_EMAIL})`);
+    ok(`Created admin user (${adminEmail})`);
   }
 
   const profile = await admin.from("profiles").upsert(
     {
       id: userId,
-      tenant_id: DEMO_TENANT,
-      email: ADMIN_EMAIL,
-      full_name: "Demo Admin",
+      tenant_id: CAMPAIGN_TENANT,
+      email: adminEmail,
+      full_name: process.env.ADMIN_FULL_NAME?.trim() || "Campaign Admin",
       role: "super_administrator",
     },
     { onConflict: "id" }
@@ -318,12 +326,12 @@ async function main() {
   info(`Polling units: ${state.pollingUnitCount}`);
   info(`Storage bucket: ${state.storageBucket ? "yes" : "missing"}`);
 
-  if (!state.schema || !state.seed || !state.puMigrations || !state.adminProfile) {
+  if (!state.schema || !state.seed || !state.puMigrations) {
     fail("Setup incomplete — review errors above");
   }
 
   console.log("\n✓ Supabase Cloud setup complete.");
-  console.log(`  Login: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  console.log("  Register the first account in the app — that user becomes super administrator.");
 }
 
 main().catch((e) => fail(e.message));

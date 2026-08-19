@@ -15,6 +15,16 @@ export async function signIn(email: string, password: string) {
 
 export async function signUp(email: string, password: string, fullName: string) {
   const supabase = await createClient();
+  let role: "super_administrator" | "supporter" = "supporter";
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const admin = createServiceClient();
+    const { count } = await admin.from("profiles").select("id", { count: "exact", head: true });
+    if (!count) role = "super_administrator";
+  } catch {
+    // Default to supporter if the service role is unavailable.
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -22,7 +32,7 @@ export async function signUp(email: string, password: string, fullName: string) 
       data: {
         full_name: fullName,
         tenant_id: "a0000000-0000-0000-0000-000000000001",
-        role: "supporter",
+        role,
       },
     },
   });

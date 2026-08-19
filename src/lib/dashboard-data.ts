@@ -86,7 +86,7 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
   const totalCommentCount = posts.reduce((s, p) => s + (p.comments_count ?? 0), 0);
   const dailyReach = posts.length
     ? Math.round(posts.reduce((s, p) => s + (p.likes ?? 0) + (p.comments_count ?? 0) + (p.shares ?? 0), 0) / posts.length)
-    : Math.round(followers * 0.12);
+    : 0;
 
   const positive = comments.filter((c) => c.sentiment === "positive").length;
   const sentimentScore = comments.length ? Math.round((positive / comments.length) * 100) : 0;
@@ -113,21 +113,24 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
 
   const briefingContent = briefingRes.data?.content as Record<string, unknown> | undefined;
   const liveBriefing = generateBriefingFromComments(comments, posts.length, totalLikes);
+  const hasLiveActivity = comments.length > 0 || posts.length > 0;
 
-  const briefing: DashboardBriefing = briefingContent
-    ? {
-        summary: String(briefingContent.summary ?? liveBriefing.summary),
-        topIssues: (briefingContent.top_issues as string[])?.length
-          ? (briefingContent.top_issues as string[])
-          : liveBriefing.topIssues,
-        recommendations: (briefingContent.recommendations as string[])?.length
-          ? (briefingContent.recommendations as string[])
-          : liveBriefing.recommendations,
-        sentimentBreakdown: comments.length
-          ? liveBriefing.sentimentBreakdown
-          : (briefingContent.sentiment_breakdown as DashboardBriefing["sentimentBreakdown"]) ?? liveBriefing.sentimentBreakdown,
-      }
-    : liveBriefing;
+  const briefing: DashboardBriefing =
+    hasLiveActivity && briefingContent
+      ? {
+          summary: String(briefingContent.summary ?? liveBriefing.summary),
+          topIssues: (briefingContent.top_issues as string[])?.length
+            ? (briefingContent.top_issues as string[])
+            : liveBriefing.topIssues,
+          recommendations: (briefingContent.recommendations as string[])?.length
+            ? (briefingContent.recommendations as string[])
+            : liveBriefing.recommendations,
+          sentimentBreakdown: comments.length
+            ? liveBriefing.sentimentBreakdown
+            : (briefingContent.sentiment_breakdown as DashboardBriefing["sentimentBreakdown"]) ??
+              liveBriefing.sentimentBreakdown,
+        }
+      : liveBriefing;
 
   return {
     tenantName: tenant?.name ?? "Campaign Command Center",

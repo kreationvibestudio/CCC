@@ -11,7 +11,7 @@ import {
   FacebookApiError,
 } from "./client";
 
-const DEMO_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
+const CAMPAIGN_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
 function getFacebookConfig() {
   const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
@@ -224,5 +224,5 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
 }
 
 export async function syncFacebookForDemoTenant() {
-  return syncFacebookToDatabase(DEMO_TENANT_ID);
+  return syncFacebookToDatabase(CAMPAIGN_TENANT_ID);
 }

@@ -62,7 +62,7 @@ npx supabase db reset
 
 Then copy the anon key from `supabase start` output into `.env.local`.
 
-Demo login after seed: `admin@demo.campaign.ng` / `DemoPassword123!`
+The first person to register becomes the campaign super administrator. There is no demo login.
 
 ---
 

@@ -21,7 +21,15 @@ Audit without changes:
 npm run cloud:audit
 ```
 
-The script is idempotent: it applies only missing schema, seed, migrations, admin user, storage bucket, and polling-unit import.
+The script is idempotent: it applies only missing schema, baseline seed (tenant + geography), migrations, storage bucket, and polling-unit import. It does not create a demo user.
+
+To wipe sample/operational data and keep polling units:
+
+```bash
+npm run data:zero
+```
+
+Or in the SQL Editor run `supabase/zero-operational-data.sql`. First person to register afterwards is super administrator.
 
 ---
 
@@ -51,20 +59,20 @@ Then repeat Step 1.
 2. Copy **all** of `supabase/seed.sql`
 3. Paste → **Run**
 
-## Step 3 — Create admin user (Dashboard UI)
+## Step 3 — Create the first admin (Dashboard UI)
 
 1. Go to **Authentication → Users**
 2. Click **Add user → Create new user**
-3. Fill in:
-   - Email: `admin@demo.campaign.ng`
-   - Password: `DemoPassword123!`
-   - ✅ **Auto Confirm User** (turn ON)
-4. Click **Create user**
+3. Use a **real** campaign email and a strong password
+4. Turn **Auto Confirm User** ON
+5. Click **Create user**
 
-## Step 4 — Make that user an admin
+Or skip this step: register in the app. The first account becomes super administrator.
+
+## Step 4 — Make that user an admin (if you created them in the dashboard)
 
 1. New SQL query
-2. Copy **all** of `supabase/cloud-admin.sql`
+2. Copy `supabase/cloud-admin.sql`, replace `YOUR_EMAIL` with that address
 3. Paste → **Run**
 
 ## Step 5 — Disable email confirmation
@@ -78,9 +86,7 @@ Then repeat Step 1.
 npm run dev
 ```
 
-Login at http://localhost:3000/login with:
-- `admin@demo.campaign.ng`
-- `DemoPassword123!`
+Login at http://localhost:3000/login with the account you created.
 
 ## Step 7 — Polling unit migrations (Edo/Esan)
 

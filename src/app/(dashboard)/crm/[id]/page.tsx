@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getContact, getContactInteractions, getContactDonations, updateContact, deleteContact, logInteraction, recordDonation } from "@/lib/crm/actions";
 
@@ -66,11 +67,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           <p key={i.id} className="mb-1 text-sm text-muted-foreground">{i.interaction_type}: {i.notes}</p>
         ))}
         <form action={interactionAction} className="mt-3 space-y-2">
-          <select name="interaction_type" className="flex h-9 w-full rounded-md border border-input px-3 text-sm">
+          <NativeSelect name="interaction_type">
             <option value="call">Call</option>
             <option value="meeting">Meeting</option>
             <option value="visit">Visit</option>
-          </select>
+          </NativeSelect>
           <Input name="notes" placeholder="Notes" required />
           <Button type="submit" size="sm">Log interaction</Button>
         </form>

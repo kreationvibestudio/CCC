@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getVolunteer, getVolunteerTasks, updateVolunteer, deleteVolunteer, assignVolunteerTask } from "@/lib/volunteers/actions";
 
@@ -49,11 +50,11 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
             <div className="space-y-1"><Label>LGA</Label><Input name="lga" defaultValue={volunteer.lga ?? ""} /></div>
             <div className="space-y-1"><Label>Skills (comma-separated)</Label><Input name="skills" defaultValue={volunteer.skills?.join(", ") ?? ""} /></div>
           </div>
-          <select name="training_status" defaultValue={volunteer.training_status} className="flex h-9 w-full rounded-md border border-input px-3 text-sm">
+          <NativeSelect name="training_status" defaultValue={volunteer.training_status}>
             <option value="pending">Pending</option>
             <option value="in_progress">In progress</option>
             <option value="completed">Completed</option>
-          </select>
+          </NativeSelect>
           <SubmitButton label="Save" />
         </form>
       </CardContent></Card>

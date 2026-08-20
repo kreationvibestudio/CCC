@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { inviteUser, updateUserRole, zeroCampaignData } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 
@@ -228,11 +229,10 @@ export function AdminView({
             </div>
             <div className="space-y-1">
               <Label htmlFor="role">Role</Label>
-              <select
+              <NativeSelect
                 id="role"
                 name="role"
                 defaultValue="supporter"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                 disabled={pending}
               >
                 {ROLE_OPTIONS.map(([value, label]) => (
@@ -240,7 +240,7 @@ export function AdminView({
                     {label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -286,10 +286,10 @@ export function AdminView({
               </div>
               <form action={handleRoleChange} className="flex items-center gap-2">
                 <input type="hidden" name="user_id" value={p.id} />
-                <select
+                <NativeSelect
                   name="role"
                   defaultValue={p.role}
-                  className="flex h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+                  className="w-auto"
                   disabled={pending}
                 >
                   {ROLE_OPTIONS.map(([value, label]) => (
@@ -297,7 +297,7 @@ export function AdminView({
                       {label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
                 <Button type="submit" size="sm" variant="secondary" disabled={pending}>
                   Save
                 </Button>

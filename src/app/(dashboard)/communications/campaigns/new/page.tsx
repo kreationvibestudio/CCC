@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shared/page-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createCampaign, getTemplates } from "@/lib/communications/actions";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -36,10 +37,9 @@ export default async function NewCampaignPage() {
             <input type="hidden" name="channel" value="sms" />
             <div className="space-y-1">
               <Label htmlFor="template_id">Default SMS template (optional)</Label>
-              <select
+              <NativeSelect
                 id="template_id"
                 name="template_id"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                 defaultValue=""
               >
                 <option value="">Choose when sending</option>
@@ -48,7 +48,7 @@ export default async function NewCampaignPage() {
                     {t.name}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <SubmitButton label="Create campaign" />
           </form>

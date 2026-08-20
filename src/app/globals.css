@@ -33,6 +33,7 @@
 }
 
 :root {
+  color-scheme: light;
   --radius: 0.625rem;
   --background: oklch(0.985 0.002 247);
   --foreground: oklch(0.18 0.02 255);
@@ -58,6 +59,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.14 0.02 255);
   --foreground: oklch(0.95 0.01 255);
   --card: oklch(0.18 0.025 255);
@@ -87,6 +89,22 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  /* Native <select> listboxes ignore Tailwind; force readable option colours. */
+  select {
+    background-color: var(--card);
+    color: var(--foreground);
+  }
+  option,
+  optgroup {
+    background-color: #ffffff;
+    color: #111827;
+  }
+  .dark option,
+  .dark optgroup {
+    background-color: #1e293b;
+    color: #f8fafc;
   }
 }
 

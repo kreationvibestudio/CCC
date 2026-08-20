@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shared/page-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createEvent } from "@/lib/events/actions";
 
@@ -23,14 +24,14 @@ export default function NewEventPage() {
             <div className="space-y-1"><Label htmlFor="title">Title</Label><Input id="title" name="title" required /></div>
             <div className="space-y-1">
               <Label htmlFor="event_type">Event type</Label>
-              <select id="event_type" name="event_type" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm">
+              <NativeSelect id="event_type" name="event_type">
                 <option value="town_hall">Town hall</option>
                 <option value="rally">Rally</option>
                 <option value="ward_meeting">Ward meeting</option>
                 <option value="door_to_door">Door to door</option>
                 <option value="fundraising_dinner">Fundraising dinner</option>
                 <option value="press_conference">Press conference</option>
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1"><Label htmlFor="location">Location</Label><Input id="location" name="location" required /></div>
             <div className="grid gap-4 sm:grid-cols-2">

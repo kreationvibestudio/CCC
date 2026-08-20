@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   Dialog,
   DialogContent,
@@ -178,9 +179,8 @@ function SendCampaignDialog({
           </p>
           <div className="space-y-1">
             <Label htmlFor={`tpl-${campaign.id}`}>SMS template</Label>
-            <select
+            <NativeSelect
               id={`tpl-${campaign.id}`}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
               disabled={loading || templates.length === 0}
@@ -194,10 +194,7 @@ function SendCampaignDialog({
                   </option>
                 ))
               )}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor={`ward-${campaign.id}`}>Ward (optional)</Label>
+            </NativeSelect>
             <Input
               id={`ward-${campaign.id}`}
               value={ward}
@@ -208,9 +205,8 @@ function SendCampaignDialog({
           </div>
           <div className="space-y-1">
             <Label htmlFor={`support-${campaign.id}`}>Support level (optional)</Label>
-            <select
+            <NativeSelect
               id={`support-${campaign.id}`}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
               value={supportLevel}
               onChange={(e) => setSupportLevel(e.target.value)}
               disabled={loading}
@@ -221,7 +217,7 @@ function SendCampaignDialog({
                   {level}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <Button
             className="w-full"

@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shared/page-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createVolunteer } from "@/lib/volunteers/actions";
 
@@ -31,11 +32,11 @@ export default function NewVolunteerPage() {
             <div className="space-y-1"><Label htmlFor="skills">Skills (comma-separated)</Label><Input id="skills" name="skills" placeholder="canvassing, driving, media" /></div>
             <div className="space-y-1">
               <Label htmlFor="training_status">Training status</Label>
-              <select id="training_status" name="training_status" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm">
+              <NativeSelect id="training_status" name="training_status">
                 <option value="pending">Pending</option>
                 <option value="in_progress">In progress</option>
                 <option value="completed">Completed</option>
-              </select>
+              </NativeSelect>
             </div>
             <SubmitButton label="Add Volunteer" />
           </form>

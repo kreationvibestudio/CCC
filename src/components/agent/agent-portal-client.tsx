@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { submitAgentReport, reportIncident, updatePuStatus, submitElectionResult } from "@/lib/agent/actions";
 import { ResultSheetForm } from "@/components/agent/result-sheet-form";
 import { toast } from "sonner";
@@ -117,15 +118,14 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
 
       <div className="space-y-1">
         <Label>Polling unit</Label>
-        <select
+        <NativeSelect
           value={puId}
           onChange={(e) => setPuId(e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input px-3 text-sm"
         >
           {units.map((u) => (
             <option key={u.id} value={u.id}>{u.code} — {u.name}</option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       <Button variant="outline" className="w-full" onClick={getLocation} type="button">
@@ -146,13 +146,13 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
         className="space-y-3 rounded-xl border border-border p-4"
       >
         <p className="font-medium">PU Status & Turnout</p>
-        <select name="status" className="flex h-9 w-full rounded-md border border-input px-3 text-sm">
+        <NativeSelect name="status">
           <option value="not_active">Not active</option>
           <option value="voting_in_progress">Voting in progress</option>
           <option value="delayed">Delayed</option>
           <option value="minor_issue">Minor issue</option>
           <option value="serious_incident">Serious incident</option>
-        </select>
+        </NativeSelect>
         <Input name="turnout" type="number" placeholder="Turnout count" min={0} />
         <Button type="submit" disabled={pending || !puId} className="w-full">Update status</Button>
       </form>
@@ -167,11 +167,11 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
         className="space-y-3 rounded-xl border border-border p-4"
       >
         <p className="font-medium">Field report</p>
-        <select name="report_type" className="flex h-9 w-full rounded-md border border-input px-3 text-sm">
+        <NativeSelect name="report_type">
           <option value="turnout">Turnout update</option>
           <option value="logistics">Logistics</option>
           <option value="observation">Observation</option>
-        </select>
+        </NativeSelect>
         <textarea name="content" required rows={3} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" placeholder="Report details…" />
         <Button type="submit" disabled={pending || !puId} className="w-full">Submit report</Button>
       </form>
@@ -205,12 +205,12 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
         <p className="font-medium text-destructive">Report incident</p>
         <Input name="title" placeholder="Title" required />
         <textarea name="description" required rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" />
-        <select name="severity" className="flex h-9 w-full rounded-md border border-input px-3 text-sm">
+        <NativeSelect name="severity">
           <option value="low">Low</option>
           <option value="medium">Medium</option>
           <option value="high">High</option>
           <option value="critical">Critical</option>
-        </select>
+        </NativeSelect>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="is_emergency" value="true" /> Emergency
         </label>

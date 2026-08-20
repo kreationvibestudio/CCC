@@ -12,10 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, nativeSelectClassName } from "@/components/ui/native-select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import type { Comment } from "@/types/database";
 import type { TeamMember } from "@/lib/comments/data";
 import {
@@ -97,7 +98,7 @@ export function CommentsInbox({
     router.refresh();
   }
 
-  const selectClass = "h-9 rounded-md border border-border bg-background px-3 text-sm";
+  const selectClass = cn(nativeSelectClassName, "w-auto");
 
   return (
     <div className="space-y-6">
@@ -112,22 +113,22 @@ export function CommentsInbox({
 
       <div className="flex flex-wrap gap-2">
         <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
-        <select className={selectClass} value={platform} onChange={(e) => setPlatform(e.target.value)}>
+        <NativeSelect className={selectClass} value={platform} onChange={(e) => setPlatform(e.target.value)}>
           <option value="all">All platforms</option>
           <option value="facebook">Facebook</option>
-        </select>
-        <select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}>
+        </NativeSelect>
+        <NativeSelect className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="all">All statuses</option>
           {["pending", "assigned", "replied", "resolved", "flagged"].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
-        </select>
-        <select className={selectClass} value={sentiment} onChange={(e) => setSentiment(e.target.value)}>
+        </NativeSelect>
+        <NativeSelect className={selectClass} value={sentiment} onChange={(e) => setSentiment(e.target.value)}>
           <option value="all">All sentiment</option>
           {["positive", "neutral", "negative"].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
-        </select>
+        </NativeSelect>
         <Badge variant="secondary">{filtered.length} comments</Badge>
       </div>
 
@@ -177,13 +178,13 @@ export function CommentsInbox({
                       <Flag className="h-3 w-3 mr-1" /> Flag
                     </Button>
                     {team.length > 0 && (
-                      <select className={`${selectClass} h-8 text-xs`} defaultValue=""
+                      <NativeSelect className="h-8 w-auto text-xs" defaultValue=""
                         onChange={(e) => handleAction("assign", comment.id, e.target.value)}>
                         <option value="" disabled>Assign to...</option>
                         {team.map((m) => (
                           <option key={m.id} value={m.id}>{m.full_name}</option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     )}
                   </div>
                 </div>

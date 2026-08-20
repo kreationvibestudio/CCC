@@ -1,6 +1,7 @@
 "use client";
 
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 
 export interface GeoOption {
   value: string;
@@ -21,14 +22,14 @@ export function GeoFilters({ lgas, wards, lga, ward, onLgaChange, onWardChange }
     <div className="flex flex-wrap gap-3">
       <div className="space-y-1">
         <Label htmlFor="geo-lga">LGA</Label>
-        <select
+        <NativeSelect
           id="geo-lga"
           value={lga}
           onChange={(e) => {
             onLgaChange(e.target.value);
             onWardChange("");
           }}
-          className="flex h-9 min-w-[160px] rounded-md border border-input bg-transparent px-3 text-sm"
+          className="min-w-[160px]"
         >
           <option value="">All LGAs</option>
           {lgas.map((o) => (
@@ -36,15 +37,15 @@ export function GeoFilters({ lgas, wards, lga, ward, onLgaChange, onWardChange }
               {o.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
       <div className="space-y-1">
         <Label htmlFor="geo-ward">Ward</Label>
-        <select
+        <NativeSelect
           id="geo-ward"
           value={ward}
           onChange={(e) => onWardChange(e.target.value)}
-          className="flex h-9 min-w-[160px] rounded-md border border-input bg-transparent px-3 text-sm"
+          className="min-w-[160px]"
           disabled={!lga && wards.length > 10}
         >
           <option value="">All wards</option>
@@ -53,7 +54,7 @@ export function GeoFilters({ lgas, wards, lga, ward, onLgaChange, onWardChange }
               {o.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
     </div>
   );

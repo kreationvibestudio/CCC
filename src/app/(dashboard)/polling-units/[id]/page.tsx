@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getPollingUnit, updatePollingUnit, deletePollingUnit, getTeamForAssignment } from "@/lib/polling-units/actions";
 
@@ -51,12 +52,12 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
               <div className="space-y-1"><Label htmlFor="registered_voters">Registered voters</Label><Input id="registered_voters" name="registered_voters" type="number" defaultValue={String(pu.registered_voters ?? 0)} /></div>
               <div className="space-y-1">
                 <Label htmlFor="risk_level">Risk</Label>
-                <select id="risk_level" name="risk_level" defaultValue={pu.risk_level as string} className="flex h-9 w-full rounded-md border border-input px-3 text-sm">
+                <NativeSelect id="risk_level" name="risk_level" defaultValue={pu.risk_level as string}>
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
                   <option value="critical">Critical</option>
-                </select>
+                </NativeSelect>
               </div>
               <div className="space-y-1"><Label htmlFor="latitude">Latitude</Label><Input id="latitude" name="latitude" type="number" step="any" defaultValue={pu.latitude != null ? String(pu.latitude) : ""} /></div>
               <div className="space-y-1"><Label htmlFor="longitude">Longitude</Label><Input id="longitude" name="longitude" type="number" step="any" defaultValue={pu.longitude != null ? String(pu.longitude) : ""} /></div>
@@ -64,12 +65,12 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
             <div className="space-y-1"><Label htmlFor="address">Address</Label><Input id="address" name="address" defaultValue={(pu.address as string) ?? ""} /></div>
             <div className="space-y-1">
               <Label htmlFor="assigned_agent_id">Assigned agent</Label>
-              <select id="assigned_agent_id" name="assigned_agent_id" defaultValue={(pu.assigned_agent_id as string) ?? ""} className="flex h-9 w-full rounded-md border border-input px-3 text-sm">
+              <NativeSelect id="assigned_agent_id" name="assigned_agent_id" defaultValue={(pu.assigned_agent_id as string) ?? ""}>
                 <option value="">Unassigned</option>
                 {team.map((t) => (
                   <option key={t.id} value={t.id}>{t.full_name} ({t.role.replace(/_/g, " ")})</option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1"><Label htmlFor="security_notes">Security notes</Label><textarea id="security_notes" name="security_notes" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={(pu.security_notes as string) ?? ""} /></div>
             <div className="space-y-1"><Label htmlFor="logistics">Logistics</Label><textarea id="logistics" name="logistics" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={(pu.logistics as string) ?? ""} /></div>

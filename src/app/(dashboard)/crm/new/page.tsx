@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shared/page-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createContact } from "@/lib/crm/actions";
 
@@ -23,7 +24,7 @@ export default function NewContactPage() {
             <div className="space-y-1"><Label htmlFor="full_name">Full name</Label><Input id="full_name" name="full_name" required /></div>
             <div className="space-y-1">
               <Label htmlFor="contact_type">Contact type</Label>
-              <select id="contact_type" name="contact_type" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm">
+              <NativeSelect id="contact_type" name="contact_type">
                 <option value="individual">Individual</option>
                 <option value="community_leader">Community leader</option>
                 <option value="religious_leader">Religious leader</option>
@@ -31,7 +32,7 @@ export default function NewContactPage() {
                 <option value="women_leader">Women leader</option>
                 <option value="donor">Donor</option>
                 <option value="influencer">Influencer</option>
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1"><Label htmlFor="phone">Phone</Label><Input id="phone" name="phone" /></div>
             <div className="space-y-1"><Label htmlFor="email">Email</Label><Input id="email" name="email" type="email" /></div>
@@ -41,12 +42,12 @@ export default function NewContactPage() {
             </div>
             <div className="space-y-1">
               <Label htmlFor="support_level">Support level</Label>
-              <select id="support_level" name="support_level" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm">
+              <NativeSelect id="support_level" name="support_level">
                 <option value="strong">Strong supporter</option>
                 <option value="leaning">Leaning</option>
                 <option value="undecided">Undecided</option>
                 <option value="opposed">Opposed</option>
-              </select>
+              </NativeSelect>
             </div>
             <SubmitButton label="Add Contact" />
           </form>

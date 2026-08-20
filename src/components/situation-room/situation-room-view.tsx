@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { PageHeader, StatCard } from "@/components/shared/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { usePollingUnitStatusRealtime, useIncidentsRealtime } from "@/hooks/use-tenant-realtime";
+import { usePollingUnitStatusRealtime, useIncidentsRealtime, useElectionResultsRealtime } from "@/hooks/use-tenant-realtime";
+import { parsePartyVotes, RESULT_PARTIES } from "@/lib/elections/parties";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
   ssr: false,
@@ -31,7 +32,13 @@ type Props = {
     polling_units: { name: string; ward: string; lga: string; latitude: number | null; longitude: number | null; code?: string } | null;
   }>;
   incidents: Array<{ id: string; title: string; severity: string; status: string; is_emergency: boolean; created_at: string }>;
-  results: Array<{ id: string; total_votes: number; submitted_at: string; polling_units: { name: string; code: string } | null }>;
+  results: Array<{
+    id: string;
+    total_votes: number;
+    submitted_at: string;
+    party_votes?: Record<string, number> | null;
+    polling_units: { name: string; code: string } | null;
+  }>;
   agentReports: Array<{ id: string; report_type: string; content: string; created_at: string; profiles: { full_name: string } | null }>;
   wardTurnout: Array<{ ward: string; turnout: number; registered: number }>;
 };
@@ -41,6 +48,7 @@ export function SituationRoomView({ tenantId, statuses, incidents, results, agen
   const refresh = useCallback(() => router.refresh(), [router]);
   const { connected: liveStatus } = usePollingUnitStatusRealtime(tenantId, refresh);
   const { connected: liveIncidents } = useIncidentsRealtime(tenantId, refresh);
+  const { connected: liveResults } = useElectionResultsRealtime(tenantId, refresh);
 
   const active = statuses.filter((s) => s.status === "voting_in_progress").length;
   const markers = statuses
@@ -57,8 +65,8 @@ export function SituationRoomView({ tenantId, statuses, incidents, results, agen
   return (
     <div className="space-y-6">
       <PageHeader title="Election Situation Room" description="Live polling unit monitoring">
-        <Badge variant={liveStatus || liveIncidents ? "default" : "secondary"}>
-          {liveStatus || liveIncidents ? "Live" : "Connecting…"}
+        <Badge variant={liveStatus || liveIncidents || liveResults ? "default" : "secondary"}>
+          {liveStatus || liveIncidents || liveResults ? "Live" : "Connecting…"}
         </Badge>
       </PageHeader>
 
@@ -136,14 +144,29 @@ export function SituationRoomView({ tenantId, statuses, incidents, results, agen
               </CardContent>
             </Card>
           ))}
-          {results.map((r) => (
-            <Card key={r.id}>
-              <CardContent className="py-3 text-sm">
-                <span className="font-medium">{r.polling_units?.name ?? "PU"}</span> — {r.total_votes} votes
-                <p className="text-xs text-muted-foreground">{new Date(r.submitted_at).toLocaleString()}</p>
-              </CardContent>
-            </Card>
-          ))}
+          {results.map((r) => {
+            const votes = parsePartyVotes(r.party_votes);
+            const ordered = RESULT_PARTIES
+              .map((p) => ({ code: p.code, n: votes[p.code] ?? 0 }))
+              .filter((p) => p.n > 0);
+            const extras = Object.entries(votes)
+              .filter(([code, n]) => n > 0 && !RESULT_PARTIES.some((p) => p.code === code))
+              .map(([code, n]) => ({ code, n }));
+            const breakdown = [...ordered, ...extras];
+            return (
+              <Card key={r.id}>
+                <CardContent className="py-3 text-sm">
+                  <span className="font-medium">{r.polling_units?.name ?? "PU"}</span> — {r.total_votes.toLocaleString()} votes
+                  {breakdown.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {breakdown.map((p) => `${p.code} ${p.n.toLocaleString()}`).join(" · ")}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">{new Date(r.submitted_at).toLocaleString()}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
     </div>

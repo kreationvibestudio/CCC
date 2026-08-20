@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
 
 export async function submitAgentReport(formData: FormData) {
   const user = await getCurrentUser();
@@ -61,16 +62,20 @@ export async function updatePuStatus(formData: FormData) {
 export async function submitElectionResult(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
-  const puId = formData.get("polling_unit_id") as string;
-  const partyVotesRaw = formData.get("party_votes") as string;
-  let partyVotes = {};
+  const puId = String(formData.get("polling_unit_id") ?? "").trim();
+  if (!puId) return { error: "Select a polling unit" };
+
+  let parsed: unknown = {};
   try {
-    partyVotes = JSON.parse(partyVotesRaw || "{}");
+    parsed = JSON.parse(String(formData.get("party_votes") ?? "{}"));
   } catch {
-    partyVotes = { APC: Number(formData.get("apc_votes") || 0), PDP: Number(formData.get("pdp_votes") || 0) };
+    parsed = {};
   }
-  const total = Object.values(partyVotes as Record<string, number>).reduce((a, b) => a + b, 0);
+  const partyVotes = parsePartyVotes(parsed);
+  const total = totalPartyVotes(partyVotes);
+  if (total < 0) return { error: "Vote counts cannot be negative" };
+
+  const supabase = await createClient();
   const { error } = await supabase.from("election_results").insert({
     tenant_id: user.profile.tenant_id,
     polling_unit_id: puId,
@@ -89,6 +94,7 @@ export async function submitElectionResult(formData: FormData) {
     updated_at: new Date().toISOString(),
   }, { onConflict: "tenant_id,polling_unit_id" });
   revalidatePath("/situation-room");
+  revalidatePath("/agent");
   return { success: true };
 }
 

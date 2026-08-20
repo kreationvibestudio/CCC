@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { submitAgentReport, reportIncident, updatePuStatus, submitElectionResult } from "@/lib/agent/actions";
+import { ResultSheetForm } from "@/components/agent/result-sheet-form";
 import { toast } from "sonner";
 
 type PU = { id: string; code: string; name: string; ward: string; lga: string };
@@ -175,30 +176,19 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
         <Button type="submit" disabled={pending || !puId} className="w-full">Submit report</Button>
       </form>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const fd = new FormData(e.currentTarget);
+      <ResultSheetForm
+        disabled={pending || !puId}
+        onSubmit={(partyVotesJson) => {
+          const fd = new FormData();
           fd.set("polling_unit_id", puId);
-          fd.set("party_votes", JSON.stringify({
-            APC: Number(fd.get("apc_votes")),
-            PDP: Number(fd.get("pdp_votes")),
-            LP: Number(fd.get("lp_votes")),
-          }));
+          fd.set("party_votes", partyVotesJson);
           if (coords) {
             fd.set("latitude", String(coords.lat));
             fd.set("longitude", String(coords.lng));
           }
           runAction(submitElectionResult, fd, "results");
         }}
-        className="space-y-3 rounded-xl border border-border p-4"
-      >
-        <p className="font-medium">Submit results</p>
-        <Input name="apc_votes" type="number" placeholder="APC votes" min={0} required />
-        <Input name="pdp_votes" type="number" placeholder="PDP votes" min={0} required />
-        <Input name="lp_votes" type="number" placeholder="LP votes" min={0} />
-        <Button type="submit" disabled={pending || !puId} className="w-full">Submit results</Button>
-      </form>
+      />
 
       <form
         onSubmit={(e) => {

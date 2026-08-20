@@ -191,6 +191,32 @@ export async function zeroCampaignData() {
     const admin = createServiceClient();
     const tenantId = adminUser.profile.tenant_id;
 
+    const rpc = await admin.rpc("zero_operational_campaign_data");
+    if (!rpc.error) {
+      const puCount = Number((rpc.data as { polling_units?: number } | null)?.polling_units ?? 0);
+      await logAudit("admin.zero_campaign", "tenant", tenantId, { pollingUnits: puCount });
+      revalidatePath("/dashboard");
+      revalidatePath("/admin");
+      revalidatePath("/volunteers");
+      revalidatePath("/crm");
+      revalidatePath("/events");
+      revalidatePath("/comments");
+      revalidatePath("/social");
+      revalidatePath("/communications");
+      revalidatePath("/analytics");
+      revalidatePath("/sentiment");
+      revalidatePath("/situation-room");
+      revalidatePath("/ai");
+      revalidatePath("/reports");
+      return {
+        success: true as const,
+        pollingUnits: puCount,
+        message: `Campaign data cleared. ${puCount} polling units kept. Your login was not removed.`,
+      };
+    }
+
+    const missingFn = /could not find the function|schema cache/i.test(rpc.error.message);
+
     const { count: puBefore, error: puCountError } = await admin
       .from("polling_units")
       .select("id", { count: "exact", head: true })
@@ -216,20 +242,6 @@ export async function zeroCampaignData() {
       })
       .eq("id", tenantId);
     if (tenantError) return { error: tenantError.message };
-
-    const { error: puError } = await admin
-      .from("polling_units")
-      .update({
-        assigned_agent_id: null,
-        assigned_supervisor_id: null,
-        security_notes: null,
-        logistics: null,
-        contact_phone: null,
-        historical_results: [],
-        risk_level: "low",
-      })
-      .eq("tenant_id", tenantId);
-    if (puError) return { error: puError.message };
 
     const { count: puAfter, error: puAfterError } = await admin
       .from("polling_units")
@@ -258,7 +270,9 @@ export async function zeroCampaignData() {
     return {
       success: true as const,
       pollingUnits: puAfter ?? 0,
-      message: `Campaign data cleared. ${puAfter ?? 0} polling units kept. Your login was not removed.`,
+      message: missingFn
+        ? `Campaign data cleared. ${puAfter ?? 0} polling units kept. (Run the SQL function migration for a faster reset next time.)`
+        : `Campaign data cleared. ${puAfter ?? 0} polling units kept. Your login was not removed.`,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Reset failed" };

@@ -117,7 +117,8 @@ export function AdminView({
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Removes sample and operational rows (volunteers, CRM, events, comments, Facebook
-            posts, donations, SMS, AI briefings). Keeps polling units and logged-in users.
+            posts, donations, SMS, AI briefings, audit log). Keeps polling units and team
+            accounts. Does not rewrite polling-unit rows, so it should finish in seconds.
           </p>
           <Button type="button" variant="destructive" disabled={pending} onClick={handleZeroCampaign}>
             {pending ? "Clearing…" : "Clear sample data (keep polling units)"}

@@ -29,7 +29,7 @@ To wipe sample/operational data and keep polling units:
 npm run data:zero
 ```
 
-Or in the SQL Editor run `supabase/zero-operational-data.sql`. First person to register afterwards is super administrator.
+Or paste `supabase/zero-operational-data.sql` into the [SQL Editor](https://supabase.com/dashboard/project/ffccfeodymiwwqshphmh/sql/new) and Run. That uses `TRUNCATE` and does **not** update every polling-unit row (a full `UPDATE` on ~176k units hits statement timeout). Team accounts stay. First person to register afterwards is super administrator only if there are zero profiles.
 
 ---
 

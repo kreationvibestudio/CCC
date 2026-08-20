@@ -1,6 +1,5 @@
--- Wipe sample/operational data. Keeps polling units, geography, tenant, and users.
--- Fast: TRUNCATE only. Does not rewrite every polling-unit row (that times out at ~176k).
--- Paste this entire file into the Supabase SQL Editor and Run.
+-- Fast reset: TRUNCATE operational tables. Do not rewrite every polling unit
+-- (that timed out at ~176k rows). Safe to re-run.
 
 CREATE OR REPLACE FUNCTION public.zero_operational_campaign_data()
 RETURNS jsonb
@@ -81,5 +80,3 @@ REVOKE ALL ON FUNCTION public.zero_operational_campaign_data() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.zero_operational_campaign_data() TO service_role;
 
 NOTIFY pgrst, 'reload schema';
-
-SELECT public.zero_operational_campaign_data();

@@ -150,44 +150,35 @@ async function main() {
     console.log("\n⚠ No polling units found. Continuing wipe of operational tables anyway.");
   }
 
-  for (const table of OPERATIONAL_TABLES) {
-    const result = await deleteAll(admin, table);
-    if (result.skipped) {
-      console.log(`  skip ${table} (not in schema)`);
-      continue;
+  const rpc = await admin.rpc("zero_operational_campaign_data");
+  if (!rpc.error) {
+    ok(`Truncated operational tables via SQL (${rpc.data?.polling_units ?? "?"} polling units kept)`);
+  } else {
+    console.log(`  RPC unavailable (${rpc.error.message}). Falling back to per-table deletes.`);
+    for (const table of OPERATIONAL_TABLES) {
+      const result = await deleteAll(admin, table);
+      if (result.skipped) {
+        console.log(`  skip ${table} (not in schema)`);
+        continue;
+      }
+      if (result.error) fail(`Delete ${table}: ${result.error}`);
+      ok(`Cleared ${table}`);
     }
-    if (result.error) fail(`Delete ${table}: ${result.error}`);
-    ok(`Cleared ${table}`);
+
+    const { error: tenantError } = await admin
+      .from("tenants")
+      .update({
+        name: "Campaign",
+        slug: "campaign",
+        logo_url: null,
+        election_date: null,
+        campaign_end_date: null,
+        fundraising_goal: 0,
+      })
+      .eq("id", TENANT);
+    if (tenantError) fail(`Reset tenant: ${tenantError.message}`);
+    ok("Reset tenant name/dates/fundraising to empty");
   }
-
-  const { error: tenantError } = await admin
-    .from("tenants")
-    .update({
-      name: "Campaign",
-      slug: "campaign",
-      logo_url: null,
-      election_date: null,
-      campaign_end_date: null,
-      fundraising_goal: 0,
-    })
-    .eq("id", TENANT);
-  if (tenantError) fail(`Reset tenant: ${tenantError.message}`);
-  ok("Reset tenant name/dates/fundraising to empty");
-
-  const { error: puError } = await admin
-    .from("polling_units")
-    .update({
-      assigned_agent_id: null,
-      assigned_supervisor_id: null,
-      security_notes: null,
-      logistics: null,
-      contact_phone: null,
-      historical_results: [],
-      risk_level: "low",
-    })
-    .eq("tenant_id", TENANT);
-  if (puError) fail(`Reset polling units: ${puError.message}`);
-  ok("Cleared polling-unit assignments and overlay fields (identity kept)");
 
   await emptyStorage(admin);
 

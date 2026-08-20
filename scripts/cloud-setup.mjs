@@ -33,6 +33,7 @@ const MIGRATIONS = [
   "supabase/migrations/20250201000000_polling_units_geocode.sql",
   "supabase/migrations/20250202000000_polling_units_inec_fields.sql",
   "supabase/migrations/20260820000000_rls_operational_tables.sql",
+  "supabase/migrations/20260820000001_zero_operational_fn.sql",
 ];
 
 loadEnvLocal();

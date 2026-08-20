@@ -39,6 +39,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260820000004_nearest_polling_units.sql",
   "supabase/migrations/20260820000005_agent_reports_rls_and_race.sql",
   "supabase/migrations/20260820000006_list_pages_scale.sql",
+  "supabase/migrations/20260820000007_polling_agent_assignment.sql",
 ];
 
 loadEnvLocal();

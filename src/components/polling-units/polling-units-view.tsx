@@ -131,6 +131,9 @@ export function PollingUnitsView({
       <PageHeader title="Polling Units" description="Search the full register by LGA, ward, or PU code">
         <div className="flex gap-2">
           <Button variant="outline" asChild>
+            <Link href="/polling-units/agents">Assign agents</Link>
+          </Button>
+          <Button variant="outline" asChild>
             <label className="cursor-pointer">
               <Upload className="mr-2 h-4 w-4" />
               {importing ? (importProgress ? `Importing ${importProgress}…` : "Importing…") : "Import CSV"}

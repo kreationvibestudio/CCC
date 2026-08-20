@@ -98,8 +98,12 @@ export function PollingUnitPicker({
   }
 
   useEffect(() => {
+    if (assigned[0]) {
+      selectedRef.current = assigned[0];
+      onSelect(assigned[0], "assigned");
+    }
     locate(false);
-    // First GPS fix only; agents can tap Use GPS again.
+    // Assigned unit first so GPS cannot overwrite it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -125,8 +129,8 @@ export function PollingUnitPicker({
       <div>
         <Label>Polling unit</Label>
         <p className="text-xs text-muted-foreground">
-          Uses your GPS position first. To choose another unit, search by PU code — every unit is
-          available.
+          Uses your assigned polling unit when HQ has tied you to one. GPS and PU-code search
+          remain available if you are sent to a different unit.
         </p>
       </div>
 

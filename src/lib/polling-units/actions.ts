@@ -8,7 +8,7 @@ import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
 
 const LIST_COLS =
-  "id, name, code, pu_code, ward, lga, state, registered_voters, latitude, longitude, risk_level, ward_code, lg_code, geocode_status, address";
+  "id, name, code, pu_code, ward, lga, state, registered_voters, latitude, longitude, risk_level, ward_code, lg_code, geocode_status, address, assigned_agent_id";
 
 function sanitizeFilter(raw: string) {
   return raw.trim().slice(0, 64).replace(/[%_,()"]/g, "");
@@ -32,6 +32,7 @@ export type PollingUnitListItem = {
   address?: string | null;
   live_status?: string;
   turnout?: number;
+  assigned_agent_id?: string | null;
 };
 
 export type PollingUnitSummary = {
@@ -110,6 +111,7 @@ export async function queryPollingUnits(input: {
   page?: number;
   pageSize?: number;
   mappedOnly?: boolean;
+  unassignedOnly?: boolean;
 }): Promise<{ rows: PollingUnitListItem[]; total: number }> {
   const user = await getCurrentUser();
   if (!user) return { rows: [], total: 0 };
@@ -137,6 +139,9 @@ export async function queryPollingUnits(input: {
   }
   if (input.mappedOnly) {
     q = q.not("latitude", "is", null).not("longitude", "is", null);
+  }
+  if (input.unassignedOnly) {
+    q = q.is("assigned_agent_id", null);
   }
 
   const { data, error, count } = await q.range(from, to);

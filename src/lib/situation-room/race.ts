@@ -14,6 +14,7 @@ export const PARTY_COLORS: Record<RaceParty, string> = {
 export type PuRef = {
   name?: string;
   code?: string;
+  pu_code?: string;
   ward?: string;
   lga?: string;
   registered_voters?: number | null;
@@ -27,7 +28,28 @@ export type ResultRow = {
   total_votes: number;
   submitted_at: string;
   party_votes?: Record<string, number> | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  submitted_by?: string | null;
+  result_sheet_url?: string | null;
+  profiles?: { full_name: string; phone?: string | null; email?: string | null } | null;
   polling_units?: PuRef;
+};
+
+export type IncidentRow = {
+  id: string;
+  title: string;
+  description?: string | null;
+  severity: string;
+  status: string;
+  is_emergency: boolean;
+  created_at: string;
+  polling_unit_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  reporter_id?: string | null;
+  polling_units?: PuRef;
+  profiles?: { full_name: string; phone?: string | null; email?: string | null } | null;
 };
 
 export type StatusRow = {
@@ -41,6 +63,7 @@ export type StatusRow = {
 
 export type FeedItem = {
   id: string;
+  sourceId: string;
   at: string;
   kind: "result" | "incident" | "report" | "status";
   title: string;
@@ -234,6 +257,7 @@ export function buildLiveFeed(input: {
     const pu = r.polling_units?.code || r.polling_units?.name || "Polling unit";
     items.push({
       id: `result-${r.id}`,
+      sourceId: r.id,
       at: r.submitted_at,
       kind: "result",
       title: `${pu} result in`,
@@ -247,6 +271,7 @@ export function buildLiveFeed(input: {
   for (const i of input.incidents) {
     items.push({
       id: `incident-${i.id}`,
+      sourceId: i.id,
       at: i.created_at,
       kind: "incident",
       title: i.is_emergency ? `Emergency: ${i.title}` : i.title,
@@ -258,6 +283,7 @@ export function buildLiveFeed(input: {
   for (const r of input.agentReports) {
     items.push({
       id: `report-${r.id}`,
+      sourceId: r.id,
       at: r.created_at,
       kind: "report",
       title: `${r.profiles?.full_name ?? "Agent"} · ${r.report_type.replace(/_/g, " ")}`,
@@ -269,6 +295,7 @@ export function buildLiveFeed(input: {
   for (const s of input.statuses ?? []) {
     items.push({
       id: `status-${s.id}`,
+      sourceId: s.id,
       at: s.updated_at || "",
       kind: "status",
       title: `${s.polling_units?.code || s.polling_units?.name || "PU"} status`,

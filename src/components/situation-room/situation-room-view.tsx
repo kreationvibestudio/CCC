@@ -18,10 +18,12 @@ import {
   OUR_PARTY,
   buildLiveFeed,
   buildRaceAnalysis,
+  type IncidentRow,
   type ResultRow,
   type StatusRow,
 } from "@/lib/situation-room/race";
 import { LiveNumber, RaceBars, RaceCharts } from "@/components/situation-room/situation-room-charts";
+import { SituationRoomDetail } from "@/components/situation-room/situation-room-detail";
 import { formatDateTime } from "@/lib/utils";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
@@ -38,15 +40,6 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   not_active: "secondary",
 };
 
-type Incident = {
-  id: string;
-  title: string;
-  severity: string;
-  status: string;
-  is_emergency: boolean;
-  created_at: string;
-};
-
 type AgentReport = {
   id: string;
   report_type: string;
@@ -60,7 +53,7 @@ type Props = {
   ourParty: string;
   universe: { puCount: number; registeredVoters: number };
   statuses: StatusRow[];
-  incidents: Incident[];
+  incidents: IncidentRow[];
   results: ResultRow[];
   agentReports: AgentReport[];
   wardTurnout: Array<{ ward: string; turnout: number; registered: number }>;
@@ -95,6 +88,7 @@ export function SituationRoomView({
   const [incidents, setIncidents] = useState(initialIncidents);
   const [results, setResults] = useState(initialResults);
   const [agentReports, setAgentReports] = useState(initialReports);
+  const [detail, setDetail] = useState<{ kind: "incident" | "result"; id: string } | null>(null);
   const [clock, setClock] = useState(() => new Date());
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -123,7 +117,7 @@ export function SituationRoomView({
     scheduleRefresh();
   });
   const { connected: liveIncidents } = useIncidentsRealtime(tenantId, (payload) => {
-    if (hasId(payload?.new)) setIncidents((prev) => upsert(prev, payload!.new as Incident, payload?.eventType));
+    if (hasId(payload?.new)) setIncidents((prev) => upsert(prev, payload!.new as IncidentRow, payload?.eventType));
     scheduleRefresh();
   });
   const { connected: liveResults } = useElectionResultsRealtime(tenantId, (payload) => {
@@ -151,6 +145,9 @@ export function SituationRoomView({
     () => buildLiveFeed({ results, incidents, agentReports, statuses, ourParty: party }),
     [results, incidents, agentReports, statuses, party]
   );
+
+  const openIncident = detail?.kind === "incident" ? incidents.find((i) => i.id === detail.id) ?? null : null;
+  const openResult = detail?.kind === "result" ? results.find((r) => r.id === detail.id) ?? null : null;
 
   const leading = race.margin >= 0;
   const rivalName =
@@ -251,25 +248,47 @@ export function SituationRoomView({
                     Result sheets, incidents, and field reports appear here as agents submit.
                   </p>
                 ) : (
-                  feed.map((item) => (
+                  feed.map((item) => {
+                    const clickable = item.kind === "incident" || item.kind === "result";
+                    return (
                     <motion.div
                       key={item.id}
                       layout
                       initial={{ opacity: 0, x: 24 }}
                       animate={{ opacity: 1, x: 0 }}
+                      role={clickable ? "button" : undefined}
+                      tabIndex={clickable ? 0 : undefined}
+                      onClick={() => {
+                        if (item.kind === "incident" || item.kind === "result") {
+                          setDetail({ kind: item.kind, id: item.sourceId });
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (!clickable) return;
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          if (item.kind === "incident" || item.kind === "result") {
+                            setDetail({ kind: item.kind, id: item.sourceId });
+                          }
+                        }
+                      }}
                       className={`rounded-md border px-3 py-2 text-sm ${
                         item.tone === "win"
                           ? "border-emerald-500/40 bg-emerald-500/10"
                           : item.tone === "alert"
                             ? "border-destructive/40 bg-destructive/10"
                             : "border-border bg-muted/40"
-                      }`}
+                      } ${clickable ? "cursor-pointer transition-colors hover:brightness-110" : ""}`}
                     >
                       <p className="font-medium">{item.title}</p>
                       <p className="text-xs text-muted-foreground">{item.detail}</p>
-                      <p className="text-[11px] text-muted-foreground">Logged {formatDateTime(item.at)}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Logged {formatDateTime(item.at)}
+                        {clickable ? " · Open details" : ""}
+                      </p>
                     </motion.div>
-                  ))
+                    );
+                  })
                 )}
               </AnimatePresence>
             </div>
@@ -347,8 +366,21 @@ export function SituationRoomView({
         </div>
         <div className="space-y-2">
           <h2 className="font-semibold">Incidents & latest sheets</h2>
+          <p className="text-xs text-muted-foreground">Tap a card to see the full record.</p>
           {incidents.map((i) => (
-            <Card key={i.id}>
+            <Card
+              key={i.id}
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer transition-colors hover:bg-muted/40"
+              onClick={() => setDetail({ kind: "incident", id: i.id })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDetail({ kind: "incident", id: i.id });
+                }
+              }}
+            >
               <CardContent className="flex items-center justify-between py-3">
                 <div>
                   <p className="font-medium">
@@ -371,7 +403,19 @@ export function SituationRoomView({
               .map(([code, n]) => ({ code, n }));
             const breakdown = [...ordered, ...extras];
             return (
-              <Card key={r.id}>
+              <Card
+                key={r.id}
+                role="button"
+                tabIndex={0}
+                className="cursor-pointer transition-colors hover:bg-muted/40"
+                onClick={() => setDetail({ kind: "result", id: r.id })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDetail({ kind: "result", id: r.id });
+                  }
+                }}
+              >
                 <CardContent className="py-3 text-sm">
                   <span className="font-medium">{r.polling_units?.name ?? r.polling_units?.code ?? "PU"}</span> —{" "}
                   {r.total_votes.toLocaleString()} votes
@@ -387,6 +431,12 @@ export function SituationRoomView({
           })}
         </div>
       </div>
+
+      <SituationRoomDetail
+        incident={openIncident}
+        result={openResult}
+        onClose={() => setDetail(null)}
+      />
     </div>
   );
 }

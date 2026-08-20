@@ -25,10 +25,11 @@ export function CrmView({ contacts }: { contacts: ContactRow[] }) {
       <DataTable
         data={contacts}
         searchKeys={["full_name", "phone", "ward"]}
+        emptyMessage="No contacts yet. Add a supporter, leader, or donor."
         onRowClick={(c) => router.push(`/crm/${c.id}`)}
         columns={[
           { key: "full_name", header: "Name" },
-          { key: "contact_type", header: "Type", render: (c) => c.contact_type.replace(/_/g, " ") },
+          { key: "contact_type", header: "Type", render: (c) => (c.contact_type ?? "individual").replace(/_/g, " ") },
           { key: "phone", header: "Phone" },
           { key: "ward", header: "Ward" },
           {

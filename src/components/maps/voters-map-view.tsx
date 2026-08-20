@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/shared/page-shell";
 import { GeoFilters } from "@/components/shared/geo-filters";
@@ -10,28 +10,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ExternalLink, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  getPollingUnitWards,
+  queryPollingUnits,
+  type PollingUnitListItem,
+} from "@/lib/polling-units/actions";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
   ssr: false,
   loading: () => <div className="h-[480px] animate-pulse rounded-xl bg-muted" />,
 });
-
-type PU = {
-  id: string;
-  name: string;
-  code: string;
-  pu_code?: string | null;
-  ward: string;
-  lga: string;
-  state: string;
-  registered_voters: number | null;
-  latitude: number | null;
-  longitude: number | null;
-  risk_level: string | null;
-  address?: string | null;
-  live_status?: string;
-  turnout?: number;
-};
 
 const LEGEND = [
   { status: "voting_in_progress", label: "Voting", color: "#22c55e" },
@@ -42,65 +30,93 @@ const LEGEND = [
   { status: "not_active", label: "Not active", color: "#94a3b8" },
 ];
 
-export function VotersMapView({ units, lgas }: { units: PU[]; lgas: string[] }) {
+const MAP_LIMIT = 400;
+
+export function VotersMapView({ lgas }: { lgas: string[] }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [lga, setLga] = useState("");
   const [ward, setWard] = useState("");
+  const [wards, setWards] = useState<string[]>([]);
+  const [units, setUnits] = useState<PollingUnitListItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
-  const wards = useMemo(() => {
-    const src = lga ? units.filter((u) => u.lga === lga) : units;
-    return [...new Set(src.map((u) => u.ward))].sort();
-  }, [units, lga]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return units.filter((u) => {
-      if (lga && u.lga !== lga) return false;
-      if (ward && u.ward !== ward) return false;
-      if (
-        q &&
-        !u.code.toLowerCase().includes(q) &&
-        !(u.pu_code ?? "").toLowerCase().includes(q) &&
-        !u.name.toLowerCase().includes(q) &&
-        !u.ward.toLowerCase().includes(q)
-      )
-        return false;
-      return u.latitude && u.longitude;
+  useEffect(() => {
+    if (!lga) {
+      setWards([]);
+      return;
+    }
+    startTransition(async () => {
+      setWards(await getPollingUnitWards(lga));
     });
-  }, [units, lga, ward, search]);
+  }, [lga]);
+
+  const canQuery = Boolean(lga || ward || debouncedSearch.length >= 2);
+
+  useEffect(() => {
+    if (!canQuery) {
+      setUnits([]);
+      setTotal(0);
+      setSelectedId(null);
+      return;
+    }
+    startTransition(async () => {
+      const result = await queryPollingUnits({
+        lga,
+        ward,
+        search: debouncedSearch,
+        page: 0,
+        pageSize: MAP_LIMIT,
+        mappedOnly: true,
+      });
+      setUnits(result.rows);
+      setTotal(result.total);
+    });
+  }, [canQuery, lga, ward, debouncedSearch]);
 
   const selected = units.find((u) => u.id === selectedId);
-
   const handleMarkerClick = useCallback((id: string) => setSelectedId(id), []);
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Voter Maps" description="Search polling units across Edo/Esan — color-coded by live status" />
+      <PageHeader
+        title="Voter Maps"
+        description="Pick an LGA or search a PU code — pins are color-coded by live status"
+      />
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search PU code, name, or ward…"
+          placeholder="Search PU code or name…"
           className="max-w-xs"
         />
         <GeoFilters
-          lgas={lgas.map((l) => ({ value: l, label: l }))}
-          wards={wards.map((w) => ({ value: w, label: w }))}
+          lgas={lgas.map((name) => ({ value: name, label: name }))}
+          wards={wards.map((name) => ({ value: name, label: name }))}
           lga={lga}
           ward={ward}
-          onLgaChange={setLga}
+          onLgaChange={(next) => {
+            setLga(next);
+            setWard("");
+          }}
           onWardChange={setWard}
         />
       </div>
 
       <div className="flex flex-wrap gap-3 text-xs">
-        {LEGEND.map((l) => (
-          <span key={l.status} className="flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded-full" style={{ background: l.color }} />
-            {l.label}
+        {LEGEND.map((item) => (
+          <span key={item.status} className="flex items-center gap-1">
+            <span className="inline-block h-3 w-3 rounded-full" style={{ background: item.color }} />
+            {item.label}
           </span>
         ))}
       </div>
@@ -108,7 +124,7 @@ export function VotersMapView({ units, lgas }: { units: PU[]; lgas: string[] }) 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <CampaignMap
-            markers={filtered.map((u) => ({
+            markers={units.map((u) => ({
               id: u.id,
               lat: u.latitude!,
               lng: u.longitude!,
@@ -117,9 +133,16 @@ export function VotersMapView({ units, lgas }: { units: PU[]; lgas: string[] }) 
               status: u.live_status,
             }))}
             height={480}
-            cluster={filtered.length > 15}
+            cluster={units.length > 15}
             selectedId={selectedId ?? undefined}
             onMarkerClick={handleMarkerClick}
+            emptyHint={
+              canQuery
+                ? pending
+                  ? "Finding polling units…"
+                  : "No mapped units match that search."
+                : "Select an LGA or search a PU code to drop pins."
+            }
           />
         </div>
 
@@ -136,7 +159,9 @@ export function VotersMapView({ units, lgas }: { units: PU[]; lgas: string[] }) 
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-                <p className="text-sm">{selected.ward}, {selected.lga}, {selected.state}</p>
+                <p className="text-sm">
+                  {selected.ward}, {selected.lga}, {selected.state}
+                </p>
                 {selected.address && <p className="text-xs text-muted-foreground">{selected.address}</p>}
                 <div className="flex flex-wrap gap-2">
                   <Badge>{(selected.registered_voters ?? 0).toLocaleString()} voters</Badge>
@@ -152,31 +177,38 @@ export function VotersMapView({ units, lgas }: { units: PU[]; lgas: string[] }) 
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <ExternalLink className="mr-2 h-4 w-4" />Directions
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Directions
                     </a>
                   </Button>
                 )}
-                <Button variant="secondary" size="sm" className="w-full" onClick={() => router.push(`/polling-units/${selected.id}`)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => router.push(`/polling-units/${selected.id}`)}
+                >
                   View full details
                 </Button>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Click a marker or search for a polling unit. {filtered.length} units on map.
+                {canQuery
+                  ? `${units.length.toLocaleString()} on the map${total > units.length ? ` of ${total.toLocaleString()} matches — narrow by ward or search` : ""}.`
+                  : "Click a marker after you filter or search."}
               </p>
             )}
             <div className="mt-4 space-y-2 border-t border-border pt-4">
-              {search &&
-                filtered.slice(0, 8).map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    className="block w-full rounded-lg border border-border p-2 text-left text-sm hover:bg-muted"
-                    onClick={() => setSelectedId(u.id)}
-                  >
-                    <span className="font-medium">{u.code}</span> — {u.name}
-                  </button>
-                ))}
+              {units.slice(0, 12).map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  className="block w-full rounded-lg border border-border p-2 text-left text-sm hover:bg-muted"
+                  onClick={() => setSelectedId(u.id)}
+                >
+                  <span className="font-medium">{u.code}</span> — {u.name}
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>

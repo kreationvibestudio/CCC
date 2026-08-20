@@ -25,6 +25,8 @@ const STATUS_COLORS: Record<string, string> = {
   not_active: "#94a3b8",
 };
 
+const EDO_CENTER: [number, number] = [6.34, 5.63];
+
 function colorIcon(color: string) {
   return L.divIcon({
     className: "",
@@ -41,6 +43,7 @@ export function CampaignMap({
   selectedId,
   onMarkerClick,
   fitBounds = true,
+  emptyHint,
 }: {
   markers: MapMarker[];
   height?: number;
@@ -48,27 +51,31 @@ export function CampaignMap({
   selectedId?: string;
   onMarkerClick?: (id: string) => void;
   fitBounds?: boolean;
+  emptyHint?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | L.MarkerClusterGroup | null>(null);
 
   useEffect(() => {
-    if (!ref.current || markers.length === 0) return;
+    if (!ref.current) return;
 
     if (!mapRef.current) {
-      const center = markers.reduce(
-        (acc, m) => ({ lat: acc.lat + m.lat / markers.length, lng: acc.lng + m.lng / markers.length }),
-        { lat: 0, lng: 0 }
-      );
-      mapRef.current = L.map(ref.current).setView([center.lat, center.lng], 11);
+      mapRef.current = L.map(ref.current).setView(EDO_CENTER, 8);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap",
       }).addTo(mapRef.current);
+      requestAnimationFrame(() => mapRef.current?.invalidateSize());
     }
 
     if (layerRef.current) {
-      mapRef.current!.removeLayer(layerRef.current);
+      mapRef.current.removeLayer(layerRef.current);
+      layerRef.current = null;
+    }
+
+    if (markers.length === 0) {
+      mapRef.current.setView(EDO_CENTER, 8);
+      return;
     }
 
     const group = cluster
@@ -76,6 +83,7 @@ export function CampaignMap({
       : L.layerGroup();
 
     for (const m of markers) {
+      if (!Number.isFinite(m.lat) || !Number.isFinite(m.lng)) continue;
       const color = STATUS_COLORS[m.status ?? "not_active"] ?? STATUS_COLORS.not_active;
       const marker = L.marker([m.lat, m.lng], { icon: colorIcon(color) });
       marker.bindPopup(
@@ -87,20 +95,20 @@ export function CampaignMap({
       group.addLayer(marker);
     }
 
-    group.addTo(mapRef.current!);
+    group.addTo(mapRef.current);
     layerRef.current = group;
 
     if (fitBounds && markers.length > 1) {
       const bounds = L.latLngBounds(markers.map((m) => [m.lat, m.lng] as [number, number]));
-      mapRef.current!.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 });
+      mapRef.current.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 });
+    } else if (markers.length === 1) {
+      mapRef.current.setView([markers[0].lat, markers[0].lng], 13);
     }
 
     if (selectedId) {
       const sel = markers.find((m) => m.id === selectedId);
-      if (sel) mapRef.current!.setView([sel.lat, sel.lng], 14);
+      if (sel) mapRef.current.setView([sel.lat, sel.lng], 14);
     }
-
-    return () => {};
   }, [markers, cluster, selectedId, onMarkerClick, fitBounds]);
 
   useEffect(() => {
@@ -110,15 +118,16 @@ export function CampaignMap({
     };
   }, []);
 
-  if (markers.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
-        No mapped polling units yet. Import Edo/Esan data or add coordinates.
-      </div>
-    );
-  }
-
-  return <div ref={ref} className="w-full rounded-xl border border-border" style={{ height }} />;
+  return (
+    <div className="relative">
+      <div ref={ref} className="w-full rounded-xl border border-border" style={{ height }} />
+      {markers.length === 0 && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-background/40 text-sm text-muted-foreground">
+          {emptyHint ?? "No mapped polling units in this view."}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function statusLegend() {

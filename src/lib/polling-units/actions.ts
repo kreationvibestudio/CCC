@@ -7,87 +7,156 @@ import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-action
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
 
-/** Supabase caps each response at 1,000 rows — page until exhausted. */
-async function fetchAllRows<T>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  buildQuery: () => any,
-  pageSize = 1000
-): Promise<T[]> {
-  const rows: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const to = from + pageSize - 1;
-    const { data, error } = await buildQuery().range(from, to);
-    if (error) throw error;
-    const chunk = (data ?? []) as T[];
-    rows.push(...chunk);
-    if (chunk.length < pageSize) break;
+const LIST_COLS =
+  "id, name, code, pu_code, ward, lga, state, registered_voters, latitude, longitude, risk_level, ward_code, lg_code, geocode_status, address";
+
+function sanitizeFilter(raw: string) {
+  return raw.trim().slice(0, 64).replace(/[%_,()"]/g, "");
+}
+
+export type PollingUnitListItem = {
+  id: string;
+  name: string;
+  code: string;
+  pu_code?: string | null;
+  ward: string;
+  lga: string;
+  state: string;
+  registered_voters: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  risk_level: string | null;
+  ward_code?: string | null;
+  lg_code?: string | null;
+  geocode_status?: string | null;
+  address?: string | null;
+  live_status?: string;
+  turnout?: number;
+};
+
+export type PollingUnitSummary = {
+  puCount: number;
+  registeredVoters: number;
+  mapped: number;
+};
+
+export async function getPollingUnitLgas(): Promise<string[]> {
+  const supabase = await createClient();
+  const rpc = await supabase.rpc("distinct_polling_lgas");
+  if (!rpc.error && Array.isArray(rpc.data)) {
+    return rpc.data
+      .map((row: { lga?: string }) => row.lga)
+      .filter((name): name is string => Boolean(name));
   }
-  return rows;
+  const { data } = await supabase.from("lgas").select("name").order("name");
+  return (data ?? []).map((row) => row.name).filter(Boolean);
 }
 
-export async function getPollingUnits(tenantId: string, filters?: { lga?: string; ward?: string; search?: string }) {
+export async function getPollingUnitWards(lga: string): Promise<string[]> {
   const supabase = await createClient();
-  return fetchAllRows(() => {
-    let q = supabase
-      .from("polling_units")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .order("lga")
-      .order("ward")
-      .order("name");
-    if (filters?.lga) q = q.eq("lga", filters.lga);
-    if (filters?.ward) q = q.eq("ward", filters.ward);
-    if (filters?.search) {
-      q = q.or(
-        `code.ilike.%${filters.search}%,name.ilike.%${filters.search}%,pu_code.ilike.%${filters.search}%,ward.ilike.%${filters.search}%,lga.ilike.%${filters.search}%`
-      );
-    }
-    return q;
+  const trimmed = lga.trim();
+  if (!trimmed) return [];
+  const rpc = await supabase.rpc("distinct_polling_wards", { p_lga: trimmed });
+  if (!rpc.error && Array.isArray(rpc.data)) {
+    return rpc.data
+      .map((row: { ward?: string }) => row.ward)
+      .filter((name): name is string => Boolean(name));
+  }
+  return [];
+}
+
+export async function getPollingUnitSummary(filters?: {
+  lga?: string;
+  ward?: string;
+}): Promise<PollingUnitSummary> {
+  const supabase = await createClient();
+  const rpc = await supabase.rpc("polling_units_summary", {
+    p_lga: filters?.lga || null,
+    p_ward: filters?.ward || null,
   });
+  const payload = rpc.data as { pu_count?: number; registered_voters?: number; mapped?: number } | null;
+  if (!rpc.error && payload) {
+    return {
+      puCount: Number(payload.pu_count ?? 0),
+      registeredVoters: Number(payload.registered_voters ?? 0),
+      mapped: Number(payload.mapped ?? 0),
+    };
+  }
+  const user = await getCurrentUser();
+  if (!user) return { puCount: 0, registeredVoters: 0, mapped: 0 };
+  const { count } = await supabase
+    .from("polling_units")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", user.profile.tenant_id);
+  return { puCount: count ?? 0, registeredVoters: 0, mapped: 0 };
 }
 
-export async function getPollingUnitsWithStatus(tenantId: string) {
+export async function countVotingActive(): Promise<number> {
+  const user = await getCurrentUser();
+  if (!user) return 0;
   const supabase = await createClient();
-  type UnitRow = {
-    id: string;
-    name: string;
-    code: string;
-    ward: string;
-    lga: string;
-    state: string;
-    registered_voters: number | null;
-    latitude: number | null;
-    longitude: number | null;
-    risk_level: string | null;
-    pu_code?: string | null;
-    ward_code?: string | null;
-    lg_code?: string | null;
-    geocode_status?: string | null;
-    [key: string]: unknown;
-  };
-  const [units, statuses] = await Promise.all([
-    fetchAllRows<UnitRow>(() =>
-      supabase
-        .from("polling_units")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("lga")
-        .order("ward")
-        .order("name")
-    ),
-    fetchAllRows<{ polling_unit_id: string; status: string; turnout: number | null }>(() =>
-      supabase
-        .from("polling_unit_status")
-        .select("polling_unit_id, status, turnout")
-        .eq("tenant_id", tenantId)
-    ),
-  ]);
-  const statusMap = new Map(statuses.map((s) => [s.polling_unit_id, s]));
-  return units.map((u) => ({
-    ...u,
-    live_status: statusMap.get(u.id)?.status ?? "not_active",
-    turnout: statusMap.get(u.id)?.turnout ?? 0,
-  }));
+  const { count } = await supabase
+    .from("polling_unit_status")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", user.profile.tenant_id)
+    .eq("status", "voting_in_progress");
+  return count ?? 0;
+}
+
+export async function queryPollingUnits(input: {
+  lga?: string;
+  ward?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+  mappedOnly?: boolean;
+}): Promise<{ rows: PollingUnitListItem[]; total: number }> {
+  const user = await getCurrentUser();
+  if (!user) return { rows: [], total: 0 };
+
+  const lga = sanitizeFilter(input.lga ?? "");
+  const ward = sanitizeFilter(input.ward ?? "");
+  const search = sanitizeFilter(input.search ?? "");
+  if (!lga && !ward && search.length < 2) return { rows: [], total: 0 };
+
+  const page = Math.max(0, input.page ?? 0);
+  const pageSize = Math.min(Math.max(input.pageSize ?? 40, 1), 500);
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
+  const supabase = await createClient();
+  let q = supabase
+    .from("polling_units")
+    .select(LIST_COLS, { count: "exact" })
+    .eq("tenant_id", user.profile.tenant_id)
+    .order("code");
+  if (lga) q = q.eq("lga", lga);
+  if (ward) q = q.eq("ward", ward);
+  if (search.length >= 2) {
+    q = q.or(`code.ilike."%${search}%",pu_code.ilike."%${search}%",name.ilike."%${search}%"`);
+  }
+  if (input.mappedOnly) {
+    q = q.not("latitude", "is", null).not("longitude", "is", null);
+  }
+
+  const { data, error, count } = await q.range(from, to);
+  if (error) return { rows: [], total: 0 };
+
+  const units = (data ?? []) as PollingUnitListItem[];
+  const ids = units.map((u) => u.id);
+  if (ids.length) {
+    const { data: statuses } = await supabase
+      .from("polling_unit_status")
+      .select("polling_unit_id, status, turnout")
+      .eq("tenant_id", user.profile.tenant_id)
+      .in("polling_unit_id", ids);
+    const statusMap = new Map((statuses ?? []).map((s) => [s.polling_unit_id, s]));
+    for (const unit of units) {
+      unit.live_status = statusMap.get(unit.id)?.status ?? "not_active";
+      unit.turnout = statusMap.get(unit.id)?.turnout ?? 0;
+    }
+  }
+  return { rows: units, total: count ?? units.length };
 }
 
 export async function getPollingUnitStatuses(tenantId: string) {

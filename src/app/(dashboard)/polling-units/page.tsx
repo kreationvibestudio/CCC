@@ -1,14 +1,14 @@
 ﻿import { getCurrentUser } from "@/lib/auth/session";
-import { getPollingUnitsWithStatus } from "@/lib/polling-units/actions";
-import { getDistinctLgasFromPUs } from "@/lib/geography/data";
+import { getPollingUnitLgas, getPollingUnitSummary, countVotingActive } from "@/lib/polling-units/actions";
 import { PollingUnitsView } from "@/components/polling-units/polling-units-view";
 
 export default async function PollingUnitsPage() {
   const user = await getCurrentUser();
   const tenantId = user!.profile.tenant_id;
-  const [units, lgas] = await Promise.all([
-    getPollingUnitsWithStatus(tenantId),
-    getDistinctLgasFromPUs(tenantId),
+  const [lgas, summary, votingActive] = await Promise.all([
+    getPollingUnitLgas(),
+    getPollingUnitSummary(),
+    countVotingActive(),
   ]);
-  return <PollingUnitsView units={units} lgas={lgas} tenantId={tenantId} />;
+  return <PollingUnitsView lgas={lgas} summary={summary} votingActive={votingActive} tenantId={tenantId} />;
 }

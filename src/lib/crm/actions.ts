@@ -2,16 +2,27 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import type { Donation } from "@/types/database";
+
+async function crmDb() {
+  try {
+    return createServiceClient();
+  } catch {
+    return createClient();
+  }
+}
 
 export async function createContact(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  if (!fullName) return { error: "Name is required" };
+  const supabase = await crmDb();
   const { error } = await supabase.from("contacts").insert({
     tenant_id: user.profile.tenant_id,
-    full_name: formData.get("full_name") as string,
+    full_name: fullName,
     contact_type: formData.get("contact_type") as string,
     phone: formData.get("phone") as string || null,
     email: formData.get("email") as string || null,
@@ -26,7 +37,13 @@ export async function createContact(formData: FormData) {
 
 export async function getContacts(tenantId: string) {
   const supabase = await createClient();
-  const { data } = await supabase.from("contacts").select("*").eq("tenant_id", tenantId).order("full_name");
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("full_name")
+    .limit(2000);
+  if (error) return [];
   return data ?? [];
 }
 
@@ -41,7 +58,7 @@ export async function getContact(id: string) {
 export async function updateContact(id: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
+  const supabase = await crmDb();
   const { error } = await supabase.from("contacts").update({
     full_name: formData.get("full_name"),
     contact_type: formData.get("contact_type"),
@@ -61,7 +78,7 @@ export async function updateContact(id: string, formData: FormData) {
 export async function deleteContact(id: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
+  const supabase = await crmDb();
   const { error } = await supabase.from("contacts").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
   revalidatePath("/crm");
@@ -71,7 +88,7 @@ export async function deleteContact(id: string) {
 export async function logInteraction(contactId: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
+  const supabase = await crmDb();
   const { error } = await supabase.from("contact_interactions").insert({
     contact_id: contactId,
     staff_id: user.id,
@@ -86,8 +103,9 @@ export async function logInteraction(contactId: string, formData: FormData) {
 export async function recordDonation(contactId: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
+  const supabase = await crmDb();
   const amount = Number(formData.get("amount"));
+  if (!Number.isFinite(amount) || amount <= 0) return { error: "Enter a valid amount" };
   const { error } = await supabase.from("donations").insert({
     tenant_id: user.profile.tenant_id,
     contact_id: contactId,

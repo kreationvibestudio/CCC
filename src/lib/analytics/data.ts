@@ -28,12 +28,13 @@ export async function getAnalyticsSummary(tenantId: string) {
   const { data: donations } = await supabase.from("donations").select("amount, created_at").eq("tenant_id", tenantId).order("created_at");
   const donationTrend = (donations ?? []).slice(-12).map((d, i) => ({ month: `M${i + 1}`, amount: Number(d.amount) }));
 
-  const { data: puByWard } = await supabase.from("polling_units").select("ward, registered_voters").eq("tenant_id", tenantId);
-  const wardMap = new Map<string, number>();
-  for (const p of puByWard ?? []) {
-    wardMap.set(p.ward, (wardMap.get(p.ward) ?? 0) + (p.registered_voters ?? 0));
-  }
-  const geographic = [...wardMap.entries()].map(([ward, voters]) => ({ ward, voters })).sort((a, b) => b.voters - a.voters).slice(0, 8);
+  const rpcWards = await supabase.rpc("top_polling_wards", { p_limit: 8 });
+  const geographic = Array.isArray(rpcWards.data)
+    ? rpcWards.data.map((row: { ward?: string; voters?: number }) => ({
+        ward: row.ward ?? "Unknown",
+        voters: Number(row.voters ?? 0),
+      }))
+    : [];
 
   const { data: posts } = await supabase.from("social_posts").select("likes, comments_count, shares").eq("tenant_id", tenantId);
   const socialEngagement = (posts ?? []).reduce((s, p) => s + (p.likes ?? 0) + (p.comments_count ?? 0) + (p.shares ?? 0), 0);

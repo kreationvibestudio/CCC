@@ -1,23 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 
-/** Supabase caps each response at 1,000 rows — page until exhausted. */
-async function fetchAllRows<T>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  buildQuery: () => any,
-  pageSize = 1000
-): Promise<T[]> {
-  const rows: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const to = from + pageSize - 1;
-    const { data, error } = await buildQuery().range(from, to);
-    if (error) throw error;
-    const chunk = (data ?? []) as T[];
-    rows.push(...chunk);
-    if (chunk.length < pageSize) break;
-  }
-  return rows;
-}
-
 export async function getGeographyOptions() {
   const supabase = await createClient();
   const [{ data: lgas }, { data: wards }] = await Promise.all([
@@ -27,22 +9,26 @@ export async function getGeographyOptions() {
   return { lgas: lgas ?? [], wards: wards ?? [] };
 }
 
-export async function getDistinctLgasFromPUs(tenantId: string) {
+export async function getDistinctLgasFromPUs() {
   const supabase = await createClient();
-  const data = await fetchAllRows<{ lga: string }>(() =>
-    supabase.from("polling_units").select("lga").eq("tenant_id", tenantId)
-  );
-  const set = new Set(data.map((r) => r.lga).filter(Boolean));
-  return [...set].sort();
+  const rpc = await supabase.rpc("distinct_polling_lgas");
+  if (!rpc.error && Array.isArray(rpc.data)) {
+    return rpc.data
+      .map((row: { lga?: string }) => row.lga)
+      .filter((name): name is string => Boolean(name));
+  }
+  const { data } = await supabase.from("lgas").select("name").order("name");
+  return (data ?? []).map((row) => row.name).filter(Boolean);
 }
 
-export async function getDistinctWardsFromPUs(tenantId: string, lga?: string) {
+export async function getDistinctWardsFromPUs(lga?: string) {
   const supabase = await createClient();
-  const data = await fetchAllRows<{ ward: string }>(() => {
-    let q = supabase.from("polling_units").select("ward").eq("tenant_id", tenantId);
-    if (lga) q = q.eq("lga", lga);
-    return q;
-  });
-  const set = new Set(data.map((r) => r.ward).filter(Boolean));
-  return [...set].sort();
+  if (!lga) return [];
+  const rpc = await supabase.rpc("distinct_polling_wards", { p_lga: lga });
+  if (!rpc.error && Array.isArray(rpc.data)) {
+    return rpc.data
+      .map((row: { ward?: string }) => row.ward)
+      .filter((name): name is string => Boolean(name));
+  }
+  return [];
 }

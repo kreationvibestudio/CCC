@@ -14,6 +14,7 @@ export async function recordSuccessfulPaystackCharge(input: {
   fullName?: string | null;
   phone?: string | null;
   channel?: string | null;
+  tenantId?: string | null;
 }): Promise<{ data: RecordedCharge } | { error: string }> {
   const reference = input.reference.trim();
   const email = input.email.trim().toLowerCase();
@@ -22,6 +23,7 @@ export async function recordSuccessfulPaystackCharge(input: {
   if (!email || !email.includes("@")) return { error: "Missing donor email" };
   if (!Number.isFinite(amount) || amount <= 0) return { error: "Invalid amount" };
 
+  const tenantId = input.tenantId?.trim() || CAMPAIGN_TENANT_ID;
   const admin = createServiceClient();
 
   const { data: existing } = await admin
@@ -42,7 +44,7 @@ export async function recordSuccessfulPaystackCharge(input: {
   const { data: byEmail } = await admin
     .from("contacts")
     .select("id, total_donations, phone")
-    .eq("tenant_id", CAMPAIGN_TENANT_ID)
+    .eq("tenant_id", tenantId)
     .ilike("email", email.replace(/[%_]/g, ""))
     .maybeSingle();
 
@@ -56,7 +58,7 @@ export async function recordSuccessfulPaystackCharge(input: {
     const { data: byPhone } = await admin
       .from("contacts")
       .select("id, total_donations")
-      .eq("tenant_id", CAMPAIGN_TENANT_ID)
+      .eq("tenant_id", tenantId)
       .eq("phone", phone)
       .maybeSingle();
     if (byPhone) {
@@ -70,7 +72,7 @@ export async function recordSuccessfulPaystackCharge(input: {
     const { data: created, error: createError } = await admin
       .from("contacts")
       .insert({
-        tenant_id: CAMPAIGN_TENANT_ID,
+        tenant_id: tenantId,
         full_name: fullName,
         contact_type: "donor",
         email,
@@ -89,7 +91,7 @@ export async function recordSuccessfulPaystackCharge(input: {
   const { data: donation, error: donationError } = await admin
     .from("donations")
     .insert({
-      tenant_id: CAMPAIGN_TENANT_ID,
+      tenant_id: tenantId,
       contact_id: contactId,
       amount,
       currency: "NGN",

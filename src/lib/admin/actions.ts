@@ -5,6 +5,7 @@ import { randomBytes } from "crypto";
 import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
+import { createInvitedAuthUser } from "@/lib/invites";
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[];
 
@@ -33,22 +34,19 @@ export async function inviteUser(formData: FormData) {
 
     const admin = createServiceClient();
     const password = tempPassword();
-    const { data, error } = await admin.auth.admin.createUser({
+    const created = await createInvitedAuthUser(admin, {
+      tenantId: adminUser.profile.tenant_id,
       email,
+      fullName,
+      role: roleRaw,
       password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-        tenant_id: adminUser.profile.tenant_id,
-        role: roleRaw,
-      },
+      invitedBy: adminUser.id,
     });
-    if (error) return { error: error.message };
-    if (!data.user) return { error: "User creation failed" };
+    if (created.error || !created.userId) return { error: created.error ?? "User creation failed" };
 
     const { error: profileError } = await admin.from("profiles").upsert(
       {
-        id: data.user.id,
+        id: created.userId,
         tenant_id: adminUser.profile.tenant_id,
         email,
         full_name: fullName,
@@ -60,12 +58,14 @@ export async function inviteUser(formData: FormData) {
     );
     if (profileError) return { error: profileError.message };
 
-    await logAudit("admin.invite", "user", data.user.id, { email, role: roleRaw });
+    await logAudit("admin.invite", "user", created.userId, { email, role: roleRaw });
     revalidatePath("/admin");
     return {
       success: true as const,
-      temporaryPassword: password,
-      message: `Invited ${email}. Share the temporary password securely; they should change it after first login.`,
+      temporaryPassword: created.created ? password : undefined,
+      message: created.created
+        ? `Invited ${email}. Share the temporary password securely; they should change it after first login.`
+        : `Updated ${email} in this campaign workspace.`,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Invite failed" };
@@ -192,7 +192,7 @@ export async function zeroCampaignData() {
     const admin = createServiceClient();
     const tenantId = adminUser.profile.tenant_id;
 
-    const rpc = await admin.rpc("zero_operational_campaign_data");
+    const rpc = await admin.rpc("zero_operational_campaign_data", { p_tenant_id: tenantId });
     if (!rpc.error) {
       const puCount = Number((rpc.data as { polling_units?: number } | null)?.polling_units ?? 0);
       await logAudit("admin.zero_campaign", "tenant", tenantId, { pollingUnits: puCount });
@@ -225,8 +225,8 @@ export async function zeroCampaignData() {
     if (puCountError) return { error: puCountError.message };
 
     for (const table of OPERATIONAL_TABLES) {
-      const { error } = await admin.from(table).delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      if (error && !/schema cache|does not exist/i.test(error.message)) {
+      const { error } = await admin.from(table).delete().eq("tenant_id", tenantId);
+      if (error && !/schema cache|does not exist|column .*tenant_id/i.test(error.message)) {
         return { error: `${table}: ${error.message}` };
       }
     }

@@ -149,6 +149,11 @@ export function Header() {
             <DropdownMenuItem onClick={() => router.push("/settings/security")}>
               <Settings className="mr-2 h-4 w-4" /> Security & 2FA
             </DropdownMenuItem>
+            {user?.isPlatformOperator && (
+              <DropdownMenuItem onClick={() => router.push("/platform")}>
+                <Shield className="mr-2 h-4 w-4" /> Platform
+              </DropdownMenuItem>
+            )}
             {can("admin.users") && (
               <DropdownMenuItem onClick={() => router.push("/admin")}>
                 <Shield className="mr-2 h-4 w-4" /> Admin

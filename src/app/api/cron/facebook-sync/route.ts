@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncFacebookForCampaignTenant } from "@/lib/integrations/facebook/sync";
+import { syncFacebookForConfiguredTenants } from "@/lib/integrations/facebook/sync";
 import { FacebookApiError } from "@/lib/integrations/facebook/client";
 
 export const maxDuration = 60;
@@ -24,14 +24,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await syncFacebookForCampaignTenant();
+    const results = await syncFacebookForConfiguredTenants();
     return NextResponse.json({
       success: true,
-      pageName: result.page.name,
-      postsSynced: result.postsSynced,
-      commentsSynced: result.commentsSynced,
-      warning: result.commentsSkippedReason,
-      tokenSource: result.tokenSource,
+      results: results.map((r) =>
+        "error" in r
+          ? { tenantId: r.tenantId, error: r.error }
+          : {
+              tenantId: r.tenantId,
+              pageName: r.page.name,
+              postsSynced: r.postsSynced,
+              commentsSynced: r.commentsSynced,
+              warning: r.commentsSkippedReason,
+              tokenSource: r.tokenSource,
+            }
+      ),
     });
   } catch (err) {
     const message =

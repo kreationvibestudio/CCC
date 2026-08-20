@@ -74,6 +74,13 @@ export async function assignVolunteerTask(volunteerId: string, formData: FormDat
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
   const supabase = await createClient();
+  const { data: volunteer } = await supabase
+    .from("volunteers")
+    .select("id")
+    .eq("id", volunteerId)
+    .eq("tenant_id", user.profile.tenant_id)
+    .maybeSingle();
+  if (!volunteer) return { error: "Volunteer is not in this campaign workspace" };
   const { error } = await supabase.from("volunteer_tasks").insert({
     tenant_id: user.profile.tenant_id,
     volunteer_id: volunteerId,

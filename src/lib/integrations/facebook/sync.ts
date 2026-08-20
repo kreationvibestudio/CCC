@@ -11,22 +11,53 @@ import {
   FacebookApiError,
 } from "./client";
 
-const CAMPAIGN_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
+const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
-function getFacebookConfig() {
-  const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
-  const userToken = process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim();
-  const pageToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim();
+function settingString(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (value && typeof value === "object" && "value" in value) {
+    return String((value as { value: string }).value).trim();
+  }
+  return "";
+}
+
+async function getFacebookConfig(tenantId: string) {
+  let pageId = "";
+  let userToken = "";
+  let pageToken = "";
+
+  try {
+    const supabase = await getDbClient();
+    const { data: settings } = await supabase
+      .from("tenant_settings")
+      .select("key, value")
+      .eq("tenant_id", tenantId)
+      .in("key", ["facebook_page_id", "facebook_page_access_token", "facebook_user_access_token"]);
+    for (const row of settings ?? []) {
+      const v = settingString(row.value);
+      if (row.key === "facebook_page_id") pageId = v;
+      if (row.key === "facebook_page_access_token") pageToken = v;
+      if (row.key === "facebook_user_access_token") userToken = v;
+    }
+  } catch {
+    // fall through to env for the original campaign tenant
+  }
+
+  if (tenantId === DEFAULT_TENANT_ID) {
+    pageId = pageId || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+    userToken = userToken || process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() || "";
+    pageToken = pageToken || process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
+  }
 
   if (!pageId || pageId.length < 5 || /^your[_-]/i.test(pageId) || pageId === "[SENSITIVE]") {
     throw new FacebookApiError(
-      "FACEBOOK_PAGE_ID is missing or invalid. Set the real page ID in Vercel / .env.local (e.g. 671649942702174)."
+      "Facebook page ID is missing for this workspace. Set tenant setting facebook_page_id (or FACEBOOK_PAGE_ID for the original campaign)."
     );
   }
 
   if (!isUsableFacebookToken(userToken) && !isUsableFacebookToken(pageToken)) {
     throw new FacebookApiError(
-      "Facebook tokens are missing or invalid. Set FACEBOOK_PAGE_ACCESS_TOKEN (preferred, never-expiring page token) or FACEBOOK_USER_ACCESS_TOKEN. Note: `vercel env pull` redacts Sensitive values as [SENSITIVE] — paste real tokens in the Vercel dashboard."
+      "Facebook tokens are missing for this workspace. Set tenant settings facebook_page_access_token / facebook_user_access_token."
     );
   }
 
@@ -47,7 +78,7 @@ async function getDbClient() {
 }
 
 export async function syncFacebookToDatabase(tenantId: string): Promise<FacebookSyncResult> {
-  const { pageId, userToken, pageToken: envPageToken } = getFacebookConfig();
+  const { pageId, userToken, pageToken: envPageToken } = await getFacebookConfig(tenantId);
   const supabase = await getDbClient();
 
   const { data: existingAccount } = await supabase
@@ -224,5 +255,29 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
 }
 
 export async function syncFacebookForCampaignTenant() {
-  return syncFacebookToDatabase(CAMPAIGN_TENANT_ID);
+  return syncFacebookToDatabase(DEFAULT_TENANT_ID);
+}
+
+export async function syncFacebookForConfiguredTenants(): Promise<
+  Array<{ tenantId: string; error: string } | ({ tenantId: string } & FacebookSyncResult)>
+> {
+  const supabase = await getDbClient();
+  const { data: settings } = await supabase
+    .from("tenant_settings")
+    .select("tenant_id")
+    .eq("key", "facebook_page_id");
+  const ids = new Set((settings ?? []).map((s) => s.tenant_id as string));
+  ids.add(DEFAULT_TENANT_ID);
+  const results = [];
+  for (const tenantId of ids) {
+    try {
+      results.push({ tenantId, ...(await syncFacebookToDatabase(tenantId)) });
+    } catch (err) {
+      results.push({
+        tenantId,
+        error: err instanceof Error ? err.message : "Sync failed",
+      });
+    }
+  }
+  return results;
 }

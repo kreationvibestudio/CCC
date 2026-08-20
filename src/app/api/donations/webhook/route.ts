@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       status?: string;
       amount?: number;
       customer?: { email?: string };
-      metadata?: { full_name?: string; phone?: string };
+      metadata?: { full_name?: string; phone?: string; tenant_id?: string };
       channel?: string;
     };
   };
@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
     fullName: typeof charge.metadata?.full_name === "string" ? charge.metadata.full_name : null,
     phone: typeof charge.metadata?.phone === "string" ? charge.metadata.phone : null,
     channel: charge.channel,
+    tenantId: typeof charge.metadata?.tenant_id === "string" ? charge.metadata.tenant_id : null,
   });
 
   if ("error" in recorded) {

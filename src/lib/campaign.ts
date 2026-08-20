@@ -1,4 +1,4 @@
-/** Single-tenant campaign id used by public donate, Facebook sync, and seed. */
+/** Seed / fallback workspace id for the original hosted campaign. */
 export const CAMPAIGN_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
 /** Hosted Paystack checkout for this campaign (Shop payment page). */
@@ -9,12 +9,18 @@ export function appBaseUrl() {
 }
 
 export function paystackPaymentLink() {
+  return paystackPaymentLinkFromSetting(null);
+}
+
+export function paystackPaymentLinkFromSetting(stored: string | null | undefined) {
+  const fromTenant = stored?.trim() ?? "";
+  if (fromTenant && isPaystackCheckoutUrl(fromTenant)) return fromTenant.replace(/\/$/, "");
   const fromEnv = process.env.NEXT_PUBLIC_PAYSTACK_PAYMENT_LINK?.trim() ?? "";
   if (fromEnv && isPaystackCheckoutUrl(fromEnv)) return fromEnv.replace(/\/$/, "");
   return DEFAULT_PAYSTACK_PAYMENT_LINK;
 }
 
-function isPaystackCheckoutUrl(value: string) {
+export function isPaystackCheckoutUrl(value: string) {
   try {
     const url = new URL(value);
     if (url.protocol !== "https:") return false;

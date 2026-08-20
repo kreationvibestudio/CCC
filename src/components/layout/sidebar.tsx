@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/navigation";
-import { usePermissions } from "@/components/providers/auth-provider";
+import { usePermissions, useAuth } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import { Shield, ChevronLeft, ChevronRight } from "lucide-react";
 export function Sidebar() {
   const pathname = usePathname();
   const { can } = usePermissions();
+  const user = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -52,8 +53,12 @@ export function Sidebar() {
           <Shield className="h-6 w-6 shrink-0 text-primary" />
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-bold leading-none">CCC</span>
-              <span className="text-[10px] text-muted-foreground">Command Center</span>
+              <span className="text-sm font-bold leading-none truncate max-w-[11rem]">
+                {user?.workspace?.name ?? "CCC"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {user?.workspace?.party ? `${user.workspace.party} · Command Center` : "Command Center"}
+              </span>
             </div>
           )}
         </Link>

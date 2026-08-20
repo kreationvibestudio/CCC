@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { amount?: unknown; email?: unknown; fullName?: unknown; phone?: unknown };
+  let body: { amount?: unknown; email?: unknown; fullName?: unknown; phone?: unknown; tenantSlug?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -32,6 +32,15 @@ export async function POST(req: NextRequest) {
   const email = String(body.email ?? "").trim().toLowerCase();
   const fullName = String(body.fullName ?? "").trim();
   const phone = String(body.phone ?? "").trim();
+  const tenantSlug = String(body.tenantSlug ?? "").trim();
+
+  let tenantId: string | undefined;
+  if (tenantSlug) {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const admin = createServiceClient();
+    const { data } = await admin.from("tenants").select("id").eq("slug", tenantSlug).maybeSingle();
+    tenantId = data?.id;
+  }
 
   if (!fullName || fullName.length < 2) {
     return NextResponse.json({ error: "Enter your full name" }, { status: 400 });
@@ -53,6 +62,7 @@ export async function POST(req: NextRequest) {
     metadata: {
       full_name: fullName,
       phone: phone || undefined,
+      tenant_id: tenantId,
     },
   });
 

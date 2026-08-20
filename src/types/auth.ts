@@ -43,7 +43,6 @@ export type Permission =
   | "reports.view"
   | "reports.generate"
   | "admin.users"
-  | "admin.tenants"
   | "admin.audit";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -72,7 +71,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "situation_room.view", "situation_room.manage", "election_results.submit",
     "agent.portal",
     "communications.view", "communications.send", "analytics.view",
-    "reports.view", "reports.generate", "admin.users", "admin.tenants", "admin.audit",
+    "reports.view", "reports.generate", "admin.users", "admin.audit",
   ],
   candidate: [
     "dashboard.view", "social.view", "comments.view", "ai.use", "sentiment.view",

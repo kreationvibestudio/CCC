@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import type { Donation } from "@/types/database";
+import { assertContactInTenant } from "@/lib/tenancy";
 
 async function crmDb() {
   try {
@@ -88,6 +89,8 @@ export async function deleteContact(id: string) {
 export async function logInteraction(contactId: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
+  if (contactError) return { error: contactError };
   const supabase = await crmDb();
   const { error } = await supabase.from("contact_interactions").insert({
     contact_id: contactId,
@@ -103,6 +106,8 @@ export async function logInteraction(contactId: string, formData: FormData) {
 export async function recordDonation(contactId: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
+  if (contactError) return { error: contactError };
   const supabase = await crmDb();
   const amount = Number(formData.get("amount"));
   if (!Number.isFinite(amount) || amount <= 0) return { error: "Enter a valid amount" };
@@ -113,20 +118,42 @@ export async function recordDonation(contactId: string, formData: FormData) {
     payment_method: formData.get("payment_method") as string || "cash",
   });
   if (error) return { error: error.message };
-  const { data: contact } = await supabase.from("contacts").select("total_donations").eq("id", contactId).single();
-  await supabase.from("contacts").update({ total_donations: (contact?.total_donations ?? 0) + amount }).eq("id", contactId);
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("total_donations")
+    .eq("id", contactId)
+    .eq("tenant_id", user.profile.tenant_id)
+    .single();
+  await supabase
+    .from("contacts")
+    .update({ total_donations: (contact?.total_donations ?? 0) + amount })
+    .eq("id", contactId)
+    .eq("tenant_id", user.profile.tenant_id);
   revalidatePath(`/crm/${contactId}`);
   return { success: true };
 }
 
 export async function getContactInteractions(contactId: string) {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
+  if (contactError) return [];
   const supabase = await createClient();
   const { data } = await supabase.from("contact_interactions").select("*, profiles(full_name)").eq("contact_id", contactId).order("created_at", { ascending: false });
   return data ?? [];
 }
 
 export async function getContactDonations(contactId: string) {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
+  if (contactError) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("donations").select("*").eq("contact_id", contactId).order("created_at", { ascending: false });
+  const { data } = await supabase
+    .from("donations")
+    .select("*")
+    .eq("contact_id", contactId)
+    .eq("tenant_id", user.profile.tenant_id)
+    .order("created_at", { ascending: false });
   return (data ?? []) as Donation[];
 }

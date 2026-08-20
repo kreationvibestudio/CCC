@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, isPlatformOperatorUser } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/types/auth";
 import { NAV_ITEMS } from "@/lib/navigation";
 import { AuthProvider } from "@/components/providers/auth-provider";
@@ -12,7 +13,16 @@ export default async function DashboardGroupLayout({
   children: React.ReactNode;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    const supabase = await createClient();
+    const {
+      data: { user: auth },
+    } = await supabase.auth.getUser();
+    if (auth?.email && (await isPlatformOperatorUser(auth.id, auth.email))) {
+      redirect("/platform");
+    }
+    redirect("/login");
+  }
 
   const pathname = (await headers()).get("x-pathname") ?? "";
   const match = NAV_ITEMS.filter(

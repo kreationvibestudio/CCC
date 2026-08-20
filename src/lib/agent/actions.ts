@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
+import { assertPollingUnitInTenant } from "@/lib/tenancy";
 
 /** User session for auth; service role for writes so missing INSERT policies cannot block agents. */
 async function agentDb() {
@@ -34,13 +35,16 @@ export async function submitAgentReport(formData: FormData) {
   const reportType = String(formData.get("report_type") ?? "").trim();
   if (!content || !reportType) return { error: "Report type and details are required" };
   const capturedAt = capturedAtIso(formData);
+  const puId = (formData.get("polling_unit_id") as string) || null;
+  const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
+  if (puError) return { error: puError };
   const supabase = await agentDb();
   const { error } = await supabase.from("agent_reports").insert({
     tenant_id: user.profile.tenant_id,
     agent_id: user.id,
     report_type: reportType,
     content,
-    polling_unit_id: (formData.get("polling_unit_id") as string) || null,
+    polling_unit_id: puId,
     created_at: capturedAt,
   });
   if (error) return { error: error.message };
@@ -51,12 +55,15 @@ export async function submitAgentReport(formData: FormData) {
 export async function reportIncident(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const puId = (formData.get("polling_unit_id") as string) || null;
+  const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
+  if (puError) return { error: puError };
   const supabase = await agentDb();
   const capturedAt = capturedAtIso(formData);
   const { error } = await supabase.from("incident_reports").insert({
     tenant_id: user.profile.tenant_id,
     reporter_id: user.id,
-    polling_unit_id: (formData.get("polling_unit_id") as string) || null,
+    polling_unit_id: puId,
     title: formData.get("title") as string,
     description: formData.get("description") as string,
     severity: (formData.get("severity") as string) || "medium",
@@ -76,6 +83,8 @@ export async function updatePuStatus(formData: FormData) {
   const supabase = await agentDb();
   const puId = String(formData.get("polling_unit_id") ?? "").trim();
   if (!puId) return { error: "Select a polling unit" };
+  const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
+  if (puError) return { error: puError };
   const capturedAt = capturedAtIso(formData);
   const { error } = await supabase.from("polling_unit_status").upsert({
     tenant_id: user.profile.tenant_id,
@@ -95,6 +104,8 @@ export async function submitElectionResult(formData: FormData) {
   if (!user) return { error: "Unauthorized" };
   const puId = String(formData.get("polling_unit_id") ?? "").trim();
   if (!puId) return { error: "Select a polling unit" };
+  const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
+  if (puError) return { error: puError };
 
   let parsed: unknown = {};
   try {

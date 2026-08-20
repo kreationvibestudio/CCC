@@ -31,6 +31,8 @@ export default async function SettingsPage() {
           <CardTitle className="flex flex-wrap items-center gap-2">
             Profile
             <Badge variant="secondary">{user.role.replace(/_/g, " ")}</Badge>
+            {user.workspace?.name && <Badge variant="outline">{user.workspace.name}</Badge>}
+            {user.workspace?.party && <Badge variant="outline">{user.workspace.party}</Badge>}
           </CardTitle>
         </CardHeader>
         <CardContent>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { assertEventInTenant } from "@/lib/tenancy";
 
 export async function createEvent(formData: FormData) {
   const user = await getCurrentUser();
@@ -114,6 +115,8 @@ export async function checkInAttendee(eventId: string, formData: FormData) {
 export async function getEventAttendees(eventId: string) {
   const user = await getCurrentUser();
   if (!user) return [];
+  const eventError = await assertEventInTenant(user.profile.tenant_id, eventId);
+  if (eventError) return [];
   const supabase = await createClient();
   const { data } = await supabase.from("event_attendees").select("*").eq("event_id", eventId).order("created_at", { ascending: false });
   return data ?? [];

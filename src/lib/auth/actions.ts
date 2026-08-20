@@ -1,65 +1,80 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { logAudit } from "@/lib/auth/session";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { logAudit, isPlatformOperatorUser } from "@/lib/auth/session";
+import { getInviteByToken } from "@/lib/invites";
 import { redirect } from "next/navigation";
 
 export async function signIn(email: string, password: string) {
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: error.message };
 
   await logAudit("auth.login", "user", email);
-  return { success: true };
+
+  const user = data.user;
+  if (user?.email && (await isPlatformOperatorUser(user.id, user.email))) {
+    const { data: profile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
+    if (!profile) return { success: true as const, next: "/platform" };
+  }
+  return { success: true as const, next: "/dashboard" };
 }
 
 export async function isRegistrationOpen(): Promise<boolean> {
-  return true;
+  return false;
 }
 
-async function isFirstCampaignUser(): Promise<boolean> {
-  try {
-    const { createServiceClient } = await import("@/lib/supabase/admin");
-    const admin = createServiceClient();
-    const { count, error } = await admin.from("profiles").select("id", { count: "exact", head: true });
-    if (error) return false;
-    return (count ?? 0) === 0;
-  } catch {
-    return false;
-  }
+export async function signUp(
+  _email: string,
+  _password: string,
+  _fullName: string
+): Promise<{ error: string } | { success: true; requiresEmailConfirmation?: boolean }> {
+  return { error: "Registration is by invitation only. Ask your campaign administrator." };
 }
 
-export async function signUp(email: string, password: string, fullName: string) {
-  const trimmedEmail = email.trim().toLowerCase();
-  const name = fullName.trim();
+export async function signUpWithInvite(input: {
+  token: string;
+  email: string;
+  password: string;
+  fullName: string;
+}) {
+  const trimmedEmail = input.email.trim().toLowerCase();
+  const name = input.fullName.trim();
   if (!trimmedEmail.includes("@")) return { error: "Valid email is required" };
   if (!name || name.length < 2) return { error: "Full name is required" };
-  if (!password || password.length < 8) return { error: "Password must be at least 8 characters" };
+  if (!input.password || input.password.length < 8) {
+    return { error: "Password must be at least 8 characters" };
+  }
+
+  let invite;
+  try {
+    const admin = createServiceClient();
+    invite = await getInviteByToken(admin, input.token);
+  } catch {
+    return { error: "Invitation could not be verified" };
+  }
+  if (!invite) return { error: "This invitation is invalid or has expired" };
+  if (invite.email !== trimmedEmail) {
+    return { error: `Sign up with the invited email (${invite.email})` };
+  }
 
   const supabase = await createClient();
-  const firstUser = await isFirstCampaignUser();
-  const role = firstUser ? "super_administrator" : "supporter";
-
   const { data, error } = await supabase.auth.signUp({
     email: trimmedEmail,
-    password,
+    password: input.password,
     options: {
       data: {
         full_name: name,
-        tenant_id: "a0000000-0000-0000-0000-000000000001",
-        role,
+        invite_token: input.token,
       },
     },
   });
   if (error) return { error: error.message };
 
-  // Session present ⇒ email confirmation is off and the user can sign in immediately.
-  // Session missing ⇒ Supabase expects a verification email. This app does not send
-  // those emails (no custom SMTP), so confirm the user with the service role instead.
   let requiresEmailConfirmation = Boolean(data.user && !data.session);
   if (requiresEmailConfirmation && data.user) {
     try {
-      const { createServiceClient } = await import("@/lib/supabase/admin");
       const admin = createServiceClient();
       const { error: confirmError } = await admin.auth.admin.updateUserById(data.user.id, {
         email_confirm: true,
@@ -68,18 +83,18 @@ export async function signUp(email: string, password: string, fullName: string) 
         requiresEmailConfirmation = false;
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: trimmedEmail,
-          password,
+          password: input.password,
         });
         if (signInError) {
-          return { success: true, requiresEmailConfirmation: true };
+          return { success: true as const, requiresEmailConfirmation: true };
         }
       }
     } catch {
-      // Leave requiresEmailConfirmation true so the UI can avoid a false "check email" claim.
+      // UI can send them to login
     }
   }
 
-  return { success: true, requiresEmailConfirmation };
+  return { success: true as const, requiresEmailConfirmation };
 }
 
 export async function signOut() {

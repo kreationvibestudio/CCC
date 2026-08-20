@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, type UserRole } from "@/types/auth";
+import { createInvitedAuthUser } from "@/lib/invites";
 
 const PU_COLS = "id, code, pu_code, name, ward, lga, assigned_agent_id";
 const KEEP_ROLES = new Set([
@@ -190,19 +191,17 @@ export async function assignPollingAgent(input: {
 
   if (!userId) {
     password = tempPassword();
-    const { data, error } = await supabase.auth.admin.createUser({
+    const invited = await createInvitedAuthUser(supabase, {
+      tenantId,
       email,
+      fullName,
+      role: "polling_agent",
       password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-        tenant_id: tenantId,
-        role: "polling_agent",
-      },
+      invitedBy: auth.user.id,
     });
-    if (error || !data.user) return { error: error?.message ?? "Could not create agent login" };
-    userId = data.user.id;
-    created = true;
+    if (invited.error || !invited.userId) return { error: invited.error ?? "Could not create agent login" };
+    userId = invited.userId;
+    created = Boolean(invited.created);
   }
 
   const { error: profileError } = await supabase.from("profiles").upsert(

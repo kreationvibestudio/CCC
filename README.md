@@ -66,7 +66,7 @@ npx supabase db reset
 
 Then copy the anon key from `supabase start` output into `.env.local`.
 
-The first person to register becomes the campaign super administrator. There is no demo login.
+The first person to register becomes the campaign super administrator. Later sign-ups start as **Supporter**; an admin assigns their role on **Admin**. There is no demo login.
 
 ---
 

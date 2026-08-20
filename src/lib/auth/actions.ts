@@ -14,6 +14,10 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function isRegistrationOpen(): Promise<boolean> {
+  return true;
+}
+
+async function isFirstCampaignUser(): Promise<boolean> {
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const admin = createServiceClient();
@@ -26,20 +30,24 @@ export async function isRegistrationOpen(): Promise<boolean> {
 }
 
 export async function signUp(email: string, password: string, fullName: string) {
+  const trimmedEmail = email.trim().toLowerCase();
+  const name = fullName.trim();
+  if (!trimmedEmail.includes("@")) return { error: "Valid email is required" };
+  if (!name || name.length < 2) return { error: "Full name is required" };
+  if (!password || password.length < 8) return { error: "Password must be at least 8 characters" };
+
   const supabase = await createClient();
-  const open = await isRegistrationOpen();
-  if (!open) {
-    return { error: "Registration is invite-only. Ask a campaign administrator to add you." };
-  }
+  const firstUser = await isFirstCampaignUser();
+  const role = firstUser ? "super_administrator" : "supporter";
 
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: trimmedEmail,
     password,
     options: {
       data: {
-        full_name: fullName,
+        full_name: name,
         tenant_id: "a0000000-0000-0000-0000-000000000001",
-        role: "super_administrator",
+        role,
       },
     },
   });
@@ -56,7 +64,16 @@ export async function signUp(email: string, password: string, fullName: string) 
       const { error: confirmError } = await admin.auth.admin.updateUserById(data.user.id, {
         email_confirm: true,
       });
-      if (!confirmError) requiresEmailConfirmation = false;
+      if (!confirmError) {
+        requiresEmailConfirmation = false;
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        });
+        if (signInError) {
+          return { success: true, requiresEmailConfirmation: true };
+        }
+      }
     } catch {
       // Leave requiresEmailConfirmation true so the UI can avoid a false "check email" claim.
     }

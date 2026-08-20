@@ -35,6 +35,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260820000000_rls_operational_tables.sql",
   "supabase/migrations/20260820000001_zero_operational_fn.sql",
   "supabase/migrations/20260820000002_donations_paystack.sql",
+  "supabase/migrations/20260820000003_self_serve_signup.sql",
 ];
 
 loadEnvLocal();

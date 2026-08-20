@@ -129,7 +129,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "dashboard.view", "crm.view", "crm.manage", "communications.view",
     "communications.send",
   ],
-  supporter: ["events.view", "maps.view"],
+  supporter: ["dashboard.view", "events.view", "maps.view"],
 };
 
 export function hasPermission(role: UserRole, permission: Permission): boolean {

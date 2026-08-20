@@ -29,7 +29,7 @@ To wipe sample/operational data and keep polling units:
 npm run data:zero
 ```
 
-Or paste `supabase/zero-operational-data.sql` into the [SQL Editor](https://supabase.com/dashboard/project/ffccfeodymiwwqshphmh/sql/new) and Run. That uses `TRUNCATE` and does **not** update every polling-unit row (a full `UPDATE` on ~176k units hits statement timeout). Team accounts stay. First person to register afterwards is super administrator only if there are zero profiles.
+Or paste `supabase/zero-operational-data.sql` into the [SQL Editor](https://supabase.com/dashboard/project/ffccfeodymiwwqshphmh/sql/new) and Run. That uses `TRUNCATE` and does **not** update every polling-unit row (a full `UPDATE` on ~176k units hits statement timeout). Team accounts stay. Anyone can register afterwards; the first profile is super administrator, later accounts start as Supporter until an admin assigns a role.
 
 ---
 
@@ -67,7 +67,7 @@ Then repeat Step 1.
 4. Turn **Auto Confirm User** ON
 5. Click **Create user**
 
-Or skip this step: register in the app. The first account becomes super administrator.
+Or skip this step: register in the app. The first account becomes super administrator; later sign-ups are Supporters until an admin changes their role.
 
 ## Step 4 — Make that user an admin (if you created them in the dashboard)
 

@@ -31,18 +31,22 @@ export function RegisterForm() {
       return;
     }
     if (result.requiresEmailConfirmation) {
-      toast.success("Account created. Ask an administrator to activate your account so you can sign in.");
-    } else {
-      toast.success("Account created! You can sign in now.");
+      toast.success("Account created. You can sign in now.");
+      router.push("/login");
+      return;
     }
-    router.push("/login");
+    toast.success("Account created. An administrator can assign your role.");
+    router.push("/dashboard");
+    router.refresh();
   }
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Create Account</CardTitle>
-        <CardDescription>First campaign administrator</CardDescription>
+        <CardDescription>
+          Join the campaign. An administrator will assign your role after you sign up.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

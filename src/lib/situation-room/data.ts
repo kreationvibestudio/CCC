@@ -37,7 +37,8 @@ export async function getSituationRoomData(tenantId: string) {
     supabase
       .from("polling_unit_status")
       .select("*, polling_units(name, ward, lga, latitude, longitude, registered_voters, code)")
-      .eq("tenant_id", tenantId),
+      .eq("tenant_id", tenantId)
+      .order("updated_at", { ascending: false }),
     supabase
       .from("incident_reports")
       .select("*")

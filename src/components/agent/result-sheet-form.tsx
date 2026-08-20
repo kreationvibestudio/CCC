@@ -146,6 +146,7 @@ export function ResultSheetForm({
       </div>
 
       <p className="text-sm font-medium">Total valid votes: {totals.total.toLocaleString()}</p>
+      <p className="text-xs text-muted-foreground">Date and time are recorded automatically when you tap submit.</p>
       <Button type="submit" disabled={disabled} className="w-full">
         Submit results
       </Button>

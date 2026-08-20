@@ -20,12 +20,20 @@ function revalidateAgent() {
   revalidatePath("/situation-room");
 }
 
+function capturedAtIso(formData: FormData) {
+  const raw = String(formData.get("captured_at") ?? "").trim();
+  const parsed = raw ? new Date(raw) : new Date();
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString();
+  return parsed.toISOString();
+}
+
 export async function submitAgentReport(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
   const content = String(formData.get("content") ?? "").trim();
   const reportType = String(formData.get("report_type") ?? "").trim();
   if (!content || !reportType) return { error: "Report type and details are required" };
+  const capturedAt = capturedAtIso(formData);
   const supabase = await agentDb();
   const { error } = await supabase.from("agent_reports").insert({
     tenant_id: user.profile.tenant_id,
@@ -33,6 +41,7 @@ export async function submitAgentReport(formData: FormData) {
     report_type: reportType,
     content,
     polling_unit_id: (formData.get("polling_unit_id") as string) || null,
+    created_at: capturedAt,
   });
   if (error) return { error: error.message };
   revalidateAgent();
@@ -43,6 +52,7 @@ export async function reportIncident(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
   const supabase = await agentDb();
+  const capturedAt = capturedAtIso(formData);
   const { error } = await supabase.from("incident_reports").insert({
     tenant_id: user.profile.tenant_id,
     reporter_id: user.id,
@@ -53,6 +63,7 @@ export async function reportIncident(formData: FormData) {
     is_emergency: formData.get("is_emergency") === "true",
     latitude: formData.get("latitude") ? Number(formData.get("latitude")) : null,
     longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
+    created_at: capturedAt,
   });
   if (error) return { error: error.message };
   revalidateAgent();
@@ -65,13 +76,14 @@ export async function updatePuStatus(formData: FormData) {
   const supabase = await agentDb();
   const puId = String(formData.get("polling_unit_id") ?? "").trim();
   if (!puId) return { error: "Select a polling unit" };
+  const capturedAt = capturedAtIso(formData);
   const { error } = await supabase.from("polling_unit_status").upsert({
     tenant_id: user.profile.tenant_id,
     polling_unit_id: puId,
     status: formData.get("status") as string,
     turnout: formData.get("turnout") ? Number(formData.get("turnout")) : 0,
     updated_by: user.id,
-    updated_at: new Date().toISOString(),
+    updated_at: capturedAt,
   }, { onConflict: "tenant_id,polling_unit_id" });
   if (error) return { error: error.message };
   revalidateAgent();
@@ -95,6 +107,7 @@ export async function submitElectionResult(formData: FormData) {
   if (total < 0) return { error: "Vote counts cannot be negative" };
 
   const supabase = await agentDb();
+  const capturedAt = capturedAtIso(formData);
   const { error } = await supabase.from("election_results").insert({
     tenant_id: user.profile.tenant_id,
     polling_unit_id: puId,
@@ -103,6 +116,7 @@ export async function submitElectionResult(formData: FormData) {
     total_votes: total,
     latitude: formData.get("latitude") ? Number(formData.get("latitude")) : null,
     longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
+    submitted_at: capturedAt,
   });
   if (error) return { error: error.message };
   await supabase.from("polling_unit_status").upsert({
@@ -110,7 +124,7 @@ export async function submitElectionResult(formData: FormData) {
     polling_unit_id: puId,
     status: "results_uploaded",
     updated_by: user.id,
-    updated_at: new Date().toISOString(),
+    updated_at: capturedAt,
   }, { onConflict: "tenant_id,polling_unit_id" });
   revalidateAgent();
   return { success: true };

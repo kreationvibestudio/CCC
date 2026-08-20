@@ -35,6 +35,7 @@ export type StatusRow = {
   polling_unit_id?: string | null;
   status: string;
   turnout: number | null;
+  updated_at?: string | null;
   polling_units?: PuRef;
 };
 
@@ -221,6 +222,7 @@ export function buildLiveFeed(input: {
   results: ResultRow[];
   incidents: Array<{ id: string; title: string; severity: string; is_emergency: boolean; created_at: string }>;
   agentReports: Array<{ id: string; report_type: string; content: string; created_at: string; profiles?: { full_name: string } | null }>;
+  statuses?: StatusRow[];
   ourParty?: string;
 }): FeedItem[] {
   const ourParty = (input.ourParty || OUR_PARTY).toUpperCase();
@@ -264,5 +266,19 @@ export function buildLiveFeed(input: {
     });
   }
 
-  return items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 18);
+  for (const s of input.statuses ?? []) {
+    items.push({
+      id: `status-${s.id}`,
+      at: s.updated_at || "",
+      kind: "status",
+      title: `${s.polling_units?.code || s.polling_units?.name || "PU"} status`,
+      detail: (s.status ?? "").replace(/_/g, " "),
+      tone: "info",
+    });
+  }
+
+  return items
+    .filter((item) => item.at)
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 18);
 }

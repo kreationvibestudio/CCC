@@ -15,6 +15,7 @@ import {
 import { ResultSheetForm } from "@/components/agent/result-sheet-form";
 import { PollingUnitPicker } from "@/components/agent/polling-unit-picker";
 import { toast } from "sonner";
+import { formatDateTime } from "@/lib/utils";
 
 const OFFLINE_KEY = "ccc-agent-queue";
 
@@ -52,6 +53,7 @@ async function flushQueue() {
     if (!fn) continue;
     const fd = new FormData();
     for (const [key, value] of Object.entries(item.data)) fd.set(key, value);
+    if (!fd.get("captured_at") && item.at) fd.set("captured_at", new Date(item.at).toISOString());
     const result = await fn(fd);
     if (result.error) remaining.push(item);
     else synced += 1;
@@ -68,6 +70,13 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
   const [selected, setSelected] = useState<AgentPollingUnit | null>(null);
   const [online, setOnline] = useState(true);
   const puId = selected?.id ?? "";
+
+  const [clock, setClock] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -90,6 +99,7 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
     fd: FormData,
     offlineLabel: OfflineAction
   ) {
+    fd.set("captured_at", new Date().toISOString());
     if (!online) {
       const data: Record<string, string> = {};
       fd.forEach((v, k) => {
@@ -102,16 +112,21 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
     startTransition(async () => {
       const result = await action(fd);
       if (result.error) toast.error(result.error);
-      else toast.success("Submitted");
+      else toast.success(`Submitted · ${formatDateTime(fd.get("captured_at") as string)}`);
     });
   }
 
   return (
     <div className="mx-auto min-h-screen max-w-lg space-y-6 bg-background p-4 pb-24">
       <PageHeader title="Agent Portal" description="Polling unit reporting">
-        <span className={`rounded-full px-2 py-1 text-xs ${online ? "bg-green-500/20 text-green-700" : "bg-yellow-500/20"}`}>
-          {online ? "Online" : "Offline"}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`rounded-full px-2 py-1 text-xs ${online ? "bg-green-500/20 text-green-700" : "bg-yellow-500/20"}`}>
+            {online ? "Online" : "Offline"}
+          </span>
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            Submit time: {formatDateTime(clock)}
+          </span>
+        </div>
       </PageHeader>
 
       <PollingUnitPicker
@@ -144,6 +159,7 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
           <option value="serious_incident">Serious incident</option>
         </NativeSelect>
         <Input name="turnout" type="number" placeholder="Turnout count" min={0} />
+        <p className="text-xs text-muted-foreground">Date and time are recorded automatically when you tap submit.</p>
         <Button type="submit" disabled={pending || !puId} className="w-full">Update status</Button>
       </form>
 
@@ -163,6 +179,7 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
           <option value="observation">Observation</option>
         </NativeSelect>
         <textarea name="content" required rows={3} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" placeholder="Report details…" />
+        <p className="text-xs text-muted-foreground">Date and time are recorded automatically when you tap submit.</p>
         <Button type="submit" disabled={pending || !puId} className="w-full">Submit report</Button>
       </form>
 
@@ -205,6 +222,7 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="is_emergency" value="true" /> Emergency
         </label>
+        <p className="text-xs text-muted-foreground">Date and time are recorded automatically when you tap submit.</p>
         <Button type="submit" variant="destructive" disabled={pending} className="w-full">Report incident</Button>
       </form>
     </div>

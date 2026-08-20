@@ -26,6 +26,23 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date));
 }
 
+/** Full Lagos date and time for field captures (e.g. 20 Aug 2026, 11:21:04 pm). */
+export function formatDateTime(value?: string | Date | null) {
+  if (value == null || value === "") return "—";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-NG", {
+    timeZone: "Africa/Lagos",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
 export function getInitials(name: string): string {
   return name
     .split(" ")

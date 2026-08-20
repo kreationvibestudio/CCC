@@ -22,6 +22,7 @@ import {
   type StatusRow,
 } from "@/lib/situation-room/race";
 import { LiveNumber, RaceBars, RaceCharts } from "@/components/situation-room/situation-room-charts";
+import { formatDateTime } from "@/lib/utils";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
   ssr: false,
@@ -147,8 +148,8 @@ export function SituationRoomView({
     [party, universe.puCount, universe.registeredVoters, statuses, results]
   );
   const feed = useMemo(
-    () => buildLiveFeed({ results, incidents, agentReports, ourParty: party }),
-    [results, incidents, agentReports, party]
+    () => buildLiveFeed({ results, incidents, agentReports, statuses, ourParty: party }),
+    [results, incidents, agentReports, statuses, party]
   );
 
   const leading = race.margin >= 0;
@@ -266,9 +267,7 @@ export function SituationRoomView({
                     >
                       <p className="font-medium">{item.title}</p>
                       <p className="text-xs text-muted-foreground">{item.detail}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {new Date(item.at).toLocaleTimeString("en-NG")}
-                      </p>
+                      <p className="text-[11px] text-muted-foreground">Logged {formatDateTime(item.at)}</p>
                     </motion.div>
                   ))
                 )}
@@ -312,6 +311,7 @@ export function SituationRoomView({
                 <div key={r.id} className="mb-2 border-b border-border pb-2 text-sm last:border-0">
                   <span className="font-medium">{r.profiles?.full_name ?? "Agent"}</span> · {r.report_type}
                   <p className="text-muted-foreground">{r.content.slice(0, 80)}</p>
+                  <p className="text-[11px] text-muted-foreground">Logged {formatDateTime(r.created_at)}</p>
                 </div>
               ))
             )}
@@ -333,6 +333,7 @@ export function SituationRoomView({
                   <p className="text-xs text-muted-foreground">
                     {s.polling_units?.ward}, {s.polling_units?.lga}
                   </p>
+                  <p className="text-[11px] text-muted-foreground">Logged {formatDateTime(s.updated_at)}</p>
                 </div>
                 <div className="text-right">
                   <Badge variant={STATUS_VARIANT[s.status] ?? "secondary"}>{s.status.replace(/_/g, " ")}</Badge>
@@ -354,7 +355,7 @@ export function SituationRoomView({
                     {i.is_emergency ? "🚨 " : ""}
                     {i.title}
                   </p>
-                  <p className="text-xs text-muted-foreground">{new Date(i.created_at).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Logged {formatDateTime(i.created_at)}</p>
                 </div>
                 <Badge variant={i.severity === "high" || i.severity === "critical" ? "destructive" : "secondary"}>
                   {i.severity}
@@ -379,7 +380,7 @@ export function SituationRoomView({
                       {breakdown.map((p) => `${p.code} ${p.n.toLocaleString()}`).join(" · ")}
                     </p>
                   )}
-                  <p className="text-xs text-muted-foreground">{new Date(r.submitted_at).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Logged {formatDateTime(r.submitted_at)}</p>
                 </CardContent>
               </Card>
             );

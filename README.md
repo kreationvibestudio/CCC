@@ -49,6 +49,10 @@ Comments need one extra Facebook permission. To enable:
 
 Set `TERMII_API_KEY` / `TERMII_SENDER_ID` (see `docs/TERMII-SETUP.md`), then use **Communications → Send** on a draft campaign.
 
+### Donations (Paystack)
+
+Public page: **`/donate`**. Set `PAYSTACK_SECRET_KEY` and the Paystack webhook (see `docs/PAYSTACK-SETUP.md`). Copy the link from **Admin**.
+
 ---
 
 ## Database (optional — for full features)

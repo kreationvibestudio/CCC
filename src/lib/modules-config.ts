@@ -40,7 +40,7 @@ export const MODULES: Record<string, ModuleConfig> = {
     slug: "crm",
     title: "Campaign CRM",
     description: "Manage supporters, leaders, donors, and influencers.",
-    features: ["Contact types", "Support levels", "Donation history", "Meeting notes", "Issue tracking", "Staff assignment"],
+    features: ["Contact types", "Support levels", "Donation history", "Public Paystack donate page", "Meeting notes", "Staff assignment"],
   },
   events: {
     slug: "events",

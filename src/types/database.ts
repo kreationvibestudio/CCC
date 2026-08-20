@@ -116,6 +116,17 @@ export interface Volunteer {
   created_at: string;
 }
 
+export interface Donation {
+  id: string;
+  tenant_id: string;
+  contact_id?: string;
+  amount: number;
+  currency?: string;
+  payment_method?: string;
+  payment_reference?: string;
+  created_at: string;
+}
+
 export interface Contact {
   id: string;
   tenant_id: string;

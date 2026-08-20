@@ -44,7 +44,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/forgot-password") ||
     isResetPassword;
   const isCheckInRoute = /^\/events\/[^/]+\/checkin/.test(path);
-  const isPublicRoute = path === "/" || isAuthRoute || isCheckInRoute;
+  const isDonateRoute = path.startsWith("/donate") || path.startsWith("/api/donations");
+  const isPublicRoute = path === "/" || isAuthRoute || isCheckInRoute || isDonateRoute;
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();

@@ -31,6 +31,11 @@ export function CrmView({ contacts }: { contacts: ContactRow[] }) {
           { key: "contact_type", header: "Type", render: (c) => c.contact_type.replace(/_/g, " ") },
           { key: "phone", header: "Phone" },
           { key: "ward", header: "Ward" },
+          {
+            key: "total_donations",
+            header: "Donations",
+            render: (c) => `₦${Number(c.total_donations ?? 0).toLocaleString()}`,
+          },
           { key: "support_level", header: "Support", render: (c) => <Badge>{c.support_level}</Badge> },
         ]}
       />

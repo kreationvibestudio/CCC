@@ -78,7 +78,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       <Card><CardContent className="pt-6">
         <h2 className="mb-2 font-semibold">Donations (₦{Number(contact.total_donations).toLocaleString()})</h2>
         {donations.map((d) => (
-          <p key={d.id} className="text-sm">₦{Number(d.amount).toLocaleString()} — {d.payment_method}</p>
+          <p key={d.id} className="text-sm">
+            ₦{Number(d.amount).toLocaleString()} — {d.payment_method}
+            {d.payment_reference ? ` · ${d.payment_reference}` : ""}
+          </p>
         ))}
         <form action={donationAction} className="mt-3 flex gap-2">
           <Input name="amount" type="number" placeholder="Amount" required />

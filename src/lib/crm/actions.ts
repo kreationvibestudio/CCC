@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import type { Donation } from "@/types/database";
 
 export async function createContact(formData: FormData) {
   const user = await getCurrentUser();
@@ -109,5 +110,5 @@ export async function getContactInteractions(contactId: string) {
 export async function getContactDonations(contactId: string) {
   const supabase = await createClient();
   const { data } = await supabase.from("donations").select("*").eq("contact_id", contactId).order("created_at", { ascending: false });
-  return data ?? [];
+  return (data ?? []) as Donation[];
 }

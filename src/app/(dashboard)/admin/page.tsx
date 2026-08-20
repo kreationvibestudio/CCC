@@ -2,6 +2,7 @@
 import { getAdminData } from "@/lib/admin/data";
 import { getSecretsStatus } from "@/lib/admin/actions";
 import { AdminView } from "@/components/admin/admin-view";
+import { appBaseUrl } from "@/lib/campaign";
 
 export default async function AdminPage() {
   const user = await requirePermission("admin.users");
@@ -9,5 +10,13 @@ export default async function AdminPage() {
     getAdminData(user.profile.tenant_id),
     getSecretsStatus(),
   ]);
-  return <AdminView profiles={profiles} auditCount={auditCount} secrets={secrets} />;
+  const base = appBaseUrl();
+  return (
+    <AdminView
+      profiles={profiles}
+      auditCount={auditCount}
+      secrets={secrets}
+      donateUrl={base ? `${base}/donate` : ""}
+    />
+  );
 }

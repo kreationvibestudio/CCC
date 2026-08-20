@@ -37,6 +37,7 @@ const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boole
   { key: "facebookPageToken", label: "Facebook page token", critical: true },
   { key: "facebookAppCredentials", label: "Facebook app ID + secret (auto-refresh)" },
   { key: "cronSecret", label: "Cron secret (Facebook sync)", critical: true },
+  { key: "paystackSecret", label: "Paystack secret key (donate page)", critical: true },
   { key: "appUrlProduction", label: "App URL is production (not localhost)", critical: true },
   { key: "openaiApiKey", label: "OpenAI API key" },
   { key: "googleMapsKey", label: "Google Maps key" },
@@ -46,14 +47,27 @@ export function AdminView({
   profiles,
   auditCount,
   secrets,
+  donateUrl,
 }: {
   profiles: ProfileRow[];
   auditCount: number;
   secrets: SecretsStatus;
+  donateUrl: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [invitePassword, setInvitePassword] = useState<string | null>(null);
+
+  function copyDonateLink() {
+    if (!donateUrl) {
+      toast.error("Set NEXT_PUBLIC_APP_URL to get a shareable donate link");
+      return;
+    }
+    void navigator.clipboard.writeText(donateUrl);
+    toast.success("Donate link copied");
+  }
+
+  const webhookUrl = donateUrl ? `${donateUrl.replace(/\/donate$/, "")}/api/donations/webhook` : "";
 
   function handleInvite(formData: FormData) {
     startTransition(async () => {
@@ -109,6 +123,39 @@ export function AdminView({
         title="Administration"
         description="Invite team members, assign roles, and check production secrets"
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Public donate page</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Share this link. Supporters pay with Paystack (card, bank transfer, USSD). Confirmed
+            gifts appear in Campaign CRM and on the dashboard.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input readOnly value={donateUrl || "Set NEXT_PUBLIC_APP_URL first"} />
+            <Button type="button" variant="secondary" onClick={copyDonateLink} disabled={!donateUrl}>
+              Copy link
+            </Button>
+            {donateUrl ? (
+              <Button type="button" variant="outline" asChild>
+                <a href={donateUrl} target="_blank" rel="noreferrer">
+                  Open
+                </a>
+              </Button>
+            ) : null}
+          </div>
+          {!secrets.paystackSecret ? (
+            <p className="text-sm text-destructive">
+              Add PAYSTACK_SECRET_KEY on Vercel
+              {webhookUrl ? `, then set the Paystack webhook to ${webhookUrl}` : "."}
+            </p>
+          ) : webhookUrl ? (
+            <p className="text-xs text-muted-foreground">Paystack webhook URL: {webhookUrl}</p>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card className="border-destructive/40">
         <CardHeader>

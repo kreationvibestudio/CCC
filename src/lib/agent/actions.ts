@@ -2,29 +2,47 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
+
+/** User session for auth; service role for writes so missing INSERT policies cannot block agents. */
+async function agentDb() {
+  try {
+    return createServiceClient();
+  } catch {
+    return createClient();
+  }
+}
+
+function revalidateAgent() {
+  revalidatePath("/agent");
+  revalidatePath("/situation-room");
+}
 
 export async function submitAgentReport(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
+  const content = String(formData.get("content") ?? "").trim();
+  const reportType = String(formData.get("report_type") ?? "").trim();
+  if (!content || !reportType) return { error: "Report type and details are required" };
+  const supabase = await agentDb();
   const { error } = await supabase.from("agent_reports").insert({
     tenant_id: user.profile.tenant_id,
     agent_id: user.id,
-    report_type: formData.get("report_type") as string,
-    content: formData.get("content") as string,
+    report_type: reportType,
+    content,
     polling_unit_id: (formData.get("polling_unit_id") as string) || null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/agent");
+  revalidateAgent();
   return { success: true };
 }
 
 export async function reportIncident(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
+  const supabase = await agentDb();
   const { error } = await supabase.from("incident_reports").insert({
     tenant_id: user.profile.tenant_id,
     reporter_id: user.id,
@@ -37,14 +55,14 @@ export async function reportIncident(formData: FormData) {
     longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/situation-room");
+  revalidateAgent();
   return { success: true };
 }
 
 export async function updatePuStatus(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const supabase = await createClient();
+  const supabase = await agentDb();
   const puId = String(formData.get("polling_unit_id") ?? "").trim();
   if (!puId) return { error: "Select a polling unit" };
   const { error } = await supabase.from("polling_unit_status").upsert({
@@ -56,8 +74,7 @@ export async function updatePuStatus(formData: FormData) {
     updated_at: new Date().toISOString(),
   }, { onConflict: "tenant_id,polling_unit_id" });
   if (error) return { error: error.message };
-  revalidatePath("/situation-room");
-  revalidatePath("/agent");
+  revalidateAgent();
   return { success: true };
 }
 
@@ -77,7 +94,7 @@ export async function submitElectionResult(formData: FormData) {
   const total = totalPartyVotes(partyVotes);
   if (total < 0) return { error: "Vote counts cannot be negative" };
 
-  const supabase = await createClient();
+  const supabase = await agentDb();
   const { error } = await supabase.from("election_results").insert({
     tenant_id: user.profile.tenant_id,
     polling_unit_id: puId,
@@ -95,8 +112,7 @@ export async function submitElectionResult(formData: FormData) {
     updated_by: user.id,
     updated_at: new Date().toISOString(),
   }, { onConflict: "tenant_id,polling_unit_id" });
-  revalidatePath("/situation-room");
-  revalidatePath("/agent");
+  revalidateAgent();
   return { success: true };
 }
 

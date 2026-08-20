@@ -42,14 +42,18 @@ function Countdown({ label, targetDate }: { label: string; targetDate: string | 
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex gap-4">
-          {[{ v: remaining.days, l: "Days" }, { v: remaining.hours, l: "Hrs" }, { v: remaining.minutes, l: "Min" }].map(({ v, l }) => (
-            <div key={l} className="text-center">
-              <p className="text-2xl font-bold tabular-nums">{v}</p>
-              <p className="text-xs text-muted-foreground">{l}</p>
-            </div>
-          ))}
-        </div>
+        {targetDate ? (
+          <div className="flex gap-4">
+            {[{ v: remaining.days, l: "Days" }, { v: remaining.hours, l: "Hrs" }, { v: remaining.minutes, l: "Min" }].map(({ v, l }) => (
+              <div key={l} className="text-center">
+                <p className="text-2xl font-bold tabular-nums">{v}</p>
+                <p className="text-xs text-muted-foreground">{l}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Not set</p>
+        )}
       </CardContent>
     </Card>
   );

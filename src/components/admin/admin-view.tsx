@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { inviteUser, updateUserRole } from "@/lib/admin/actions";
+import { inviteUser, updateUserRole, zeroCampaignData } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 
 type ProfileRow = {
@@ -72,6 +72,25 @@ export function AdminView({
     });
   }
 
+  function handleZeroCampaign() {
+    if (
+      !window.confirm(
+        "This deletes volunteers, CRM, events, comments, social posts, SMS, and the sample briefing. Polling units and user accounts stay. Continue?"
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const result = await zeroCampaignData();
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.message ?? "Campaign data cleared");
+      router.refresh();
+    });
+  }
+
   function handleRoleChange(formData: FormData) {
     startTransition(async () => {
       const result = await updateUserRole(formData);
@@ -90,6 +109,21 @@ export function AdminView({
         title="Administration"
         description="Invite team members, assign roles, and check production secrets"
       />
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle>Reset campaign data</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Removes sample and operational rows (volunteers, CRM, events, comments, Facebook
+            posts, donations, SMS, AI briefings). Keeps polling units and logged-in users.
+          </p>
+          <Button type="button" variant="destructive" disabled={pending} onClick={handleZeroCampaign}>
+            {pending ? "Clearing…" : "Clear sample data (keep polling units)"}
+          </Button>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>

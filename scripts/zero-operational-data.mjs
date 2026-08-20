@@ -189,14 +189,6 @@ async function main() {
   if (puError) fail(`Reset polling units: ${puError.message}`);
   ok("Cleared polling-unit assignments and overlay fields (identity kept)");
 
-  const users = await admin.auth.admin.listUsers({ perPage: 200 });
-  if (users.error) fail(`List users: ${users.error.message}`);
-  for (const user of users.data?.users ?? []) {
-    const { error } = await admin.auth.admin.deleteUser(user.id);
-    if (error) fail(`Delete user ${user.email}: ${error.message}`);
-    ok(`Removed account ${user.email}`);
-  }
-
   await emptyStorage(admin);
 
   const after = await audit(admin);
@@ -211,12 +203,9 @@ async function main() {
   if (leftover.length) {
     fail(`Still has rows: ${leftover.join(", ")}`);
   }
-  if ((after.profiles.count ?? 0) > 0) {
-    fail("Profiles still present after user wipe");
-  }
 
   console.log(`\n✓ System zeroed. Polling units kept: ${puAfter}`);
-  console.log("  First person to register becomes super administrator.");
+  console.log("  User accounts were left in place.");
 }
 
 main().catch((e) => fail(e.message));

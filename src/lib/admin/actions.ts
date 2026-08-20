@@ -144,3 +144,123 @@ export async function getSecretsStatus() {
     cronSecret: isLiveSecret(process.env.CRON_SECRET, 16),
   };
 }
+
+const OPERATIONAL_TABLES = [
+  "comment_notes",
+  "comment_responses",
+  "comments",
+  "social_posts",
+  "social_accounts",
+  "ai_analyses",
+  "ai_briefings",
+  "ai_suggestions",
+  "volunteer_tasks",
+  "volunteer_attendance",
+  "volunteer_checkins",
+  "volunteers",
+  "contact_interactions",
+  "donations",
+  "contacts",
+  "event_photos",
+  "event_checkins",
+  "event_attendees",
+  "campaign_events",
+  "incident_media",
+  "incident_reports",
+  "election_results",
+  "agent_reports",
+  "polling_unit_status",
+  "messages",
+  "message_campaigns",
+  "message_templates",
+  "notifications",
+  "activities",
+  "audit_logs",
+  "tenant_settings",
+  "campaign_locations",
+];
+
+/** Wipe sample/operational rows. Keeps polling units and logged-in users. */
+export async function zeroCampaignData() {
+  try {
+    const adminUser = await requirePermission("admin.users");
+    if (adminUser.role !== "super_administrator") {
+      return { error: "Only a super administrator can reset campaign data" };
+    }
+
+    const admin = createServiceClient();
+    const tenantId = adminUser.profile.tenant_id;
+
+    const { count: puBefore, error: puCountError } = await admin
+      .from("polling_units")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId);
+    if (puCountError) return { error: puCountError.message };
+
+    for (const table of OPERATIONAL_TABLES) {
+      const { error } = await admin.from(table).delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (error && !/schema cache|does not exist/i.test(error.message)) {
+        return { error: `${table}: ${error.message}` };
+      }
+    }
+
+    const { error: tenantError } = await admin
+      .from("tenants")
+      .update({
+        name: "Campaign",
+        slug: "campaign",
+        logo_url: null,
+        election_date: null,
+        campaign_end_date: null,
+        fundraising_goal: 0,
+      })
+      .eq("id", tenantId);
+    if (tenantError) return { error: tenantError.message };
+
+    const { error: puError } = await admin
+      .from("polling_units")
+      .update({
+        assigned_agent_id: null,
+        assigned_supervisor_id: null,
+        security_notes: null,
+        logistics: null,
+        contact_phone: null,
+        historical_results: [],
+        risk_level: "low",
+      })
+      .eq("tenant_id", tenantId);
+    if (puError) return { error: puError.message };
+
+    const { count: puAfter, error: puAfterError } = await admin
+      .from("polling_units")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId);
+    if (puAfterError) return { error: puAfterError.message };
+    if ((puAfter ?? 0) !== (puBefore ?? 0)) {
+      return { error: `Polling unit count changed (${puBefore} → ${puAfter})` };
+    }
+
+    await logAudit("admin.zero_campaign", "tenant", tenantId, { pollingUnits: puAfter });
+    revalidatePath("/dashboard");
+    revalidatePath("/admin");
+    revalidatePath("/volunteers");
+    revalidatePath("/crm");
+    revalidatePath("/events");
+    revalidatePath("/comments");
+    revalidatePath("/social");
+    revalidatePath("/communications");
+    revalidatePath("/analytics");
+    revalidatePath("/sentiment");
+    revalidatePath("/situation-room");
+    revalidatePath("/ai");
+    revalidatePath("/reports");
+
+    return {
+      success: true as const,
+      pollingUnits: puAfter ?? 0,
+      message: `Campaign data cleared. ${puAfter ?? 0} polling units kept. Your login was not removed.`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Reset failed" };
+  }
+}

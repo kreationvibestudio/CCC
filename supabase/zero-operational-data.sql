@@ -70,5 +70,3 @@ SET
   contact_phone = NULL,
   historical_results = '[]'::jsonb,
   risk_level = 'low';
-
-DELETE FROM auth.users;

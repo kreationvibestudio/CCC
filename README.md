@@ -51,7 +51,7 @@ Set `TERMII_API_KEY` / `TERMII_SENDER_ID` (see `docs/TERMII-SETUP.md`), then use
 
 ### Donations (Paystack)
 
-Public page: **`/donate`**. Set `PAYSTACK_SECRET_KEY` and the Paystack webhook (see `docs/PAYSTACK-SETUP.md`). Copy the link from **Admin**.
+Public page: **`/donate`** (opens [Paystack checkout](https://paystack.shop/pay/816txayv39)). See `docs/PAYSTACK-SETUP.md`. Copy the link from **Admin**.
 
 ---
 

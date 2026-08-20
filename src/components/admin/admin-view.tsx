@@ -37,7 +37,7 @@ const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boole
   { key: "facebookPageToken", label: "Facebook page token", critical: true },
   { key: "facebookAppCredentials", label: "Facebook app ID + secret (auto-refresh)" },
   { key: "cronSecret", label: "Cron secret (Facebook sync)", critical: true },
-  { key: "paystackSecret", label: "Paystack secret key (donate page)", critical: true },
+  { key: "paystackSecret", label: "Paystack secret key (optional CRM auto-record)" },
   { key: "appUrlProduction", label: "App URL is production (not localhost)", critical: true },
   { key: "openaiApiKey", label: "OpenAI API key" },
   { key: "googleMapsKey", label: "Google Maps key" },
@@ -48,23 +48,35 @@ export function AdminView({
   auditCount,
   secrets,
   donateUrl,
+  paystackCheckoutUrl,
 }: {
   profiles: ProfileRow[];
   auditCount: number;
   secrets: SecretsStatus;
   donateUrl: string;
+  paystackCheckoutUrl: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [invitePassword, setInvitePassword] = useState<string | null>(null);
 
   function copyDonateLink() {
+    const url = paystackCheckoutUrl || donateUrl;
+    if (!url) {
+      toast.error("Donate link is not available");
+      return;
+    }
+    void navigator.clipboard.writeText(url);
+    toast.success("Donate link copied");
+  }
+
+  function copyCampaignDonatePage() {
     if (!donateUrl) {
-      toast.error("Set NEXT_PUBLIC_APP_URL to get a shareable donate link");
+      toast.error("Set NEXT_PUBLIC_APP_URL to get a campaign donate page");
       return;
     }
     void navigator.clipboard.writeText(donateUrl);
-    toast.success("Donate link copied");
+    toast.success("Campaign donate page copied");
   }
 
   const webhookUrl = donateUrl ? `${donateUrl.replace(/\/donate$/, "")}/api/donations/webhook` : "";
@@ -130,30 +142,42 @@ export function AdminView({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Share this link. Supporters pay with Paystack (card, bank transfer, USSD). Confirmed
-            gifts appear in Campaign CRM and on the dashboard.
+            Share the Paystack checkout link. Supporters enter amount and pay on Paystack. The
+            campaign page at /donate sends people to the same checkout.
           </p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input readOnly value={donateUrl || "Set NEXT_PUBLIC_APP_URL first"} />
-            <Button type="button" variant="secondary" onClick={copyDonateLink} disabled={!donateUrl}>
-              Copy link
-            </Button>
-            {donateUrl ? (
+          <div className="space-y-1">
+            <Label>Paystack checkout</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input readOnly value={paystackCheckoutUrl} />
+              <Button type="button" variant="secondary" onClick={copyDonateLink} disabled={!paystackCheckoutUrl}>
+                Copy link
+              </Button>
               <Button type="button" variant="outline" asChild>
-                <a href={donateUrl} target="_blank" rel="noreferrer">
+                <a href={paystackCheckoutUrl} target="_blank" rel="noreferrer">
                   Open
                 </a>
               </Button>
-            ) : null}
+            </div>
           </div>
-          {!secrets.paystackSecret ? (
-            <p className="text-sm text-destructive">
-              Add PAYSTACK_SECRET_KEY on Vercel
-              {webhookUrl ? `, then set the Paystack webhook to ${webhookUrl}` : "."}
+          <div className="space-y-1">
+            <Label>Campaign page</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input readOnly value={donateUrl || "Set NEXT_PUBLIC_APP_URL first"} />
+              <Button type="button" variant="outline" onClick={copyCampaignDonatePage} disabled={!donateUrl}>
+                Copy
+              </Button>
+            </div>
+          </div>
+          {secrets.paystackSecret && webhookUrl ? (
+            <p className="text-xs text-muted-foreground">
+              Optional CRM auto-record webhook: {webhookUrl}
             </p>
-          ) : webhookUrl ? (
-            <p className="text-xs text-muted-foreground">Paystack webhook URL: {webhookUrl}</p>
-          ) : null}
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Gifts are collected on Paystack. Add PAYSTACK_SECRET_KEY and the webhook later if
+              you want gifts to appear automatically in Campaign CRM.
+            </p>
+          )}
         </CardContent>
       </Card>
 

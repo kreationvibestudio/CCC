@@ -1,9 +1,8 @@
 import { HeartHandshake } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DonateForm } from "@/components/donate/donate-form";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { CAMPAIGN_TENANT_ID } from "@/lib/campaign";
-import { paystackSecretKey } from "@/lib/integrations/paystack/client";
+import { CAMPAIGN_TENANT_ID, paystackPaymentLink } from "@/lib/campaign";
 import { formatCurrency } from "@/lib/utils";
 
 export const metadata = {
@@ -14,7 +13,7 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function DonatePage() {
-  const enabled = Boolean(paystackSecretKey());
+  const checkoutUrl = paystackPaymentLink();
   let campaignName = "the campaign";
   let goal = 0;
   let raised = 0;
@@ -42,17 +41,18 @@ export default async function DonatePage() {
           </div>
           <CardTitle className="text-2xl">Support {campaignName}</CardTitle>
           <CardDescription>
-            Secure checkout with Paystack. Cards, bank transfer, and USSD.
+            Checkout is on Paystack. Enter your name, email, and amount, then pay by card, bank
+            transfer, or USSD.
             {goal > 0 ? ` ${formatCurrency(raised)} of ${formatCurrency(goal)} raised.` : ""}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {!enabled && (
-            <p className="mb-4 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-              Online giving is not open yet. Add a Paystack secret key, then share this page again.
-            </p>
-          )}
-          <DonateForm enabled={enabled} />
+        <CardContent className="space-y-3">
+          <Button asChild className="w-full" size="lg">
+            <a href={checkoutUrl}>Donate with Paystack</a>
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            You will complete payment on Paystack. A receipt is emailed after a successful gift.
+          </p>
         </CardContent>
       </Card>
     </div>

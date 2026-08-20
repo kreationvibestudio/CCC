@@ -4,13 +4,17 @@ import { useState, useTransition, useEffect } from "react";
 import { PageHeader } from "@/components/shared/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { submitAgentReport, reportIncident, updatePuStatus, submitElectionResult } from "@/lib/agent/actions";
+import {
+  submitAgentReport,
+  reportIncident,
+  updatePuStatus,
+  submitElectionResult,
+  type AgentPollingUnit,
+} from "@/lib/agent/actions";
 import { ResultSheetForm } from "@/components/agent/result-sheet-form";
+import { PollingUnitPicker } from "@/components/agent/polling-unit-picker";
 import { toast } from "sonner";
-
-type PU = { id: string; code: string; name: string; ward: string; lga: string };
 
 const OFFLINE_KEY = "ccc-agent-queue";
 
@@ -58,11 +62,12 @@ async function flushQueue() {
   else if (remaining.length) toast.error("Could not sync offline reports — will retry when you are back online");
 }
 
-export function AgentPortalClient({ units }: { units: PU[] }) {
+export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }) {
   const [pending, startTransition] = useTransition();
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [puId, setPuId] = useState(units[0]?.id ?? "");
+  const [selected, setSelected] = useState<AgentPollingUnit | null>(null);
   const [online, setOnline] = useState(true);
+  const puId = selected?.id ?? "";
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -79,13 +84,6 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
       window.removeEventListener("offline", off);
     };
   }, []);
-
-  function getLocation() {
-    navigator.geolocation?.getCurrentPosition(
-      (p) => setCoords({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => toast.error("Could not get GPS")
-    );
-  }
 
   function runAction(
     action: (fd: FormData) => Promise<{ error?: string; success?: boolean }>,
@@ -116,21 +114,13 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
         </span>
       </PageHeader>
 
-      <div className="space-y-1">
-        <Label>Polling unit</Label>
-        <NativeSelect
-          value={puId}
-          onChange={(e) => setPuId(e.target.value)}
-        >
-          {units.map((u) => (
-            <option key={u.id} value={u.id}>{u.code} — {u.name}</option>
-          ))}
-        </NativeSelect>
-      </div>
-
-      <Button variant="outline" className="w-full" onClick={getLocation} type="button">
-        {coords ? `GPS: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : "Capture GPS"}
-      </Button>
+      <PollingUnitPicker
+        assigned={assigned}
+        selected={selected}
+        coords={coords}
+        onCoords={setCoords}
+        onSelect={(unit) => setSelected(unit)}
+      />
 
       <form
         onSubmit={(e) => {
@@ -194,6 +184,7 @@ export function AgentPortalClient({ units }: { units: PU[] }) {
         onSubmit={(e) => {
           e.preventDefault();
           const fd = new FormData(e.currentTarget);
+          if (puId) fd.set("polling_unit_id", puId);
           if (coords) {
             fd.set("latitude", String(coords.lat));
             fd.set("longitude", String(coords.lng));

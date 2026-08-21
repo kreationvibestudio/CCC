@@ -53,7 +53,10 @@ export async function isPlatformOperatorUser(userId: string, email: string): Pro
     .eq("user_id", userId)
     .maybeSingle();
   if (data) return true;
-  return ensurePlatformOperatorRow(userId, email);
+  const allowlisted = platformOperatorEmails().includes(email.toLowerCase());
+  if (!allowlisted) return false;
+  await ensurePlatformOperatorRow(userId, email);
+  return true;
 }
 
 async function loadWorkspace(tenantId: string): Promise<WorkspaceInfo | null> {

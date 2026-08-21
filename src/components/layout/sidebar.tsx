@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Shield, ChevronLeft, ChevronRight } from "lucide-react";
+import { Shield, Layers, ChevronLeft, ChevronRight } from "lucide-react";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -28,21 +28,30 @@ export function Sidebar() {
     (item) => item.href !== "/admin" && can(item.permission)
   );
   const showAdmin = can("admin.users");
+  const showPlatform = Boolean(user?.isPlatformOperator);
   const adminActive = pathname.startsWith("/admin");
+  const platformActive = pathname.startsWith("/platform");
+
+  const footerLinkClass = (active: boolean) =>
+    cn(
+      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+      active
+        ? "bg-primary/10 text-primary font-medium"
+        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+      collapsed && "justify-center px-2"
+    );
 
   const adminLink = showAdmin ? (
-    <Link
-      href="/admin"
-      className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-        adminActive
-          ? "bg-primary/10 text-primary font-medium"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground",
-        collapsed && "justify-center px-2"
-      )}
-    >
+    <Link href="/admin" className={footerLinkClass(adminActive)}>
       <Shield className="h-4 w-4 shrink-0" />
       {!collapsed && <span className="flex-1">Admin</span>}
+    </Link>
+  ) : null;
+
+  const platformLink = showPlatform ? (
+    <Link href="/platform" className={footerLinkClass(platformActive)}>
+      <Layers className="h-4 w-4 shrink-0" />
+      {!collapsed && <span className="flex-1">Platform</span>}
     </Link>
   ) : null;
 
@@ -107,6 +116,16 @@ export function Sidebar() {
         </nav>
       </ScrollArea>
       <div className="space-y-1 border-t border-border p-2">
+        {showPlatform && (
+          collapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>{platformLink}</TooltipTrigger>
+              <TooltipContent side="right">Platform</TooltipContent>
+            </Tooltip>
+          ) : (
+            platformLink
+          )
+        )}
         {showAdmin && (
           collapsed ? (
             <Tooltip>

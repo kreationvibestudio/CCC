@@ -63,6 +63,6 @@ export function slugifyWorkspace(raw: string) {
 export function platformOperatorEmails() {
   return (process.env.PLATFORM_OPERATOR_EMAILS ?? "")
     .split(",")
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => s.trim().toLowerCase().replace(/^["']+|["']+$/g, ""))
     .filter((s) => s.includes("@"));
 }

@@ -14,7 +14,7 @@ Add to `.env.local` (never commit):
 
 ```
 TERMII_API_KEY=your_key
-TERMII_SENDER_ID=CCC
+TERMII_SENDER_ID=HoR 2027
 ```
 
 Then:

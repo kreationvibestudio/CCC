@@ -61,10 +61,17 @@ export function CampaignMap({
     if (!ref.current) return;
 
     if (!mapRef.current) {
+      const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.trim();
       mapRef.current = L.map(ref.current).setView(EDO_CENTER, 8);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap",
-      }).addTo(mapRef.current);
+      L.tileLayer(
+        token
+          ? `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=${token}`
+          : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+          attribution: token ? "&copy; Mapbox &copy; OpenStreetMap" : "&copy; OpenStreetMap",
+          ...(token ? { tileSize: 512, zoomOffset: -1, maxZoom: 18 } : {}),
+        }
+      ).addTo(mapRef.current);
       requestAnimationFrame(() => mapRef.current?.invalidateSize());
     }
 

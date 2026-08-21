@@ -83,7 +83,8 @@ npm run dev
 | `PAYSTACK_SECRET_KEY` | Optional: auto-record Paystack charges into CRM |
 | `FACEBOOK_*` | Social sync / comments |
 | `OPENAI_API_KEY` | AI assistant (optional) |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional Maps SDK |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | Campaign maps (Leaflet tiles) |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional Maps SDK (unused if Mapbox is set) |
 
 After setting keys locally, mirror them to **GitHub Secrets** and **Vercel**. Confirm with Admin → Secrets readiness (booleans only).
 

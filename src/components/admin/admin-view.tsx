@@ -41,6 +41,7 @@ const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boole
   { key: "paystackSecret", label: "Paystack secret key (optional CRM auto-record)" },
   { key: "appUrlProduction", label: "App URL is production (not localhost)", critical: true },
   { key: "openaiApiKey", label: "OpenAI API key" },
+  { key: "mapboxToken", label: "Mapbox token (maps)" },
   { key: "googleMapsKey", label: "Google Maps key" },
 ];
 

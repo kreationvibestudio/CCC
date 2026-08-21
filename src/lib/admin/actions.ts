@@ -141,6 +141,7 @@ export async function getSecretsStatus() {
     facebookAppCredentials: isLiveSecret(process.env.FACEBOOK_APP_ID) && isLiveSecret(process.env.FACEBOOK_APP_SECRET),
     openaiApiKey: isLiveSecret(process.env.OPENAI_API_KEY),
     googleMapsKey: isLiveSecret(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
+    mapboxToken: isLiveSecret(process.env.NEXT_PUBLIC_MAPBOX_TOKEN, 20),
     cronSecret: isLiveSecret(process.env.CRON_SECRET, 16),
     paystackSecret: isLiveSecret(process.env.PAYSTACK_SECRET_KEY, 20),
   };

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { logAudit, isPlatformOperatorUser } from "@/lib/auth/session";
+import { homePathForRole, type UserRole } from "@/types/auth";
 import { getInviteByToken } from "@/lib/invites";
 import { redirect } from "next/navigation";
 
@@ -14,11 +15,14 @@ export async function signIn(email: string, password: string) {
   await logAudit("auth.login", "user", email);
 
   const user = data.user;
-  if (user?.email && (await isPlatformOperatorUser(user.id, user.email))) {
+  if (!user) return { error: "Sign in failed" };
+  if (user.email && (await isPlatformOperatorUser(user.id, user.email))) {
     const { data: profile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
     if (!profile) return { success: true as const, next: "/platform" };
   }
-  return { success: true as const, next: "/dashboard" };
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const role = (profile?.role ?? "supporter") as UserRole;
+  return { success: true as const, next: homePathForRole(role) };
 }
 
 export async function isRegistrationOpen(): Promise<boolean> {

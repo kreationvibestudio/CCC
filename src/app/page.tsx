@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isPlatformOperatorUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { homePathForRole } from "@/types/auth";
 
 export default async function HomePage() {
   const user = await getCurrentUser();
-  if (user) redirect("/dashboard");
+  if (user) redirect(homePathForRole(user.role));
   const supabase = await createClient();
   const {
     data: { user: auth },

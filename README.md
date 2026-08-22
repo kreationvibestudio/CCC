@@ -85,4 +85,4 @@ The app automatically converts your user token into a page token — you don't n
 
 Next.js 15 · TypeScript · Supabase · Tailwind · Meta Graph API · Termii SMS
 
-Field agents: web `/agent` or the Android-first Expo app in [`apps/agent`](apps/agent/README.md). Build the APK from your PC: [docs/EAS-SETUP.md](docs/EAS-SETUP.md).
+Field agents: web `/agent` or the Android-first Expo app in [`apps/agent`](apps/agent/README.md). Sideload APK: [docs/EAS-SETUP.md](docs/EAS-SETUP.md). Play Store: [docs/PLAY-STORE.md](docs/PLAY-STORE.md).

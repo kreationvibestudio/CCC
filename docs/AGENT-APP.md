@@ -4,4 +4,4 @@ Android-first Expo app for the Agent Portal lives in [`apps/agent`](../apps/agen
 
 Field flow: sign in → pick a polling unit (assigned / GPS / code) → status, report, results, or incident. Camera photos and SQLite-queued writes sync when the phone is back online. HQ can nudge an assigned agent from Polling agents.
 
-Android APK: follow [EAS-SETUP.md](EAS-SETUP.md) on your PC (`eas login` then `eas build`).
+Android APK: [EAS-SETUP.md](EAS-SETUP.md). Play Store listing: [PLAY-STORE.md](PLAY-STORE.md).

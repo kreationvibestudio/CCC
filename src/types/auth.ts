@@ -55,7 +55,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   volunteer_coordinator: "Volunteer Coordinator",
   ward_coordinator: "Ward Coordinator",
   polling_unit_supervisor: "Polling Unit Supervisor",
-  polling_agent: "Polling Agent",
+  polling_agent: "Field Agent",
   data_analyst: "Data Analyst",
   call_center_agent: "Call Center Agent",
   supporter: "Supporter",
@@ -84,7 +84,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "volunteers.view", "volunteers.manage", "crm.view", "crm.manage",
     "events.view", "events.manage", "polling_units.view", "polling_units.manage",
     "maps.view", "situation_room.view", "situation_room.manage",
-    "agent.portal",
     "communications.view", "communications.send", "analytics.view",
     "reports.view", "reports.generate",
   ],
@@ -114,12 +113,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   polling_unit_supervisor: [
     "dashboard.view", "polling_units.view", "polling_units.manage",
     "situation_room.view", "situation_room.manage", "maps.view",
-    "election_results.submit", "agent.portal",
+    "election_results.submit",
   ],
-  polling_agent: [
-    "polling_units.view", "situation_room.view", "election_results.submit",
-    "maps.view", "agent.portal",
-  ],
+  polling_agent: ["agent.portal"],
   data_analyst: [
     "dashboard.view", "social.view", "comments.view", "sentiment.view",
     "analytics.view", "reports.view", "reports.generate", "polling_units.view",
@@ -137,4 +133,13 @@ export function hasPermission(role: UserRole, permission: Permission): boolean {
 
 export function hasAnyPermission(role: UserRole, permissions: Permission[]): boolean {
   return permissions.some((p) => hasPermission(role, p));
+}
+
+/** Field Agent: CCC Agent app + web /agent fallback. No HQ modules. */
+export function isFieldAgentRole(role: UserRole) {
+  return role === "polling_agent";
+}
+
+export function homePathForRole(role: UserRole) {
+  return isFieldAgentRole(role) ? "/agent" : "/dashboard";
 }

@@ -54,7 +54,7 @@ eas build --platform android --profile preview
 
 **Windows Git Bash at D:\CCC:** see [docs/EAS-SETUP.md](../../docs/EAS-SETUP.md) section B. There `eas login` can use the browser.
 
-`preview` = APK for testers. `production` = `.aab` for Play Console.
+`preview` = APK for testers. `production` = `.aab` for Play Console. Play Store steps: [docs/PLAY-STORE.md](../../docs/PLAY-STORE.md).
 
 ## iOS / TestFlight (same project)
 

@@ -193,7 +193,7 @@ export function AgentRosterView({
     <div className="space-y-6">
       <PageHeader
         title="Polling agents"
-        description="Tie each of your 332 polling agents to their unit. The Agent Portal then opens on that PU."
+        description="Create Field Agent logins and tie each one to a polling unit. They use the CCC Agent app only — not HQ."
       >
         <Button variant="outline" asChild>
           <Link href="/polling-units">Back to polling units</Link>
@@ -243,7 +243,7 @@ export function AgentRosterView({
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Upload a sheet with <code>pu_code,email,full_name,phone</code>. Existing emails are reused and
-            set as polling agents; new emails get a login. Each agent is tied to exactly one unit.
+            set as Field Agents; new emails get a login. Each agent is tied to exactly one unit.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={downloadTemplate}>

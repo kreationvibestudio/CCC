@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser, isPlatformOperatorUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { hasPermission } from "@/types/auth";
+import { hasPermission, isFieldAgentRole } from "@/types/auth";
 import { NAV_ITEMS } from "@/lib/navigation";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -22,6 +22,10 @@ export default async function DashboardGroupLayout({
       redirect("/platform");
     }
     redirect("/login");
+  }
+
+  if (isFieldAgentRole(user.role)) {
+    redirect("/agent");
   }
 
   const pathname = (await headers()).get("x-pathname") ?? "";

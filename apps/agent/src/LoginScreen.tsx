@@ -33,7 +33,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
       } catch (e) {
         await signOut();
         if (e instanceof AgentAuthError && e.status === 403) {
-          throw new Error("This account cannot use the Agent Portal. Ask HQ to assign the polling-agent role.");
+          throw new Error("This account cannot use the Agent app. Ask HQ to create a Field Agent login under Polling units → PU Agents.");
         }
         throw e;
       }

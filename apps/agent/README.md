@@ -40,41 +40,21 @@ Scan the QR with Expo Go (Android). GPS and camera are limited in Expo Go; a dev
 
 ## Android APK
 
-EAS project `4992c0a7-72be-4527-a41d-e23b730ee9ef` is already linked. Full steps: [docs/EAS-SETUP.md](../../docs/EAS-SETUP.md).
+EAS project `4992c0a7-72be-4527-a41d-e23b730ee9ef` is already linked.
 
-**If the login page says localhost refused to connect:** you ran `eas login` in Cursor Cloud. The browser is on your laptop; the login server is not. Do this instead:
-
-1. On your laptop open [https://expo.dev/settings/access-tokens](https://expo.dev/settings/access-tokens) (the real site, not localhost). Create a token.
-2. In the Cursor terminal:
+**Cursor Cloud** (`localhost refused to connect` is expected here). On your laptop open [https://expo.dev/settings/access-tokens](https://expo.dev/settings/access-tokens), create a token, then in this terminal:
 
 ```bash
 cd /workspace/apps/agent
 export EXPO_TOKEN="paste-the-token-here"
 eas whoami
-eas build --platform android --profile preview
-```
-
-3. Put the **anon** key (Supabase → Project Settings → API) in an EAS secret so the APK can sign agents in. Never use the service-role key.
-
-```bash
-cd /d/CCC/apps/agent
 eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "PASTE_ANON_KEY_HERE"
-```
-
-4. Build the sideload APK (10–20 minutes in Expo’s cloud):
-
-```bash
-cd /d/CCC/apps/agent
 eas build --platform android --profile preview
 ```
 
-If it asks to generate an Android keystore, choose **yes** (first time only).
+**Windows Git Bash at D:\CCC:** see [docs/EAS-SETUP.md](../../docs/EAS-SETUP.md) section B. There `eas login` can use the browser.
 
-5. When it finishes, Git Bash prints a URL. Open it, download the `.apk`, copy it to an Android phone, tap to install (allow “unknown sources” if asked).
-
-The same file is also at [https://expo.dev](https://expo.dev) → **CCC Agent** → **Builds**.
-
-`preview` = APK for testers. `production` = `.aab` for Play Console (`eas submit --platform android`).
+`preview` = APK for testers. `production` = `.aab` for Play Console.
 
 ## iOS / TestFlight (same project)
 

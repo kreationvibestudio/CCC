@@ -42,7 +42,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    return fetch(`${API_URL}/api/agent/${path}`, { ...init, headers });
+    return fetch(`${API_URL}/api/agent/${path}`, { ...init, headers, redirect: "manual" });
   }
 
   let token = await getAccessToken();
@@ -50,6 +50,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 401) {
     token = await getAccessToken(true);
     res = await once(token);
+  }
+  if (res.status === 307 || res.status === 308 || res.status === 405) {
+    throw new Error(
+      "This app reached the HQ website, not the Agent API. Deploy the Agent branch to Vercel production (ccc-three-kappa.vercel.app), then try again."
+    );
   }
   const json = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (res.status === 401 || res.status === 403) {

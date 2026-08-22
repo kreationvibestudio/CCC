@@ -80,3 +80,6 @@ You ran `eas login` in the **cloud** terminal, and the browser ran on **your lap
 ## Install the APK
 
 Download the `.apk` from the build URL (or expo.dev → CCC Agent → Builds). Sideload on Android. Agents sign in with the HQ-issued email, not Expo.
+
+The APK talks to **production** `https://ccc-three-kappa.vercel.app`. That site must include `/api/agent/*`. If sign-in shows **405**, production is still the old HQ (it redirects the phone to `/login`). Merge/deploy this branch to Vercel production, then sign in again — no new APK required for that fix.
+

@@ -90,6 +90,12 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono), ui-monospace, monospace;
+  }
 
   /* Native <select> listboxes ignore Tailwind; force readable option colours. */
   select {

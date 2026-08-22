@@ -1,8 +1,12 @@
 import * as SQLite from "expo-sqlite";
+import { agentApi } from "./api";
+import { localPhoto, publicPayload } from "./payload";
+
+export type QueueAction = "status" | "report" | "results" | "incident";
 
 export type QueueItem = {
   id: number;
-  action: "status" | "report" | "results" | "incident";
+  action: QueueAction;
   payload: Record<string, unknown>;
   created_at: number;
 };
@@ -44,4 +48,34 @@ export function removeQueued(id: number) {
 export function queuedCount() {
   const row = database().getFirstSync<{ n: number }>("SELECT COUNT(*) as n FROM queue");
   return row?.n ?? 0;
+}
+
+async function send(action: QueueAction, payload: Record<string, unknown>) {
+  const body = { ...payload };
+  const photo = localPhoto(body);
+  if (photo) {
+    const url = await agentApi.upload(photo.uri, photo.kind);
+    if (photo.kind === "result_sheet") body.result_sheet_url = url;
+    else body.media_url = url;
+  }
+  const publicBody = publicPayload(body);
+  if (action === "status") await agentApi.status(publicBody);
+  if (action === "report") await agentApi.report(publicBody);
+  if (action === "results") await agentApi.results(publicBody);
+  if (action === "incident") await agentApi.incident(publicBody);
+}
+
+export async function flushQueue(): Promise<{ synced: number; remaining: number }> {
+  const items = listQueue();
+  let synced = 0;
+  for (const item of items) {
+    try {
+      await send(item.action, item.payload);
+      removeQueued(item.id);
+      synced += 1;
+    } catch {
+      break;
+    }
+  }
+  return { synced, remaining: queuedCount() };
 }

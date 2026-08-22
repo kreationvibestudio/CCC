@@ -8,10 +8,3 @@ export const API_URL = (
 
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
-
-export const FEATURED = [
-  { code: "APC", name: "All Progressives Congress" },
-  { code: "PDP", name: "Peoples Democratic Party" },
-  { code: "NDC", name: "National Democratic Coalition" },
-  { code: "ADC", name: "African Democratic Congress" },
-] as const;

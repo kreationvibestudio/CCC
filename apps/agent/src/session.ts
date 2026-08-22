@@ -31,14 +31,19 @@ export async function saveSession(session: Session | null) {
   await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
 }
 
-export async function getAccessToken() {
+export async function getAccessToken(forceRefresh = false) {
   const session = await loadStoredSession();
   if (!session) return null;
-  if (session.expires_at && session.expires_at * 1000 < Date.now() + 30_000 && session.refresh_token) {
+  const expiring = Boolean(session.expires_at && session.expires_at * 1000 < Date.now() + 30_000);
+  if ((forceRefresh || expiring) && session.refresh_token) {
     const { data, error } = await client().auth.refreshSession({ refresh_token: session.refresh_token });
     if (!error && data.session) {
       await saveSession(data.session);
       return data.session.access_token;
+    }
+    if (forceRefresh) {
+      await saveSession(null);
+      return null;
     }
   }
   return session.access_token;

@@ -12,6 +12,8 @@ import {
 import { jsonToFormData } from "@/lib/agent/form-data";
 import { isResponse, jsonError, jsonOk, requireAgentApi } from "@/lib/agent/http";
 import { nudgeAgent, uploadAgentMedia, upsertPushToken } from "@/lib/agent/media";
+import { FEATURED_PARTIES, OTHER_MAJOR_PARTIES } from "@/lib/elections/parties";
+import type { AuthUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,6 +31,19 @@ export async function OPTIONS() {
 
 function pathKey(params: { path?: string[] }) {
   return (params.path ?? []).join("/");
+}
+
+function sessionBody(agent: AuthUser) {
+  return {
+    id: agent.id,
+    email: agent.email,
+    full_name: agent.profile.full_name,
+    role: agent.role,
+    tenant_id: agent.profile.tenant_id,
+    campaign_party: agent.workspace?.party ?? "",
+    workspace: agent.workspace,
+    parties: { featured: FEATURED_PARTIES, other: OTHER_MAJOR_PARTIES },
+  };
 }
 
 async function readJson(request: NextRequest): Promise<Record<string, unknown>> {
@@ -49,16 +64,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
   if (isResponse(agent)) return cors(agent);
 
   if (key === "session") {
-    return cors(
-      jsonOk({
-        id: agent.id,
-        email: agent.email,
-        full_name: agent.profile.full_name,
-        role: agent.role,
-        tenant_id: agent.profile.tenant_id,
-        workspace: agent.workspace,
-      })
-    );
+    return cors(jsonOk(sessionBody(agent)));
   }
 
   if (key === "assigned-pus") {
@@ -89,16 +95,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   if (key === "session") {
     const agent = await requireAgentApi();
     if (isResponse(agent)) return cors(agent);
-    return cors(
-      jsonOk({
-        id: agent.id,
-        email: agent.email,
-        full_name: agent.profile.full_name,
-        role: agent.role,
-        tenant_id: agent.profile.tenant_id,
-        workspace: agent.workspace,
-      })
-    );
+    return cors(jsonOk(sessionBody(agent)));
   }
 
   const agent = await requireAgentApi();

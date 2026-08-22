@@ -9,7 +9,9 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { signIn } from "./session";
+import { AgentAuthError, agentApi } from "./api";
+import { signIn, signOut } from "./session";
+import { colors } from "./theme";
 
 export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [email, setEmail] = useState("");
@@ -26,6 +28,15 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
     setLoading(true);
     try {
       await signIn(email.trim(), password);
+      try {
+        await agentApi.session();
+      } catch (e) {
+        await signOut();
+        if (e instanceof AgentAuthError && e.status === 403) {
+          throw new Error("This account cannot use the Agent Portal. Ask HQ to assign the polling-agent role.");
+        }
+        throw e;
+      }
       onSignedIn();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign in failed");
@@ -36,14 +47,18 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={styles.mark}>
+        <Text style={styles.markText}>CCC</Text>
+      </View>
       <Text style={styles.title}>CCC Agent</Text>
-      <Text style={styles.sub}>Sign in with the login HQ assigned to you</Text>
+      <Text style={styles.sub}>Sign in with the login HQ assigned to you. This app is for polling agents only — HQ stays on the web.</Text>
       <TextInput
         style={styles.input}
         autoCapitalize="none"
+        autoCorrect={false}
         keyboardType="email-address"
         placeholder="you@campaign.ng"
-        placeholderTextColor="#6b7280"
+        placeholderTextColor={colors.muted}
         value={email}
         onChangeText={setEmail}
       />
@@ -51,7 +66,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
         style={styles.input}
         secureTextEntry
         placeholder="Password"
-        placeholderTextColor="#6b7280"
+        placeholderTextColor={colors.muted}
         value={password}
         onChangeText={setPassword}
       />
@@ -64,18 +79,28 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: "#0b1220", justifyContent: "center", padding: 24, gap: 12 },
-  title: { color: "#f8fafc", fontSize: 28, fontWeight: "700" },
-  sub: { color: "#94a3b8", marginBottom: 12 },
+  wrap: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", padding: 24, gap: 12 },
+  mark: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.primaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  markText: { color: "#93c5fd", fontWeight: "800", fontSize: 18 },
+  title: { color: colors.text, fontSize: 28, fontWeight: "700" },
+  sub: { color: colors.muted, marginBottom: 12, lineHeight: 20 },
   input: {
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: colors.border,
     borderRadius: 10,
-    color: "#f8fafc",
+    color: colors.text,
     padding: 12,
-    backgroundColor: "#111827",
+    backgroundColor: colors.card,
   },
-  error: { color: "#f87171" },
-  button: { backgroundColor: "#2563eb", borderRadius: 10, padding: 14, alignItems: "center" },
+  error: { color: colors.dangerText },
+  button: { backgroundColor: colors.primary, borderRadius: 10, padding: 14, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "600" },
 });

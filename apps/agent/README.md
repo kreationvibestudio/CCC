@@ -4,11 +4,13 @@ Expo (React Native) field app for polling agents. HQ stays on the web. This app 
 
 ## What it does
 
-- Sign in with the HQ-issued agent email
+- Sign in with the HQ-issued agent email (non-agent accounts are rejected)
+- Bottom tabs: Unit, Status, Report, Results, Incident
 - Assigned PU shortcuts, GPS nearest (bounded), PU-code search
-- Status, field report, result votes, incident
-- Camera for result-sheet and incident photos
-- SQLite offline queue (syncs when back online)
+- Status, field report, result votes (featured + other INEC parties), incident
+- Camera for result-sheet and incident photos, with preview
+- SQLite offline queue (including photos copied into app storage) that flushes on reconnect
+- Lagos live clock on submit; UTC `captured_at` on the server
 - Expo push token registration; HQ can tap **Nudge app** on Polling agents
 
 ## Configure
@@ -66,7 +68,7 @@ All routes require `Authorization: Bearer <supabase access_token>` and `agent.po
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/api/agent/session` | Whoami |
+| POST | `/api/agent/session` | Whoami, workspace, result-sheet parties |
 | GET | `/api/agent/assigned-pus` | Assigned units (max 40) |
 | GET | `/api/agent/nearest-pus?lat=&lng=` | Nearest (max 8) |
 | GET | `/api/agent/search-pus?q=` | PU code search (max 25) |

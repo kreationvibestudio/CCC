@@ -5,6 +5,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { LoginScreen } from "./src/LoginScreen";
 import { PortalScreen } from "./src/PortalScreen";
 import { getAccessToken } from "./src/session";
+import { colors } from "./src/theme";
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -22,7 +23,7 @@ export default function App() {
 
   if (!ready) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#0b1220", justifyContent: "center" }}>
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center" }}>
         <ActivityIndicator color="#93c5fd" />
       </View>
     );
@@ -30,7 +31,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#0b1220" }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
         <StatusBar style="light" />
         {signedIn ? (
           <PortalScreen onSignOut={() => setSignedIn(false)} />

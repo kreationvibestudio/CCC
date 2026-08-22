@@ -1,6 +1,8 @@
 import { Platform } from "react-native";
 import { API_URL } from "./config";
-import { getAccessToken } from "./session";
+import { publicPayload } from "./payload";
+import { getAccessToken, signOut } from "./session";
+import type { PartyOption } from "./parties";
 
 export type AgentUnit = {
   id: string;
@@ -20,18 +22,40 @@ export type SessionInfo = {
   full_name: string;
   role: string;
   tenant_id: string;
+  campaign_party?: string;
   workspace: { name: string; slug: string; party: string } | null;
+  parties?: { featured: PartyOption[]; other: PartyOption[] };
 };
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await getAccessToken();
-  const headers = new Headers(init.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+export class AgentAuthError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
   }
-  const res = await fetch(`${API_URL}/api/agent/${path}`, { ...init, headers });
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async function once(token: string | null) {
+    const headers = new Headers(init.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    return fetch(`${API_URL}/api/agent/${path}`, { ...init, headers });
+  }
+
+  let token = await getAccessToken();
+  let res = await once(token);
+  if (res.status === 401) {
+    token = await getAccessToken(true);
+    res = await once(token);
+  }
   const json = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) await signOut();
+    throw new AgentAuthError(json.error || "Unauthorized", res.status);
+  }
   if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
   return json;
 }
@@ -42,11 +66,14 @@ export const agentApi = {
   nearest: (lat: number, lng: number) =>
     request<{ units: AgentUnit[] }>(`nearest-pus?lat=${lat}&lng=${lng}`),
   search: (q: string) => request<{ units: AgentUnit[] }>(`search-pus?q=${encodeURIComponent(q)}`),
-  status: (body: Record<string, unknown>) => request("status", { method: "POST", body: JSON.stringify(body) }),
-  report: (body: Record<string, unknown>) => request("reports", { method: "POST", body: JSON.stringify(body) }),
-  results: (body: Record<string, unknown>) => request("results", { method: "POST", body: JSON.stringify(body) }),
+  status: (body: Record<string, unknown>) =>
+    request("status", { method: "POST", body: JSON.stringify(publicPayload(body)) }),
+  report: (body: Record<string, unknown>) =>
+    request("reports", { method: "POST", body: JSON.stringify(publicPayload(body)) }),
+  results: (body: Record<string, unknown>) =>
+    request("results", { method: "POST", body: JSON.stringify(publicPayload(body)) }),
   incident: (body: Record<string, unknown>) =>
-    request("incidents", { method: "POST", body: JSON.stringify(body) }),
+    request("incidents", { method: "POST", body: JSON.stringify(publicPayload(body)) }),
   pushToken: (token: string) =>
     request("push-token", {
       method: "POST",

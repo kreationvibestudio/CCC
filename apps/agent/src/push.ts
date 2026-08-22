@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { agentApi } from "./api";
@@ -10,6 +10,23 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+export function listenForHqNudges() {
+  const received = Notifications.addNotificationReceivedListener((event) => {
+    const title = event.request.content.title ?? "Campaign HQ";
+    const body = event.request.content.body ?? "Please submit your polling unit update.";
+    Alert.alert(title, body);
+  });
+  const response = Notifications.addNotificationResponseReceivedListener((event) => {
+    const title = event.notification.request.content.title ?? "Campaign HQ";
+    const body = event.notification.request.content.body ?? "Please submit your polling unit update.";
+    Alert.alert(title, body);
+  });
+  return () => {
+    received.remove();
+    response.remove();
+  };
+}
 
 export async function registerPushToken() {
   if (!Device.isDevice) return;
@@ -25,6 +42,10 @@ export async function registerPushToken() {
       importance: Notifications.AndroidImportance.HIGH,
     });
   }
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
-  await agentApi.pushToken(token);
+  try {
+    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    await agentApi.pushToken(token);
+  } catch {
+    /* EAS projectId is required for a real token; preview builds after eas init. */
+  }
 }

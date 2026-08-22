@@ -3,6 +3,7 @@
 The Agent app is in `apps/agent`. EAS project is already linked:
 
 - owner: `kreationvibestudios`
+- slug: `kreationvibestudios`
 - project id: `4992c0a7-72be-4527-a41d-e23b730ee9ef`
 
 `eas login` opens a **localhost** page. That only works if the terminal and the browser are on the **same computer**. It fails in Cursor Cloud (`localhost refused to connect`).

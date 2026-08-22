@@ -38,25 +38,21 @@ npx expo start
 
 Scan the QR with Expo Go (Android). GPS and camera are limited in Expo Go; a development or preview build is better for field tests.
 
-## Android APK — do this on your PC (Git Bash)
+## Android APK
 
-This cloud environment cannot log into Expo for you. The app is already linked to EAS project `4992c0a7-72be-4527-a41d-e23b730ee9ef`. You only sign in and start the build.
+EAS project `4992c0a7-72be-4527-a41d-e23b730ee9ef` is already linked. Full steps: [docs/EAS-SETUP.md](../../docs/EAS-SETUP.md).
 
-1. Create a free account at [https://expo.dev/signup](https://expo.dev/signup) if you do not have one (use the `kreationvibestudio` org if you already created it).
-2. On Windows, open **Git Bash**:
+**If the login page says localhost refused to connect:** you ran `eas login` in Cursor Cloud. The browser is on your laptop; the login server is not. Do this instead:
+
+1. On your laptop open [https://expo.dev/settings/access-tokens](https://expo.dev/settings/access-tokens) (the real site, not localhost). Create a token.
+2. In the Cursor terminal:
 
 ```bash
-cd /d/CCC
-git fetch origin
-git checkout cursor/agent-mobile-apps-0aee
-git pull origin cursor/agent-mobile-apps-0aee
-
-npm install --global eas-cli
-cd /d/CCC/apps/agent
-eas login
+cd /workspace/apps/agent
+export EXPO_TOKEN="paste-the-token-here"
+eas whoami
+eas build --platform android --profile preview
 ```
-
-A browser window opens. Sign in, then return to Git Bash. `eas whoami` should print your Expo username.
 
 3. Put the **anon** key (Supabase → Project Settings → API) in an EAS secret so the APK can sign agents in. Never use the service-role key.
 

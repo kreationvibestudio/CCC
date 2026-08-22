@@ -17,7 +17,9 @@
         "NSCameraUsageDescription": "Photograph result sheets and incident evidence for your assigned polling unit.",
         "NSPhotoLibraryUsageDescription": "Attach a result-sheet or incident photo from your library.",
         "NSLocationWhenInUseUsageDescription": "Find the nearest polling unit from your GPS position.",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -56,7 +58,9 @@
         }
       ],
       "expo-secure-store",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-asset",
+      "expo-font"
     ],
     "extra": {
       "eas": {

@@ -19,6 +19,10 @@ function tempPassword() {
   return `${randomBytes(9).toString("base64url")}Aa1!`;
 }
 
+function escapeIlikeExact(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/[%_]/g, (ch) => `\\${ch}`);
+}
+
 function canStaffAgents(role: UserRole) {
   return hasPermission(role, "polling_units.manage") || hasPermission(role, "admin.users");
 }
@@ -159,89 +163,95 @@ export async function assignPollingAgent(input: {
   puCode?: string;
   email?: string;
 }> {
-  const auth = await requireStaff();
-  if (!auth.user) return { error: "Unauthorized" };
+  try {
+    const auth = await requireStaff();
+    if (!auth.user) return { error: "Unauthorized" };
 
-  const email = input.email.trim().toLowerCase();
-  const puCode = input.puCode.trim();
-  const fullName = (input.fullName ?? "").trim() || email.split("@")[0];
-  const phone = (input.phone ?? "").trim() || null;
-  if (!puCode) return { error: "PU code is required" };
-  if (!email.includes("@")) return { error: "Valid email is required" };
+    const email = input.email.trim().toLowerCase();
+    const puCode = input.puCode.trim();
+    const fullName = (input.fullName ?? "").trim() || email.split("@")[0];
+    const phone = (input.phone ?? "").trim() || null;
+    if (!puCode) return { error: "PU code is required" };
+    if (!email.includes("@")) return { error: "Valid email is required" };
 
-  const supabase = db();
-  const tenantId = auth.user.profile.tenant_id;
-  const pu = await findPuByCode(supabase, tenantId, puCode);
-  if (!pu) return { error: `No polling unit matches ${puCode}` };
+    const supabase = db();
+    const tenantId = auth.user.profile.tenant_id;
+    const pu = await findPuByCode(supabase, tenantId, puCode);
+    if (!pu) return { error: `No polling unit matches ${puCode}` };
 
-  const { data: existing } = await supabase
-    .from("profiles")
-    .select("id, role, email")
-    .eq("tenant_id", tenantId)
-    .eq("email", email)
-    .maybeSingle();
+    const { data: existingRows } = await supabase
+      .from("profiles")
+      .select("id, role, email")
+      .eq("tenant_id", tenantId)
+      .ilike("email", escapeIlikeExact(email))
+      .limit(5);
+    const existing =
+      (existingRows ?? []).find((row) => row.email?.toLowerCase() === email) ?? existingRows?.[0];
 
-  let userId = existing?.id as string | undefined;
-  let created = false;
-  let password: string | undefined;
+    let userId = existing?.id as string | undefined;
+    let created = false;
+    let password: string | undefined;
 
-  if (existing && KEEP_ROLES.has(existing.role)) {
-    return { error: `${email} is ${existing.role.replace(/_/g, " ")} — assign a different account` };
-  }
+    if (existing && KEEP_ROLES.has(existing.role)) {
+      return { error: `${email} is ${existing.role.replace(/_/g, " ")} — assign a different account` };
+    }
 
-  if (!userId) {
-    password = tempPassword();
-    const invited = await createInvitedAuthUser(supabase, {
-      tenantId,
+    if (!userId) {
+      password = tempPassword();
+      const invited = await createInvitedAuthUser(supabase, {
+        tenantId,
+        email,
+        fullName,
+        role: "polling_agent",
+        password,
+        invitedBy: auth.user.id,
+      });
+      if (invited.error || !invited.userId) return { error: invited.error ?? "Could not create agent login" };
+      userId = invited.userId;
+      created = Boolean(invited.created);
+    }
+
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      {
+        id: userId,
+        tenant_id: tenantId,
+        email,
+        full_name: fullName,
+        phone,
+        role: "polling_agent",
+        ward: pu.ward,
+        lga: pu.lga,
+      },
+      { onConflict: "id" }
+    );
+    if (profileError) return { error: profileError.message };
+
+    await supabase
+      .from("polling_units")
+      .update({ assigned_agent_id: null })
+      .eq("tenant_id", tenantId)
+      .eq("assigned_agent_id", userId)
+      .neq("id", pu.id);
+
+    const { error: assignError } = await supabase
+      .from("polling_units")
+      .update({ assigned_agent_id: userId })
+      .eq("tenant_id", tenantId)
+      .eq("id", pu.id);
+    if (assignError) return { error: assignError.message };
+
+    revalidatePath("/polling-units/agents");
+    revalidatePath("/polling-units");
+    revalidatePath("/agent");
+    return {
+      created,
+      temporaryPassword: password,
+      puCode: pu.pu_code || pu.code,
       email,
-      fullName,
-      role: "polling_agent",
-      password,
-      invitedBy: auth.user.id,
-    });
-    if (invited.error || !invited.userId) return { error: invited.error ?? "Could not create agent login" };
-    userId = invited.userId;
-    created = Boolean(invited.created);
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not create agent login" };
   }
-
-  const { error: profileError } = await supabase.from("profiles").upsert(
-    {
-      id: userId,
-      tenant_id: tenantId,
-      email,
-      full_name: fullName,
-      phone,
-      role: "polling_agent",
-      ward: pu.ward,
-      lga: pu.lga,
-    },
-    { onConflict: "id" }
-  );
-  if (profileError) return { error: profileError.message };
-
-  await supabase
-    .from("polling_units")
-    .update({ assigned_agent_id: null })
-    .eq("tenant_id", tenantId)
-    .eq("assigned_agent_id", userId)
-    .neq("id", pu.id);
-
-  const { error: assignError } = await supabase
-    .from("polling_units")
-    .update({ assigned_agent_id: userId })
-    .eq("tenant_id", tenantId)
-    .eq("id", pu.id);
-  if (assignError) return { error: assignError.message };
-
-  revalidatePath("/polling-units/agents");
-  revalidatePath("/polling-units");
-  revalidatePath("/agent");
-  return {
-    created,
-    temporaryPassword: password,
-    puCode: pu.pu_code || pu.code,
-    email,
-  };
 }
 
 export async function unassignPollingAgent(pollingUnitId: string) {

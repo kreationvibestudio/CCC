@@ -39,17 +39,17 @@ export async function submitAgentReport(formData: FormData) {
   const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
   if (puError) return { error: puError };
   const supabase = await agentDb();
-  const { error } = await supabase.from("agent_reports").insert({
+  const { data, error } = await supabase.from("agent_reports").insert({
     tenant_id: user.profile.tenant_id,
     agent_id: user.id,
     report_type: reportType,
     content,
     polling_unit_id: puId,
     created_at: capturedAt,
-  });
+  }).select("id").single();
   if (error) return { error: error.message };
   revalidateAgent();
-  return { success: true };
+  return { success: true as const, id: data?.id as string | undefined };
 }
 
 export async function reportIncident(formData: FormData) {
@@ -60,7 +60,7 @@ export async function reportIncident(formData: FormData) {
   if (puError) return { error: puError };
   const supabase = await agentDb();
   const capturedAt = capturedAtIso(formData);
-  const { error } = await supabase.from("incident_reports").insert({
+  const { data, error } = await supabase.from("incident_reports").insert({
     tenant_id: user.profile.tenant_id,
     reporter_id: user.id,
     polling_unit_id: puId,
@@ -71,10 +71,18 @@ export async function reportIncident(formData: FormData) {
     latitude: formData.get("latitude") ? Number(formData.get("latitude")) : null,
     longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
     created_at: capturedAt,
-  });
+  }).select("id").single();
   if (error) return { error: error.message };
+  const mediaUrl = String(formData.get("media_url") ?? "").trim();
+  if (data?.id && mediaUrl) {
+    await supabase.from("incident_media").insert({
+      incident_id: data.id,
+      media_type: "photo",
+      url: mediaUrl,
+    });
+  }
   revalidateAgent();
-  return { success: true };
+  return { success: true as const, id: data?.id as string | undefined };
 }
 
 export async function updatePuStatus(formData: FormData) {
@@ -119,16 +127,18 @@ export async function submitElectionResult(formData: FormData) {
 
   const supabase = await agentDb();
   const capturedAt = capturedAtIso(formData);
-  const { error } = await supabase.from("election_results").insert({
+  const sheetUrl = String(formData.get("result_sheet_url") ?? "").trim() || null;
+  const { data, error } = await supabase.from("election_results").insert({
     tenant_id: user.profile.tenant_id,
     polling_unit_id: puId,
     submitted_by: user.id,
     party_votes: partyVotes,
     total_votes: total,
+    result_sheet_url: sheetUrl,
     latitude: formData.get("latitude") ? Number(formData.get("latitude")) : null,
     longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
     submitted_at: capturedAt,
-  });
+  }).select("id").single();
   if (error) return { error: error.message };
   await supabase.from("polling_unit_status").upsert({
     tenant_id: user.profile.tenant_id,
@@ -138,7 +148,7 @@ export async function submitElectionResult(formData: FormData) {
     updated_at: capturedAt,
   }, { onConflict: "tenant_id,polling_unit_id" });
   revalidateAgent();
-  return { success: true };
+  return { success: true as const, id: data?.id as string | undefined };
 }
 
 export type AgentPollingUnit = {

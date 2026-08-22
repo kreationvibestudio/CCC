@@ -1,0 +1,79 @@
+# CCC Agent app (Android first, iOS later)
+
+Expo (React Native) field app for polling agents. HQ stays on the web. This app talks to the existing CCC API at `/api/agent/*` with a Supabase user JWT. It never downloads the full polling-unit catalog.
+
+## What it does
+
+- Sign in with the HQ-issued agent email
+- Assigned PU shortcuts, GPS nearest (bounded), PU-code search
+- Status, field report, result votes, incident
+- Camera for result-sheet and incident photos
+- SQLite offline queue (syncs when back online)
+- Expo push token registration; HQ can tap **Nudge app** on Polling agents
+
+## Configure
+
+Copy `.env.example` to `.env` in this folder:
+
+```
+EXPO_PUBLIC_API_URL=https://ccc-three-kappa.vercel.app
+EXPO_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+Use the **anon** key only. Never put the service role in the app.
+
+Apply `supabase/migrations/20260822000000_agent_device_tokens.sql` on Supabase so push tokens persist.
+
+## Run locally
+
+From `apps/agent`:
+
+```bash
+npm install
+npx expo start
+```
+
+Scan the QR with Expo Go (Android). GPS and camera are limited in Expo Go; a development or preview build is better for field tests.
+
+## Android APK (preview)
+
+Requires an [Expo account](https://expo.dev) and EAS CLI:
+
+```bash
+npm i -g eas-cli
+cd apps/agent
+eas login
+eas init          # writes extra.eas.projectId into app.json
+eas build --platform android --profile preview
+```
+
+`preview` produces an installable APK for internal testers. `production` produces an AAB for Play Console internal track (`eas submit --platform android`).
+
+## iOS / TestFlight (same project)
+
+You need an Apple Developer account. Then:
+
+1. Replace `submit.production.ios.ascAppId` in `eas.json` with the App Store Connect app id.
+2. `eas build --platform ios --profile preview` then TestFlight via `eas submit --platform ios`.
+3. Confirm camera and location permission copy in `app.json` → `ios.infoPlist`.
+
+There is no second codebase. Android and iOS share `App.tsx`.
+
+## API contract
+
+All routes require `Authorization: Bearer <supabase access_token>` and `agent.portal`.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/agent/session` | Whoami |
+| GET | `/api/agent/assigned-pus` | Assigned units (max 40) |
+| GET | `/api/agent/nearest-pus?lat=&lng=` | Nearest (max 8) |
+| GET | `/api/agent/search-pus?q=` | PU code search (max 25) |
+| POST | `/api/agent/status` | PU status / turnout |
+| POST | `/api/agent/reports` | Field report |
+| POST | `/api/agent/results` | Party votes + optional `result_sheet_url` |
+| POST | `/api/agent/incidents` | Incident + optional `media_url` |
+| POST | `/api/agent/media` | Multipart photo → `election-media` |
+| POST | `/api/agent/push-token` | Register Expo push token |
+| POST | `/api/agent/nudge` | HQ: push one agent (`user_id`) |

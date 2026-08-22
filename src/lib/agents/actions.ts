@@ -258,3 +258,10 @@ export async function unassignPollingAgent(pollingUnitId: string) {
   revalidatePath("/polling-units");
   return { success: true as const };
 }
+
+export async function nudgeAssignedAgent(userId: string) {
+  const auth = await requireStaff();
+  if (!auth.user) return { error: "Unauthorized" };
+  const { nudgeAgent } = await import("@/lib/agent/media");
+  return nudgeAgent(auth.user, userId, "Please open the Agent app and submit your unit update.");
+}

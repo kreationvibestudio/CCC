@@ -1,9 +1,12 @@
+import { headers } from "next/headers";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { UserRole, Permission } from "@/types/auth";
 import { hasPermission, ROLE_PERMISSIONS } from "@/types/auth";
 import type { Profile } from "@/types/database";
 import { platformOperatorEmails } from "@/lib/tenancy";
+import { parseBearer } from "@/lib/auth/bearer";
 
 export type WorkspaceInfo = {
   id: string;
@@ -45,8 +48,12 @@ async function ensurePlatformOperatorRow(userId: string, email: string) {
   }
 }
 
-export async function isPlatformOperatorUser(userId: string, email: string): Promise<boolean> {
-  const supabase = await createClient();
+export async function isPlatformOperatorUser(
+  userId: string,
+  email: string,
+  db?: SupabaseClient
+): Promise<boolean> {
+  const supabase = db ?? (await createClient());
   const { data } = await supabase
     .from("platform_operators")
     .select("user_id")
@@ -96,8 +103,8 @@ function partyCode(value: unknown) {
   return "";
 }
 
-async function loadSupportAccess(userId: string): Promise<SupportAccess | null> {
-  const supabase = await createClient();
+async function loadSupportAccess(userId: string, db?: SupabaseClient): Promise<SupportAccess | null> {
+  const supabase = db ?? (await createClient());
   const { data } = await supabase
     .from("platform_support_sessions")
     .select("id, tenant_id, expires_at, tenants(name)")
@@ -130,18 +137,12 @@ function syntheticSupportProfile(userId: string, email: string, tenantId: string
   };
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
+async function assembleAuthUser(user: User, db: SupabaseClient): Promise<AuthUser | null> {
   const email = user.email ?? "";
-  const isOperator = await isPlatformOperatorUser(user.id, email);
-  const supportAccess = isOperator ? await loadSupportAccess(user.id) : null;
+  const isOperator = await isPlatformOperatorUser(user.id, email, db);
+  const supportAccess = isOperator ? await loadSupportAccess(user.id, db) : null;
 
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  const { data: profile } = await db.from("profiles").select("*").eq("id", user.id).single();
 
   if (!profile) {
     if (!isOperator || !supportAccess) return null;
@@ -173,6 +174,23 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     isPlatformOperator: isOperator,
     supportAccess,
   };
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  let bearer: string | null = null;
+  try {
+    bearer = parseBearer((await headers()).get("authorization"));
+  } catch {
+    bearer = null;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = bearer ? await supabase.auth.getUser(bearer) : await supabase.auth.getUser();
+  if (error || !user) return null;
+  return assembleAuthUser(user, supabase);
 }
 
 export async function requireAuth(): Promise<AuthUser> {

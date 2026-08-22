@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   assignPollingAgent,
   listAgentAssignments,
+  nudgeAssignedAgent,
   unassignPollingAgent,
   type AssignmentRow,
 } from "@/lib/agents/actions";
@@ -154,6 +155,18 @@ export function AgentRosterView({
       setRows(listed.rows);
       setTotal(listed.total);
       router.refresh();
+    });
+  }
+
+  function handleNudge(userId: string | null) {
+    if (!userId) {
+      toast.error("No agent login on this unit");
+      return;
+    }
+    startTransition(async () => {
+      const result = await nudgeAssignedAgent(userId);
+      if (result.error) toast.error(result.error);
+      else toast.success(`Push sent (${"sent" in result ? result.sent : 0})`);
     });
   }
 
@@ -319,9 +332,20 @@ export function AgentRosterView({
                   {row.agent_phone ? ` · ${row.agent_phone}` : ""}
                 </p>
               </div>
-              <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => handleUnassign(row.id)}>
-                Unassign
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={pending || !row.assigned_agent_id}
+                  onClick={() => handleNudge(row.assigned_agent_id)}
+                >
+                  Nudge app
+                </Button>
+                <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => handleUnassign(row.id)}>
+                  Unassign
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}

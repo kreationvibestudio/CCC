@@ -1,10 +1,18 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { parseBearer } from "@/lib/auth/bearer";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 export async function createClient() {
   const cookieStore = await cookies();
+  let authorization: string | null = null;
+  try {
+    authorization = (await headers()).get("authorization");
+  } catch {
+    authorization = null;
+  }
+  const bearer = parseBearer(authorization);
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,6 +32,9 @@ export async function createClient() {
           }
         },
       },
+      ...(bearer
+        ? { global: { headers: { Authorization: `Bearer ${bearer}` } } }
+        : {}),
     }
   );
 }

@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeInternalPath } from "@/lib/auth/bearer";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -46,7 +47,9 @@ export async function updateSession(request: NextRequest) {
   const isCheckInRoute = /^\/events\/[^/]+\/checkin/.test(path);
   const isDonateRoute = path.startsWith("/donate") || path.startsWith("/api/donations");
   const isJoinRoute = path.startsWith("/join");
-  const isPublicRoute = path === "/" || isAuthRoute || isCheckInRoute || isDonateRoute || isJoinRoute;
+  const isAgentApi = path.startsWith("/api/agent");
+  const isPublicRoute =
+    path === "/" || isAuthRoute || isCheckInRoute || isDonateRoute || isJoinRoute || isAgentApi;
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
@@ -57,7 +60,10 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthRoute && !isResetPassword) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const next = safeInternalPath(request.nextUrl.searchParams.get("redirect")) ?? "/dashboard";
+    const q = next.indexOf("?");
+    url.pathname = q === -1 ? next : next.slice(0, q);
+    url.search = q === -1 ? "" : next.slice(q);
     return NextResponse.redirect(url);
   }
 

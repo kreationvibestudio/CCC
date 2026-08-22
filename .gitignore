@@ -43,3 +43,10 @@ next-env.d.ts
 # supabase
 .branches
 .temp
+
+# expo agent app
+/apps/agent/node_modules
+/apps/agent/.expo
+/apps/agent/dist
+/apps/agent/ios
+/apps/agent/android

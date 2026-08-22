@@ -84,3 +84,5 @@ The app automatically converts your user token into a page token — you don't n
 ## Tech Stack
 
 Next.js 15 · TypeScript · Supabase · Tailwind · Meta Graph API · Termii SMS
+
+Field agents: web `/agent` or the Android-first Expo app in [`apps/agent`](apps/agent/README.md) (see [docs/AGENT-APP.md](docs/AGENT-APP.md)).

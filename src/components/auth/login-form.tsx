@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { safeInternalPath } from "@/lib/auth/bearer";
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,7 +34,9 @@ export function LoginForm() {
       return;
     }
     toast.success("Welcome to Campaign Command Center");
-    router.push(result.next || "/dashboard");
+    const next =
+      safeInternalPath(searchParams.get("redirect")) || result.next || "/dashboard";
+    router.push(next);
     router.refresh();
   }
 

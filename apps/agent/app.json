@@ -1,0 +1,69 @@
+{
+  "expo": {
+    "name": "CCC Agent",
+    "slug": "ccc-agent",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "ccc-agent",
+    "splash": {
+      "backgroundColor": "#0b1220"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ng.ccc.agent",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Photograph result sheets and incident evidence for your assigned polling unit.",
+        "NSPhotoLibraryUsageDescription": "Attach a result-sheet or incident photo from your library.",
+        "NSLocationWhenInUseUsageDescription": "Find the nearest polling unit from your GPS position.",
+        "UIBackgroundModes": ["remote-notification"]
+      }
+    },
+    "android": {
+      "package": "ng.ccc.agent",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0b1220"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Find the nearest polling unit from your GPS position."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Photograph result sheets and incident evidence.",
+          "photosPermission": "Attach a result-sheet or incident photo."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ],
+      "expo-secure-store",
+      "expo-sqlite"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "replace-after-eas-init"
+      },
+      "apiUrl": "https://ccc-three-kappa.vercel.app"
+    },
+    "owner": "kreationvibestudio"
+  }
+}

@@ -18,6 +18,7 @@ export const colors = {
 export const STATUS_OPTIONS = [
   { value: "not_active", label: "Not active" },
   { value: "voting_in_progress", label: "Voting in progress" },
+  { value: "voting_finished", label: "Voting finished" },
   { value: "delayed", label: "Delayed" },
   { value: "minor_issue", label: "Minor issue" },
   { value: "serious_incident", label: "Serious incident" },

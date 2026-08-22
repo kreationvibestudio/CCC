@@ -33,6 +33,7 @@ const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then(
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   voting_in_progress: "default",
+  voting_finished: "secondary",
   delayed: "outline",
   minor_issue: "outline",
   serious_incident: "destructive",

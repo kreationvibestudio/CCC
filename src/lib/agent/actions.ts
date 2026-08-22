@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
+import { parsePollingUnitStatus } from "@/lib/agent/pu-status";
 import { assertPollingUnitInTenant } from "@/lib/tenancy";
 
 /** User session for auth; service role for writes so missing INSERT policies cannot block agents. */
@@ -94,10 +95,12 @@ export async function updatePuStatus(formData: FormData) {
   const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
   if (puError) return { error: puError };
   const capturedAt = capturedAtIso(formData);
+  const status = parsePollingUnitStatus(String(formData.get("status") ?? ""));
+  if (!status) return { error: "Select a valid PU status" };
   const { error } = await supabase.from("polling_unit_status").upsert({
     tenant_id: user.profile.tenant_id,
     polling_unit_id: puId,
-    status: formData.get("status") as string,
+    status,
     turnout: formData.get("turnout") ? Number(formData.get("turnout")) : 0,
     updated_by: user.id,
     updated_at: capturedAt,

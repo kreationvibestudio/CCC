@@ -40,6 +40,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260820000005_agent_reports_rls_and_race.sql",
   "supabase/migrations/20260820000006_list_pages_scale.sql",
   "supabase/migrations/20260820000007_polling_agent_assignment.sql",
+  "supabase/migrations/20260822000001_pu_status_voting_finished.sql",
 ];
 
 loadEnvLocal();

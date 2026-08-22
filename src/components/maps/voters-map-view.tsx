@@ -23,6 +23,7 @@ const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then(
 
 const LEGEND = [
   { status: "voting_in_progress", label: "Voting", color: "#22c55e" },
+  { status: "voting_finished", label: "Voting finished", color: "#0d9488" },
   { status: "delayed", label: "Delayed", color: "#eab308" },
   { status: "minor_issue", label: "Minor issue", color: "#f97316" },
   { status: "serious_incident", label: "Incident", color: "#ef4444" },

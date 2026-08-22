@@ -42,6 +42,7 @@ export type EventType =
 export type PollingUnitStatus =
   | "not_active"
   | "voting_in_progress"
+  | "voting_finished"
   | "delayed"
   | "minor_issue"
   | "serious_incident"

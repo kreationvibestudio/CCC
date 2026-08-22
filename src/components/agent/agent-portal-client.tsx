@@ -154,6 +154,7 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
         <NativeSelect name="status">
           <option value="not_active">Not active</option>
           <option value="voting_in_progress">Voting in progress</option>
+          <option value="voting_finished">Voting finished</option>
           <option value="delayed">Delayed</option>
           <option value="minor_issue">Minor issue</option>
           <option value="serious_incident">Serious incident</option>

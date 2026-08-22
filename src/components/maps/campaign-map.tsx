@@ -18,6 +18,7 @@ export type MapMarker = {
 
 const STATUS_COLORS: Record<string, string> = {
   voting_in_progress: "#22c55e",
+  voting_finished: "#0d9488",
   delayed: "#eab308",
   minor_issue: "#f97316",
   serious_incident: "#ef4444",

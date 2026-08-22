@@ -7,17 +7,29 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://ccc-three-kappa.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ffccfeodymiwwqshphmh.supabase.co"
+      }
     },
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "ios": { "simulator": false }
+      "ios": { "simulator": false },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://ccc-three-kappa.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ffccfeodymiwwqshphmh.supabase.co"
+      }
     },
     "production": {
       "android": { "buildType": "app-bundle" },
       "ios": {
         "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://ccc-three-kappa.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ffccfeodymiwwqshphmh.supabase.co"
       }
     }
   },

@@ -38,19 +38,47 @@ npx expo start
 
 Scan the QR with Expo Go (Android). GPS and camera are limited in Expo Go; a development or preview build is better for field tests.
 
-## Android APK (preview)
+## Android APK — do this on your PC (Git Bash)
 
-Requires an [Expo account](https://expo.dev) and EAS CLI:
+This cloud environment cannot log into Expo for you. The app is already linked to EAS project `4992c0a7-72be-4527-a41d-e23b730ee9ef`. You only sign in and start the build.
+
+1. Create a free account at [https://expo.dev/signup](https://expo.dev/signup) if you do not have one (use the `kreationvibestudio` org if you already created it).
+2. On Windows, open **Git Bash**:
 
 ```bash
-npm i -g eas-cli
-cd apps/agent
+cd /d/CCC
+git fetch origin
+git checkout cursor/agent-mobile-apps-0aee
+git pull origin cursor/agent-mobile-apps-0aee
+
+npm install --global eas-cli
+cd /d/CCC/apps/agent
 eas login
-# project is already linked: extra.eas.projectId in app.json
+```
+
+A browser window opens. Sign in, then return to Git Bash. `eas whoami` should print your Expo username.
+
+3. Put the **anon** key (Supabase → Project Settings → API) in an EAS secret so the APK can sign agents in. Never use the service-role key.
+
+```bash
+cd /d/CCC/apps/agent
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "PASTE_ANON_KEY_HERE"
+```
+
+4. Build the sideload APK (10–20 minutes in Expo’s cloud):
+
+```bash
+cd /d/CCC/apps/agent
 eas build --platform android --profile preview
 ```
 
-`preview` produces an installable APK for internal testers. `production` produces an AAB for Play Console internal track (`eas submit --platform android`).
+If it asks to generate an Android keystore, choose **yes** (first time only).
+
+5. When it finishes, Git Bash prints a URL. Open it, download the `.apk`, copy it to an Android phone, tap to install (allow “unknown sources” if asked).
+
+The same file is also at [https://expo.dev](https://expo.dev) → **CCC Agent** → **Builds**.
+
+`preview` = APK for testers. `production` = `.aab` for Play Console (`eas submit --platform android`).
 
 ## iOS / TestFlight (same project)
 

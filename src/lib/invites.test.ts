@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isMissingRelationError } from "./invites.ts";
+import { isMissingRelationError } from "./public-error.ts";
 
 describe("isMissingRelationError", () => {
   it("detects PostgREST schema-cache misses for tenant_invites", () => {

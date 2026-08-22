@@ -6,8 +6,15 @@ import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
+import { toErrorMessage } from "@/lib/public-error";
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[];
+const KEEP_ROLES = new Set<string>([
+  "super_administrator",
+  "candidate",
+  "campaign_director",
+  "director_general",
+]);
 
 function isUserRole(value: string): value is UserRole {
   return ROLES.includes(value as UserRole);
@@ -33,6 +40,17 @@ export async function inviteUser(formData: FormData) {
     }
 
     const admin = createServiceClient();
+    const { data: existing } = await admin
+      .from("profiles")
+      .select("id, role, email")
+      .eq("tenant_id", adminUser.profile.tenant_id)
+      .ilike("email", email)
+      .limit(5);
+    const already = (existing ?? []).find((row) => row.email?.toLowerCase() === email);
+    if (already && KEEP_ROLES.has(already.role) && already.role !== roleRaw) {
+      return { error: `${email} is already ${already.role.replace(/_/g, " ")} — pick a different email` };
+    }
+
     const password = tempPassword();
     const created = await createInvitedAuthUser(admin, {
       tenantId: adminUser.profile.tenant_id,
@@ -42,7 +60,9 @@ export async function inviteUser(formData: FormData) {
       password,
       invitedBy: adminUser.id,
     });
-    if (created.error || !created.userId) return { error: created.error ?? "User creation failed" };
+    if (created.error || !created.userId) {
+      return { error: toErrorMessage(created.error, "Could not create that login") };
+    }
 
     const { error: profileError } = await admin.from("profiles").upsert(
       {
@@ -56,19 +76,23 @@ export async function inviteUser(formData: FormData) {
       },
       { onConflict: "id" }
     );
-    if (profileError) return { error: profileError.message };
+    if (profileError) return { error: toErrorMessage(profileError, "Could not save the team profile") };
 
     await logAudit("admin.invite", "user", created.userId, { email, role: roleRaw });
     revalidatePath("/admin");
+    revalidatePath("/polling-units/agents");
+    revalidatePath("/agent");
     return {
       success: true as const,
       temporaryPassword: created.created ? password : undefined,
       message: created.created
-        ? `Invited ${email}. Share the temporary password securely; they should change it after first login.`
+        ? roleRaw === "polling_agent"
+          ? `Invited ${email} as Field Agent. Copy the temporary password, then tie them to a polling unit under Polling units → PU Agents.`
+          : `Invited ${email}. Share the temporary password securely; they should change it after first login.`
         : `Updated ${email} in this campaign workspace.`,
     };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Invite failed" };
+    return { error: toErrorMessage(e, "Invite failed") };
   }
 }
 
@@ -101,7 +125,7 @@ export async function updateUserRole(formData: FormData) {
       .update({ role: roleRaw })
       .eq("id", userId)
       .eq("tenant_id", adminUser.profile.tenant_id);
-    if (error) return { error: error.message };
+    if (error) return { error: toErrorMessage(error, "Could not update that role") };
 
     await logAudit("admin.role_change", "user", userId, {
       email: existing.email,
@@ -109,9 +133,10 @@ export async function updateUserRole(formData: FormData) {
       to: roleRaw,
     });
     revalidatePath("/admin");
+    revalidatePath("/agent");
     return { success: true as const };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Role update failed" };
+    return { error: toErrorMessage(e, "Role update failed") };
   }
 }
 

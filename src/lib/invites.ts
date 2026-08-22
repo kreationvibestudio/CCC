@@ -1,23 +1,12 @@
 import { randomBytes } from "crypto";
 import type { UserRole } from "@/types/auth";
 import type { createServiceClient } from "@/lib/supabase/admin";
+import { toErrorMessage, isMissingRelationError } from "./public-error";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
 export function newInviteToken() {
   return randomBytes(24).toString("base64url");
-}
-
-/** PostgREST / Postgres when a table or type was never migrated. */
-export function isMissingRelationError(message: string | undefined, relation: string) {
-  if (!message) return false;
-  const haystack = message.toLowerCase();
-  const name = relation.toLowerCase();
-  return haystack.includes(name) && (
-    haystack.includes("schema cache") ||
-    haystack.includes("does not exist") ||
-    haystack.includes("pgrst205")
-  );
 }
 
 function escapeIlikeExact(value: string) {
@@ -45,7 +34,7 @@ export async function createTenantInvite(
     invited_by: input.invitedBy ?? null,
     expires_at: new Date(Date.now() + days * 86400000).toISOString(),
   });
-  if (error) return { error: error.message, token: null as string | null };
+  if (error) return { error: toErrorMessage(error, "Could not create invitation"), token: null as string | null };
   return { token, error: null as string | null };
 }
 
@@ -73,53 +62,65 @@ export async function createInvitedAuthUser(
     invitedBy?: string | null;
   }
 ) {
-  const email = input.email.trim().toLowerCase();
-  const { data: matches, error: lookupError } = await admin
-    .from("profiles")
-    .select("id, tenant_id, email")
-    .ilike("email", escapeIlikeExact(email))
-    .limit(5);
-  if (lookupError && !isMissingRelationError(lookupError.message, "profiles")) {
-    return { error: lookupError.message };
-  }
-  const existing = (matches ?? []).find((row) => row.email?.toLowerCase() === email) ?? matches?.[0];
-  if (existing && existing.tenant_id !== input.tenantId) {
-    return { error: "This email already belongs to another campaign workspace" };
-  }
-  if (existing) {
-    return { userId: existing.id as string, created: false as const };
-  }
-
-  const invited = await createTenantInvite(admin, {
-    tenantId: input.tenantId,
-    email,
-    role: input.role,
-    invitedBy: input.invitedBy,
-  });
-  if (invited.error && !isMissingRelationError(invited.error, "tenant_invites")) {
-    return { error: invited.error };
-  }
-
-  const { data, error } = await admin.auth.admin.createUser({
-    email,
-    password: input.password,
-    email_confirm: true,
-    user_metadata: {
-      full_name: input.fullName,
-      tenant_id: input.tenantId,
-      role: input.role,
-      ...(invited.token ? { invite_token: invited.token } : {}),
-    },
-  });
-  if (error || !data.user) {
-    const already = /already (been )?registered|already exists|duplicate/i.test(error?.message ?? "");
-    if (already) {
-      const userId = await findAuthUserIdByEmail(email);
-      if (userId) return { userId, created: false as const };
+  try {
+    const email = input.email.trim().toLowerCase();
+    const { data: matches, error: lookupError } = await admin
+      .from("profiles")
+      .select("id, tenant_id, email")
+      .ilike("email", escapeIlikeExact(email))
+      .limit(5);
+    if (lookupError && !isMissingRelationError(lookupError.message, "profiles")) {
+      return { error: toErrorMessage(lookupError, "Could not look up that email") };
     }
-    return { error: error?.message ?? "Could not create login" };
+    const existing = (matches ?? []).find((row) => row.email?.toLowerCase() === email) ?? matches?.[0];
+    if (existing && existing.tenant_id !== input.tenantId) {
+      return { error: "This email already belongs to another campaign workspace" };
+    }
+    if (existing) {
+      return { userId: existing.id as string, created: false as const };
+    }
+
+    let inviteToken: string | undefined;
+    try {
+      const invited = await createTenantInvite(admin, {
+        tenantId: input.tenantId,
+        email,
+        role: input.role,
+        invitedBy: input.invitedBy,
+      });
+      if (invited.error && !isMissingRelationError(invited.error, "tenant_invites")) {
+        return { error: toErrorMessage(invited.error, "Could not create invitation") };
+      }
+      inviteToken = invited.token ?? undefined;
+    } catch (e) {
+      if (!isMissingRelationError(toErrorMessage(e), "tenant_invites")) {
+        return { error: toErrorMessage(e, "Could not create invitation") };
+      }
+    }
+
+    const { data, error } = await admin.auth.admin.createUser({
+      email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: input.fullName,
+        tenant_id: input.tenantId,
+        role: input.role,
+        ...(inviteToken ? { invite_token: inviteToken } : {}),
+      },
+    });
+    if (error || !data.user) {
+      const already = /already (been )?registered|already exists|duplicate/i.test(error?.message ?? "");
+      if (already) {
+        const userId = await findAuthUserIdByEmail(email);
+        if (userId) return { userId, created: false as const };
+      }
+      return { error: toErrorMessage(error, "Could not create login") };
+    }
+    return { userId: data.user.id, created: true as const, inviteToken };
+  } catch (e) {
+    return { error: toErrorMessage(e, "Could not create login") };
   }
-  return { userId: data.user.id, created: true as const, inviteToken: invited.token ?? undefined };
 }
 
 export async function getInviteByToken(admin: Admin, token: string) {

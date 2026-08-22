@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { inviteUser, updateUserRole, zeroCampaignData } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
+import { toErrorMessage } from "@/lib/public-error";
 
 type ProfileRow = {
   id: string;
@@ -87,7 +88,7 @@ export function AdminView({
     startTransition(async () => {
       const result = await inviteUser(formData);
       if (result.error) {
-        toast.error(result.error);
+        toast.error(toErrorMessage(result.error, "Could not invite that user"));
         return;
       }
       if ("temporaryPassword" in result && result.temporaryPassword) {
@@ -111,7 +112,7 @@ export function AdminView({
     startTransition(async () => {
       const result = await zeroCampaignData();
       if (result.error) {
-        toast.error(result.error);
+        toast.error(toErrorMessage(result.error, "Could not reset campaign data"));
         return;
       }
       toast.success(result.message ?? "Campaign data cleared");
@@ -123,7 +124,7 @@ export function AdminView({
     startTransition(async () => {
       const result = await updateUserRole(formData);
       if (result.error) {
-        toast.error(result.error);
+        toast.error(toErrorMessage(result.error, "Could not update that role"));
         return;
       }
       toast.success("Role updated");
@@ -242,6 +243,10 @@ export function AdminView({
                   </option>
                 ))}
               </NativeSelect>
+              <p className="text-xs text-muted-foreground">
+                Field Agents only use the CCC Agent app. After invite, tie them to a unit under Polling
+                units → PU Agents — or create them there in one step.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

@@ -46,7 +46,7 @@ Requires an [Expo account](https://expo.dev) and EAS CLI:
 npm i -g eas-cli
 cd apps/agent
 eas login
-eas init          # writes extra.eas.projectId into app.json
+# project is already linked: extra.eas.projectId in app.json
 eas build --platform android --profile preview
 ```
 

@@ -43,9 +43,10 @@ export async function registerPushToken() {
     });
   }
   try {
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+    const token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
     await agentApi.pushToken(token);
   } catch {
-    /* EAS projectId is required for a real token; preview builds after eas init. */
+    /* Push tokens need a real device and a linked EAS project. */
   }
 }

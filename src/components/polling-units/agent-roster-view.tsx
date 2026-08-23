@@ -203,11 +203,20 @@ export function AgentRosterView({
         toast.error(result.error);
         return;
       }
-      rememberCode({ agentCode: result.agentCode, puCode: rows.find((r) => r.id === id)?.pu_code ?? "", fullName: rows.find((r) => r.id === id)?.agent_name ?? "" });
+      const row = rows.find((r) => r.id === id);
+      rememberCode({
+        agentCode: result.agentCode,
+        puCode: row?.pu_code || row?.code || "",
+        fullName: row?.agent_name ?? "",
+      });
       if (result.agentCode) {
         await copyText(result.agentCode).catch(() => undefined);
         toast.success(`New code ${result.agentCode}. Previous code no longer works.`);
       }
+      const listed = await listAgentAssignments({ search: debounced, page, pageSize: 40 });
+      setRows(listed.rows);
+      setTotal(listed.total);
+      setCodesTableMissing(Boolean(listed.codesTableMissing));
     });
   }
 

@@ -87,6 +87,7 @@ export type AssignmentRow = {
   agent_name: string | null;
   agent_email: string | null;
   agent_phone: string | null;
+  agent_code: string | null;
   agent_code_hint: string | null;
   has_coordinates: boolean;
 };
@@ -133,20 +134,31 @@ export async function listAgentAssignments(input?: {
     .not("assigned_agent_id", "is", null)
     .order("code");
   if (search.length >= 2) {
-    q = q.or(`code.ilike."%${search}%",pu_code.ilike."%${search}%",name.ilike."%${search}%"`);
+    const safe = search.replace(/[%_,()"]/g, "");
+    const { data: nameHits } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("role", "polling_agent")
+      .ilike("full_name", `%${safe}%`);
+    const nameIds = (nameHits ?? []).map((p) => p.id);
+    const puMatch = `code.ilike."%${safe}%",pu_code.ilike."%${safe}%",name.ilike."%${safe}%"`;
+    q = nameIds.length
+      ? q.or(`${puMatch},assigned_agent_id.in.(${nameIds.join(",")})`)
+      : q.or(puMatch);
   }
   const { data, count } = await q.range(from, to);
   const units = data ?? [];
   const agentIds = [...new Set(units.map((u) => u.assigned_agent_id).filter(Boolean))] as string[];
   const names = new Map<string, { full_name: string; email: string; phone: string | null }>();
-  const hints = new Map<string, string>();
+  const codes = new Map<string, { display: string | null; hint: string | null }>();
   let codesTableMissing = false;
   if (agentIds.length) {
     const [{ data: profiles }, codesRes] = await Promise.all([
       supabase.from("profiles").select("id, full_name, email, phone").eq("tenant_id", tenantId).in("id", agentIds),
       supabase
         .from("agent_access_codes")
-        .select("profile_id, code_hint")
+        .select("profile_id, code_hint, code_display")
         .eq("tenant_id", tenantId)
         .in("profile_id", agentIds)
         .is("revoked_at", null),
@@ -154,8 +166,18 @@ export async function listAgentAssignments(input?: {
     for (const p of profiles ?? []) names.set(p.id, p);
     if (codesRes.error && isMissingRelationError(codesRes.error.message, "agent_access_codes")) {
       codesTableMissing = true;
+    } else if (codesRes.error && /code_display/i.test(codesRes.error.message)) {
+      const fallback = await supabase
+        .from("agent_access_codes")
+        .select("profile_id, code_hint")
+        .eq("tenant_id", tenantId)
+        .in("profile_id", agentIds)
+        .is("revoked_at", null);
+      for (const row of fallback.data ?? []) codes.set(row.profile_id, { display: null, hint: row.code_hint });
     } else {
-      for (const row of codesRes.data ?? []) hints.set(row.profile_id, row.code_hint);
+      for (const row of codesRes.data ?? []) {
+        codes.set(row.profile_id, { display: row.code_display ?? null, hint: row.code_hint });
+      }
     }
   }
   return {
@@ -163,6 +185,7 @@ export async function listAgentAssignments(input?: {
     codesTableMissing,
     rows: units.map((u) => {
       const agent = u.assigned_agent_id ? names.get(u.assigned_agent_id) : null;
+      const code = u.assigned_agent_id ? codes.get(u.assigned_agent_id) : null;
       return {
         id: u.id,
         code: u.code,
@@ -174,11 +197,35 @@ export async function listAgentAssignments(input?: {
         agent_name: agent?.full_name ?? null,
         agent_email: agent?.email ?? null,
         agent_phone: agent?.phone ?? null,
-        agent_code_hint: u.assigned_agent_id ? hints.get(u.assigned_agent_id) ?? null : null,
+        agent_code: code?.display ?? null,
+        agent_code_hint: code?.hint ?? null,
         has_coordinates: u.latitude != null && u.longitude != null,
       };
     }),
   };
+}
+
+export async function listAgentCodesByName(): Promise<{
+  rows: { name: string; code: string; puCode: string; unitName: string }[];
+  codesTableMissing?: boolean;
+}> {
+  const listed = await listAgentAssignments({ page: 0, pageSize: 100 });
+  if (!listed.rows.length) return { rows: [], codesTableMissing: listed.codesTableMissing };
+  const missing = listed.rows.filter((row) => row.assigned_agent_id && !row.agent_code);
+  for (const row of missing) {
+    await resetAgentAccessCode(row.id);
+  }
+  const refreshed = missing.length ? await listAgentAssignments({ page: 0, pageSize: 100 }) : listed;
+  const rows = refreshed.rows
+    .filter((row) => row.agent_name)
+    .map((row) => ({
+      name: row.agent_name as string,
+      code: row.agent_code || (row.agent_code_hint ? `…${row.agent_code_hint}` : "—"),
+      puCode: row.pu_code || row.code,
+      unitName: row.name,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  return { rows, codesTableMissing: refreshed.codesTableMissing };
 }
 
 export async function assignPollingAgent(input: {
@@ -226,6 +273,16 @@ export async function assignPollingAgent(input: {
         .limit(5);
       existing =
         (existingRows ?? []).find((row) => row.email?.toLowerCase() === emailInput) ?? existingRows?.[0];
+    } else {
+      const { data: named } = await supabase
+        .from("profiles")
+        .select("id, role, email, full_name")
+        .eq("tenant_id", tenantId)
+        .eq("role", "polling_agent")
+        .ilike("full_name", escapeIlikeExact(fullName))
+        .limit(5);
+      existing =
+        (named ?? []).find((row) => row.full_name?.toLowerCase() === fullName.toLowerCase()) ?? named?.[0];
     }
 
     let userId = existing?.id as string | undefined;
@@ -306,11 +363,12 @@ export async function assignPollingAgent(input: {
 export async function getAgentAccessCodesSql() {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized" as const, sql: "" };
-  const sql = await readFile(
-    join(process.cwd(), "supabase/migrations/20260823000003_agent_access_codes.sql"),
-    "utf8"
-  );
-  return { sql };
+  const files = [
+    "supabase/migrations/20260823000003_agent_access_codes.sql",
+    "supabase/migrations/20260823000004_agent_access_code_display.sql",
+  ];
+  const chunks = await Promise.all(files.map((file) => readFile(join(process.cwd(), file), "utf8")));
+  return { sql: chunks.join("\n\n") };
 }
 
 export async function resetAgentAccessCode(pollingUnitId: string): Promise<{ error?: string; agentCode?: string }> {

@@ -45,6 +45,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260823000001_hq_invite_handle_new_user.sql",
   "supabase/migrations/20260823000002_handle_new_user_never_abort.sql",
   "supabase/migrations/20260823000003_agent_access_codes.sql",
+  "supabase/migrations/20260823000004_agent_access_code_display.sql",
 ];
 
 loadEnvLocal();

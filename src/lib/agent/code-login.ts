@@ -36,10 +36,14 @@ export async function issueAgentAccessCode(input: IssueInput): Promise<{ code?: 
       polling_unit_id: input.pollingUnitId,
       code_hash: hashAgentCode(code),
       code_hint: agentCodeHint(code),
+      code_display: code,
     });
     if (!error) return { code, hint: agentCodeHint(code) };
     if (isMissingRelationError(error.message, "agent_access_codes")) {
-      return { error: "Agent codes need the latest database SQL. Run 20260823000003_agent_access_codes.sql in Supabase." };
+      return { error: "Agent codes need the latest database SQL. Run 20260823000003_agent_access_codes.sql and 20260823000004_agent_access_code_display.sql in Supabase." };
+    }
+    if (/code_display/i.test(error.message) && /column|schema cache|pgrst/i.test(error.message)) {
+      return { error: "Agent codes need the latest database SQL. Run 20260823000004_agent_access_code_display.sql in Supabase." };
     }
     if (!/duplicate|unique/i.test(error.message)) return { error: error.message };
   }

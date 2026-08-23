@@ -13,6 +13,7 @@ import {
   assignPollingAgent,
   getAgentAccessCodesSql,
   listAgentAssignments,
+  listAgentCodesByName,
   nudgeAssignedAgent,
   resetAgentAccessCode,
   unassignPollingAgent,
@@ -43,6 +44,7 @@ export function AgentRosterView({
   const [total, setTotal] = useState(0);
   const [codesTableMissing, setCodesTableMissing] = useState(false);
   const [issued, setIssued] = useState<IssuedCode[]>([]);
+  const [codesByName, setCodesByName] = useState<{ name: string; code: string; puCode: string; unitName: string }[]>([]);
   const [gapLga, setGapLga] = useState("");
   const [gaps, setGaps] = useState<PollingUnitListItem[]>([]);
   const [importing, setImporting] = useState("");
@@ -66,8 +68,22 @@ export function AgentRosterView({
       setRows(result.rows);
       setTotal(result.total);
       setCodesTableMissing(Boolean(result.codesTableMissing));
+      const directory = await listAgentCodesByName();
+      setCodesByName(directory.rows);
+      if (directory.codesTableMissing) setCodesTableMissing(true);
     });
   }, [debounced, page]);
+
+  async function reloadRoster() {
+    const listed = await listAgentAssignments({ search: debounced, page, pageSize: 40 });
+    setRows(listed.rows);
+    setTotal(listed.total);
+    setCodesTableMissing(Boolean(listed.codesTableMissing));
+    const directory = await listAgentCodesByName();
+    setCodesByName(directory.rows);
+    if (directory.codesTableMissing) setCodesTableMissing(true);
+    router.refresh();
+  }
 
   function rememberCode(result: { agentCode?: string; puCode?: string; fullName?: string; email?: string }) {
     if (!result.agentCode) return;
@@ -92,8 +108,14 @@ export function AgentRosterView({
   }
 
   function downloadCodes() {
-    if (!issued.length) return;
-    const csv = ["agent_code,pu_code,agent_name", ...issued.map((c) => `${c.code},${c.puCode},${c.name}`)].join("\n");
+    const source = codesByName.length
+      ? codesByName
+      : issued.map((c) => ({ name: c.name, code: c.code, puCode: c.puCode, unitName: "" }));
+    if (!source.length) return;
+    const csv = [
+      "agent_name,agent_code,pu_code,unit_name",
+      ...source.map((c) => `${c.name},${c.code},${c.puCode},${"unitName" in c ? c.unitName : ""}`),
+    ].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -135,11 +157,7 @@ export function AgentRosterView({
       if (result.missingCoordinates) {
         toast.warning("This polling unit has no map pin. Geocode it or the agent cannot sign in with GPS.");
       }
-      router.refresh();
-      const listed = await listAgentAssignments({ search: debounced, page, pageSize: 40 });
-      setRows(listed.rows);
-      setTotal(listed.total);
-      setCodesTableMissing(Boolean(listed.codesTableMissing));
+      await reloadRoster();
     });
   }
 
@@ -180,7 +198,7 @@ export function AgentRosterView({
     if (missingPin) {
       toast.warning(`${missingPin} unit${missingPin === 1 ? "" : "s"} have no map pin. Agents cannot GPS-check in until you geocode them.`);
     }
-    router.refresh();
+    await reloadRoster();
   }
 
   function handleUnassign(id: string) {
@@ -188,11 +206,7 @@ export function AgentRosterView({
       const result = await unassignPollingAgent(id);
       if (result.error) toast.error(result.error);
       else toast.success("Agent unassigned");
-      const listed = await listAgentAssignments({ search: debounced, page, pageSize: 40 });
-      setRows(listed.rows);
-      setTotal(listed.total);
-      setCodesTableMissing(Boolean(listed.codesTableMissing));
-      router.refresh();
+      await reloadRoster();
     });
   }
 
@@ -213,10 +227,7 @@ export function AgentRosterView({
         await copyText(result.agentCode).catch(() => undefined);
         toast.success(`New code ${result.agentCode}. Previous code no longer works.`);
       }
-      const listed = await listAgentAssignments({ search: debounced, page, pageSize: 40 });
-      setRows(listed.rows);
-      setTotal(listed.total);
-      setCodesTableMissing(Boolean(listed.codesTableMissing));
+      await reloadRoster();
     });
   }
 
@@ -337,30 +348,37 @@ export function AgentRosterView({
         </CardContent>
       </Card>
 
-      {issued.length > 0 && (
+      {codesByName.length > 0 && (
         <Card className="border-amber-500/40">
           <CardHeader>
-            <CardTitle>Agent codes</CardTitle>
+            <CardTitle>Codes by agent</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Shown once. Share the code with the agent. They enter it in CCC Agent while standing at the unit.
+              Every assigned Field Agent, listed by name. Share the code; they enter it in CCC Agent at the unit.
             </p>
             <Button type="button" variant="secondary" onClick={downloadCodes}>
               Download codes CSV
             </Button>
-            <div className="max-h-56 space-y-2 overflow-auto text-sm">
-              {issued.slice(0, 20).map((c) => (
-                <div key={`${c.code}-${c.puCode}`} className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-mono text-base tracking-wide">
-                    {c.code} <span className="text-muted-foreground">· {c.puCode} · {c.name}</span>
-                  </p>
-                  <Button type="button" size="sm" variant="outline" onClick={() => void copyText(c.code).then(() => toast.success("Copied"))}>
-                    Copy
-                  </Button>
+            <div className="max-h-80 space-y-2 overflow-auto text-sm">
+              {codesByName.map((c) => (
+                <div key={`${c.name}-${c.puCode}`} className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium">{c.name}</p>
+                    <p className="font-mono text-base tracking-wide">
+                      {c.code}{" "}
+                      <span className="text-muted-foreground">
+                        · {c.puCode} · {c.unitName}
+                      </span>
+                    </p>
+                  </div>
+                  {c.code.includes("-") ? (
+                    <Button type="button" size="sm" variant="outline" onClick={() => void copyText(c.code).then(() => toast.success("Copied"))}>
+                      Copy
+                    </Button>
+                  ) : null}
                 </div>
               ))}
-              {issued.length > 20 && <p className="text-muted-foreground">+ {issued.length - 20} more in the download</p>}
             </div>
           </CardContent>
         </Card>
@@ -397,7 +415,7 @@ export function AgentRosterView({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by PU code…"
+            placeholder="Search by agent name or PU code…"
             className="max-w-xs"
           />
         </div>
@@ -408,18 +426,28 @@ export function AgentRosterView({
           <Card key={row.id}>
             <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
               <div>
-                <p className="font-medium">
-                  {row.pu_code || row.code} — {row.name}
+                <p className="font-medium">{row.agent_name || "Unnamed agent"}</p>
+                <p className="font-mono text-base tracking-wide">
+                  {row.agent_code || (row.agent_code_hint ? `…${row.agent_code_hint}` : "No code yet")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {row.ward}, {row.lga} · {row.agent_name}
+                  {row.pu_code || row.code} — {row.name} · {row.ward}, {row.lga}
                   {row.agent_email && !row.agent_email.endsWith("@ccc.agent") ? ` · ${row.agent_email}` : ""}
                   {row.agent_phone ? ` · ${row.agent_phone}` : ""}
-                  {row.agent_code_hint ? ` · code …${row.agent_code_hint}` : " · no code yet"}
                   {row.has_coordinates ? "" : " · no map pin"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {row.agent_code?.includes("-") ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void copyText(row.agent_code!).then(() => toast.success("Copied"))}
+                  >
+                    Copy code
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"

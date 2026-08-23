@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Upload } from "lucide-react";
+import { GeocodePinsButton } from "@/components/polling-units/geocode-pins-button";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
@@ -129,7 +130,8 @@ export function PollingUnitsView({
   return (
     <div className="space-y-6">
       <PageHeader title="Polling Units" description="Search the full register by LGA, ward, or PU code">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} />
           <Button variant="outline" asChild>
             <Link href="/polling-units/agents">Assign agents</Link>
           </Button>
@@ -151,7 +153,7 @@ export function PollingUnitsView({
 
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard title="Total PUs" value={summary.puCount.toLocaleString()} />
-        <StatCard title="Mapped" value={summary.mapped.toLocaleString()} />
+        <StatCard title="Mapped" value={`${summary.mapped.toLocaleString()} / ${summary.puCount.toLocaleString()}`} />
         <StatCard title="Registered Voters" value={summary.registeredVoters.toLocaleString()} />
         <StatCard title="Voting Active" value={votingActive.toLocaleString()} />
       </div>
@@ -224,6 +226,18 @@ export function PollingUnitsView({
                 render: (u) => (
                   <Badge variant="secondary">{(u.live_status ?? "not_active").replace(/_/g, " ")}</Badge>
                 ),
+              },
+              {
+                key: "latitude",
+                header: "Pin",
+                render: (u) =>
+                  u.latitude != null && u.longitude != null ? (
+                    <span className="font-mono text-xs">
+                      {Number(u.latitude).toFixed(4)}, {Number(u.longitude).toFixed(4)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">no pin</span>
+                  ),
               },
               {
                 key: "risk_level",

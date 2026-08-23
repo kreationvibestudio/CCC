@@ -274,7 +274,7 @@ export function AgentRosterView({
     <div className="space-y-6">
       <PageHeader
         title="Polling agents"
-        description="Issue an 8-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must match the unit at sign-in."
+        description="Issue an 8-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must match the unit at sign-in. Units without a map pin cannot check in — fill pins from Polling Units first."
       >
         <Button variant="outline" asChild>
           <Link href="/polling-units">Back to polling units</Link>

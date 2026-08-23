@@ -35,25 +35,28 @@ export function parseAgentAssignmentCsv(text: string): AgentCsvRow[] {
   const emailIdx = idx(["email", "e-mail"]);
   const nameIdx = idx(["full_name", "name", "agent", "agent_name"]);
   const phoneIdx = idx(["phone", "mobile", "tel"]);
-  if (puIdx < 0 || emailIdx < 0) return [];
+  if (puIdx < 0) return [];
 
   const rows: AgentCsvRow[] = [];
   for (const line of lines.slice(1)) {
     const cols = splitCsvLine(line);
     const puCode = (cols[puIdx] ?? "").trim();
-    const email = (cols[emailIdx] ?? "").trim().toLowerCase();
-    if (!puCode || !email.includes("@")) continue;
+    const email = (emailIdx >= 0 ? cols[emailIdx] ?? "" : "").trim().toLowerCase();
+    if (!puCode) continue;
+    if (email && !email.includes("@")) continue;
+    const fullName =
+      (nameIdx >= 0 ? cols[nameIdx] : "")?.trim() || (email.includes("@") ? email.split("@")[0] : "");
     rows.push({
       puCode,
       email,
-      fullName: (nameIdx >= 0 ? cols[nameIdx] : "")?.trim() || email.split("@")[0],
+      fullName,
       phone: (phoneIdx >= 0 ? cols[phoneIdx] : "")?.trim() || "",
     });
   }
   return rows;
 }
 
-export const AGENT_CSV_TEMPLATE = `pu_code,email,full_name,phone
-12/03/005,jane.agent@example.com,Jane Agent,08030000001
-12/03/006,john.agent@example.com,John Agent,08030000002
+export const AGENT_CSV_TEMPLATE = `pu_code,full_name,phone,email
+12/03/005,Jane Agent,08030000001,
+12/03/006,John Agent,08030000002,
 `;

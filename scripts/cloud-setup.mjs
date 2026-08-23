@@ -44,6 +44,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260822000002_tenant_invites.sql",
   "supabase/migrations/20260823000001_hq_invite_handle_new_user.sql",
   "supabase/migrations/20260823000002_handle_new_user_never_abort.sql",
+  "supabase/migrations/20260823000003_agent_access_codes.sql",
 ];
 
 loadEnvLocal();
@@ -318,6 +319,11 @@ async function main() {
     if (dbPassword) runSqlFile(rlsFile, ref, dbPassword);
     else await runSqlViaManagement(ref, readFileSync(join(ROOT, rlsFile), "utf8"));
     ok("Operational RLS policies applied");
+    for (const file of MIGRATIONS.slice(4)) {
+      if (dbPassword) runSqlFile(file, ref, dbPassword);
+      else await runSqlViaManagement(ref, readFileSync(join(ROOT, file), "utf8"));
+    }
+    ok("Follow-on migrations applied");
   }
 
   if (!state.seed) {

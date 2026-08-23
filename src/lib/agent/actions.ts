@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
 import { parsePollingUnitStatus } from "@/lib/agent/pu-status";
+import { haversineMeters } from "@/lib/agent/geo";
 import { assertPollingUnitInTenant } from "@/lib/tenancy";
 
 /** User session for auth; service role for writes so missing INSERT policies cannot block agents. */
@@ -165,16 +166,6 @@ export type AgentPollingUnit = {
   longitude: number | null;
   distance_m?: number | null;
 };
-
-function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6371000 * Math.asin(Math.sqrt(a));
-}
 
 function sanitizePuQuery(raw: string) {
   return raw.trim().slice(0, 48).replace(/[%_,()]/g, "");

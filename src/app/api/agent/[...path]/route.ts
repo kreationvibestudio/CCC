@@ -9,6 +9,7 @@ import {
   submitElectionResult,
   updatePuStatus,
 } from "@/lib/agent/actions";
+import { loginWithAgentCode } from "@/lib/agent/code-login";
 import { jsonToFormData } from "@/lib/agent/form-data";
 import { isResponse, jsonError, jsonOk, requireAgentApi } from "@/lib/agent/http";
 import { nudgeAgent, uploadAgentMedia, upsertPushToken } from "@/lib/agent/media";
@@ -91,6 +92,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
 export async function POST(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const key = pathKey({ path });
+
+  if (key === "code-login") {
+    const body = await readJson(request);
+    const result = await loginWithAgentCode({
+      code: String(body.code ?? ""),
+      latitude: Number(body.latitude),
+      longitude: Number(body.longitude),
+    });
+    if (result.error) return cors(jsonError(400, result.error));
+    return cors(jsonOk(result));
+  }
 
   if (key === "session") {
     const agent = await requireAgentApi();

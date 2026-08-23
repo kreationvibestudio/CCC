@@ -20,7 +20,7 @@
     "cloud:audit": "node scripts/cloud-setup.mjs --audit",
     "data:zero": "node scripts/zero-operational-data.mjs",
     "data:zero:audit": "node scripts/zero-operational-data.mjs --audit",
-    "test": "node --experimental-strip-types --test src/lib/auth/bearer.test.ts src/lib/auth/roles.test.ts src/lib/auth/admin-users.test.ts src/lib/agent/http.test.ts src/lib/agent/pu-status.test.ts src/lib/invites.test.ts src/lib/public-error.test.ts apps/agent/src/lagos.test.ts apps/agent/src/parties.test.ts apps/agent/src/payload.test.ts apps/agent/src/theme.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/auth/bearer.test.ts src/lib/auth/roles.test.ts src/lib/auth/admin-users.test.ts src/lib/agent/http.test.ts src/lib/agent/pu-status.test.ts src/lib/agent/geo.test.ts src/lib/agent/access-code.test.ts src/lib/agents/csv.test.ts src/lib/invites.test.ts src/lib/public-error.test.ts apps/agent/src/lagos.test.ts apps/agent/src/parties.test.ts apps/agent/src/payload.test.ts apps/agent/src/theme.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

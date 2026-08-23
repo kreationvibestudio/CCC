@@ -4,7 +4,7 @@ Expo (React Native) field app for polling agents. HQ stays on the web. This app 
 
 ## What it does
 
-- Sign in with the HQ-issued agent email (non-agent accounts are rejected)
+- Sign in with the HQ-issued 8-character agent code while GPS-confirmed at the assigned polling unit (email/password remains as a fallback)
 - Bottom tabs: Unit, Status, Report, Results, Incident
 - Assigned PU shortcuts, GPS nearest (bounded), PU-code search
 - Status, field report, result votes (featured + other INEC parties), incident
@@ -26,6 +26,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 Use the **anon** key only. Never put the service role in the app.
 
 Apply `supabase/migrations/20260822000000_agent_device_tokens.sql` on Supabase so push tokens persist.
+
+Apply `supabase/migrations/20260823000003_agent_access_codes.sql` so HQ can issue agent codes (hash at rest, GPS check at login, 1.5 km).
 
 ## Run locally
 
@@ -68,10 +70,11 @@ There is no second codebase. Android and iOS share `App.tsx`.
 
 ## API contract
 
-All routes require `Authorization: Bearer <supabase access_token>` and `agent.portal`.
+Most routes require `Authorization: Bearer <supabase access_token>` and a Field Agent role.
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| POST | `/api/agent/code-login` | Public. Body `{ code, latitude, longitude }`. GPS must be within 1.5 km of the tied polling unit. Returns a Supabase session. |
 | POST | `/api/agent/session` | Whoami, workspace, result-sheet parties |
 | GET | `/api/agent/assigned-pus` | Assigned units (max 40) |
 | GET | `/api/agent/nearest-pus?lat=&lng=` | Nearest (max 8) |

@@ -165,6 +165,26 @@ export async function findAuthUserIdByEmail(email: string): Promise<string | nul
   return match?.id ?? null;
 }
 
+export async function adminGenerateMagicLink(email: string): Promise<{ hashedToken?: string; error?: string }> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized.includes("@")) return { error: "Valid email is required" };
+  let res: AdminHttpResult | null;
+  try {
+    res = await authAdminRequest("/admin/generate_link", {
+      method: "POST",
+      body: { type: "magiclink", email: normalized },
+    });
+  } catch (e) {
+    return { error: e instanceof Error && e.message.trim() ? e.message.trim() : "Auth admin request failed" };
+  }
+  if (!res) return { error: "SUPABASE_SERVICE_ROLE_KEY is not configured" };
+  if (res.status < 200 || res.status >= 300) return { error: parseGoTrueError(res.status, res.text) };
+  const body = parseJson(res.text) as { hashed_token?: string; properties?: { hashed_token?: string } };
+  const hashedToken = body.hashed_token || body.properties?.hashed_token;
+  if (!hashedToken) return { error: "Auth did not return a sign-in token" };
+  return { hashedToken };
+}
+
 export async function adminCreateAuthUser(input: {
   email: string;
   password: string;

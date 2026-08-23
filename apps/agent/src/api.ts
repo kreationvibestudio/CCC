@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import type { Session } from "@supabase/supabase-js";
 import { API_URL } from "./config";
 import { publicPayload } from "./payload";
 import { getAccessToken, signOut } from "./session";
@@ -35,6 +36,27 @@ export class AgentAuthError extends Error {
   }
 }
 
+export type CodeLoginResult = {
+  session: Session;
+  agent: { id: string; email: string; full_name: string; role: string };
+  unit: AgentUnit;
+};
+
+async function parseAgentResponse<T>(res: Response): Promise<T> {
+  if (res.status === 307 || res.status === 308 || res.status === 405) {
+    throw new Error(
+      "This app reached the HQ website, not the Agent API. Deploy the Agent branch to Vercel production (ccc-three-kappa.vercel.app), then try again."
+    );
+  }
+  const json = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) await signOut();
+    throw new AgentAuthError(json.error || "Unauthorized", res.status);
+  }
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+  return json;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   async function once(token: string | null) {
     const headers = new Headers(init.headers);
@@ -51,21 +73,19 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     token = await getAccessToken(true);
     res = await once(token);
   }
-  if (res.status === 307 || res.status === 308 || res.status === 405) {
-    throw new Error(
-      "This app reached the HQ website, not the Agent API. Deploy the Agent branch to Vercel production (ccc-three-kappa.vercel.app), then try again."
-    );
-  }
-  const json = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (res.status === 401 || res.status === 403) {
-    if (res.status === 401) await signOut();
-    throw new AgentAuthError(json.error || "Unauthorized", res.status);
-  }
-  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
-  return json;
+  return parseAgentResponse<T>(res);
 }
 
 export const agentApi = {
+  async codeLogin(code: string, latitude: number, longitude: number) {
+    const res = await fetch(`${API_URL}/api/agent/code-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, latitude, longitude }),
+      redirect: "manual",
+    });
+    return parseAgentResponse<CodeLoginResult>(res);
+  },
   session: () => request<SessionInfo>("session", { method: "POST" }),
   assigned: () => request<{ units: AgentUnit[] }>("assigned-pus"),
   nearest: (lat: number, lng: number) =>

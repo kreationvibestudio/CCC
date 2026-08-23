@@ -256,8 +256,8 @@ export function AdminView({
                 ))}
               </NativeSelect>
               <p className="text-xs text-muted-foreground">
-                Field Agents only use the CCC Agent app. After invite, tie them to a unit under Polling
-                units → PU Agents — or create them there in one step.
+                Field Agents only use the CCC Agent app. Create them under Polling units → PU Agents to
+                issue an agent code tied to a unit. GPS is checked at sign-in. Email is optional.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

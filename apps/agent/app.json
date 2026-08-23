@@ -16,7 +16,7 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Photograph result sheets and incident evidence for your assigned polling unit.",
         "NSPhotoLibraryUsageDescription": "Attach a result-sheet or incident photo from your library.",
-        "NSLocationWhenInUseUsageDescription": "Find the nearest polling unit from your GPS position.",
+        "NSLocationWhenInUseUsageDescription": "Confirm you are at your assigned polling unit when you sign in, and find nearby units.",
         "UIBackgroundModes": [
           "remote-notification"
         ]
@@ -41,7 +41,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Find the nearest polling unit from your GPS position."
+          "locationWhenInUsePermission": "Confirm you are at your assigned polling unit when you sign in, and find nearby units."
         }
       ],
       [

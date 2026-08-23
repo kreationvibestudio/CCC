@@ -67,9 +67,13 @@ cd /d/CCC/apps/agent
 eas login
 eas whoami
 
+# Skip this line if you already saved the anon key on the last APK build.
 eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "PASTE_ANON_KEY_HERE"
-eas build --platform android --profile preview
+
+eas build --platform android --profile preview --non-interactive
 ```
+
+`--non-interactive` skips the “install on emulator?” prompt (that needs Android Studio / `adb`). The APK download URL still prints when EAS finishes.
 
 ---
 
@@ -79,7 +83,7 @@ You ran `eas login` in the **cloud** terminal, and the browser ran on **your lap
 
 ## Install the APK
 
-Download the `.apk` from the build URL (or expo.dev → CCC Agent → Builds). Sideload on Android. Agents sign in with the HQ-issued email, not Expo.
+Download the `.apk` from the build URL (or expo.dev → CCC Agent → Builds). Sideload on Android. Agents sign in with the **HQ-issued 8-character code** at their polling unit (GPS is checked). Email/password is only a fallback. Do not put HQ Super Admin emails in the app.
 
-The APK talks to **production** `https://ccc-three-kappa.vercel.app`. That site must include `/api/agent/*`. If sign-in shows **405**, production is still the old HQ (it redirects the phone to `/login`). Merge/deploy this branch to Vercel production, then sign in again — no new APK required for that fix.
+The APK talks to **production** `https://ccc-three-kappa.vercel.app`. That deploy must include `POST /api/agent/code-login` (this branch) and the `agent_access_codes` SQL. If code sign-in shows **405**, production is still the old HQ. Deploy this branch to Vercel, then try again — no extra APK for that API fix, but you **do** need this APK for the new login screen.
 

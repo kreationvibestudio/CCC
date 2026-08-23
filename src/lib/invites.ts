@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import type { UserRole } from "@/types/auth";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { toErrorMessage, isMissingRelationError } from "./public-error";
+import { adminCreateAuthUser } from "./auth/admin-users";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -36,19 +37,6 @@ export async function createTenantInvite(
   });
   if (error) return { error: toErrorMessage(error, "Could not create invitation"), token: null as string | null };
   return { token, error: null as string | null };
-}
-
-async function findAuthUserIdByEmail(email: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  const res = await fetch(`${url}/auth/v1/admin/users?filter=${encodeURIComponent(email)}`, {
-    headers: { Authorization: `Bearer ${key}`, apikey: key },
-  });
-  if (!res.ok) return null;
-  const body = (await res.json()) as { users?: { id: string; email?: string }[] };
-  const match = (body.users ?? []).find((user) => user.email?.toLowerCase() === email);
-  return match?.id ?? null;
 }
 
 export async function createInvitedAuthUser(
@@ -98,26 +86,18 @@ export async function createInvitedAuthUser(
       }
     }
 
-    const { data, error } = await admin.auth.admin.createUser({
+    const created = await adminCreateAuthUser({
       email,
       password: input.password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: input.fullName,
-        tenant_id: input.tenantId,
-        role: input.role,
-        ...(inviteToken ? { invite_token: inviteToken } : {}),
-      },
+      fullName: input.fullName,
+      tenantId: input.tenantId,
+      role: input.role,
+      inviteToken,
     });
-    if (error || !data.user) {
-      const already = /already (been )?registered|already exists|duplicate/i.test(error?.message ?? "");
-      if (already) {
-        const userId = await findAuthUserIdByEmail(email);
-        if (userId) return { userId, created: false as const };
-      }
-      return { error: toErrorMessage(error, "Could not create login") };
+    if (created.error || !created.userId) {
+      return { error: toErrorMessage(created.error, "Could not create login") };
     }
-    return { userId: data.user.id, created: true as const, inviteToken };
+    return { userId: created.userId, created: Boolean(created.created), inviteToken };
   } catch (e) {
     return { error: toErrorMessage(e, "Could not create login") };
   }

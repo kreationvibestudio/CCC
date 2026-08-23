@@ -11,10 +11,11 @@ export function toErrorMessage(error: unknown, fallback = "Something went wrong"
   }
   if (typeof error === "object") {
     const rec = error as Record<string, unknown>;
-    for (const key of ["message", "error", "details", "hint"]) {
+    for (const key of ["message", "error", "details", "hint", "msg", "error_description"]) {
       const value = rec[key];
       if (typeof value === "string" && value.trim() && value.trim() !== "{}") return value.trim();
     }
+    if ("originalError" in rec) return toErrorMessage(rec.originalError, fallback);
   }
   return fallback;
 }

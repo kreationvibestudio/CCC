@@ -15,6 +15,7 @@ describe("toErrorMessage", () => {
     class AuthShapedError extends Error {}
     const auth = new AuthShapedError("A user with this email address has already been registered");
     assert.equal(JSON.stringify(auth), "{}");
+    assert.equal(toErrorMessage({ msg: "Database error creating new user" }), "Database error creating new user");
     assert.equal(toErrorMessage(auth), "A user with this email address has already been registered");
   });
 });

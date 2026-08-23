@@ -42,6 +42,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260820000007_polling_agent_assignment.sql",
   "supabase/migrations/20260822000001_pu_status_voting_finished.sql",
   "supabase/migrations/20260822000002_tenant_invites.sql",
+  "supabase/migrations/20260823000001_hq_invite_handle_new_user.sql",
 ];
 
 loadEnvLocal();

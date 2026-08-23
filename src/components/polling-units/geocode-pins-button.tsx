@@ -27,6 +27,12 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
 
   useEffect(() => {
     setRemaining(Math.max(0, total - mapped));
+    void fetch("/api/polling-units/geocode")
+      .then((res) => res.json() as Promise<{ remaining?: number }>)
+      .then((data) => {
+        if (typeof data.remaining === "number") setRemaining(data.remaining);
+      })
+      .catch(() => undefined);
   }, [mapped, total]);
 
   async function run(retryFailed: boolean) {

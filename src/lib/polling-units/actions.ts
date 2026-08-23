@@ -85,11 +85,19 @@ export async function getPollingUnitSummary(filters?: {
   }
   const user = await getCurrentUser();
   if (!user) return { puCount: 0, registeredVoters: 0, mapped: 0 };
-  const { count } = await supabase
-    .from("polling_units")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", user.profile.tenant_id);
-  return { puCount: count ?? 0, registeredVoters: 0, mapped: 0 };
+  const [{ count: puCount }, { count: mapped }] = await Promise.all([
+    supabase
+      .from("polling_units")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", user.profile.tenant_id),
+    supabase
+      .from("polling_units")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", user.profile.tenant_id)
+      .not("latitude", "is", null)
+      .not("longitude", "is", null),
+  ]);
+  return { puCount: puCount ?? 0, registeredVoters: 0, mapped: mapped ?? 0 };
 }
 
 export async function countVotingActive(): Promise<number> {

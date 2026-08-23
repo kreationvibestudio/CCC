@@ -179,6 +179,11 @@ export async function listAgentAssignments(input?: {
         codes.set(row.profile_id, { display: row.code_display ?? null, hint: row.code_hint });
       }
     }
+  } else {
+    const probe = await supabase.from("agent_access_codes").select("id").eq("tenant_id", tenantId).limit(1);
+    if (probe.error && isMissingRelationError(probe.error.message, "agent_access_codes")) {
+      codesTableMissing = true;
+    }
   }
   return {
     total: count ?? units.length,

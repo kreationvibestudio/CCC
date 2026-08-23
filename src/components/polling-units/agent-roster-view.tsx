@@ -68,9 +68,13 @@ export function AgentRosterView({
       setRows(result.rows);
       setTotal(result.total);
       setCodesTableMissing(Boolean(result.codesTableMissing));
-      const directory = await listAgentCodesByName();
-      setCodesByName(directory.rows);
-      if (directory.codesTableMissing) setCodesTableMissing(true);
+      try {
+        const directory = await listAgentCodesByName();
+        setCodesByName(directory.rows);
+        if (directory.codesTableMissing) setCodesTableMissing(true);
+      } catch {
+        setCodesByName([]);
+      }
     });
   }, [debounced, page]);
 
@@ -79,9 +83,13 @@ export function AgentRosterView({
     setRows(listed.rows);
     setTotal(listed.total);
     setCodesTableMissing(Boolean(listed.codesTableMissing));
-    const directory = await listAgentCodesByName();
-    setCodesByName(directory.rows);
-    if (directory.codesTableMissing) setCodesTableMissing(true);
+    try {
+      const directory = await listAgentCodesByName();
+      setCodesByName(directory.rows);
+      if (directory.codesTableMissing) setCodesTableMissing(true);
+    } catch {
+      setCodesByName([]);
+    }
     router.refresh();
   }
 
@@ -291,6 +299,49 @@ export function AgentRosterView({
         <StatCard title="Polling agent logins" value={agents.toLocaleString()} change="CCC Agent app codes" />
       </div>
 
+      <Card className="border-amber-500/40">
+        <CardHeader>
+          <CardTitle>Codes by agent</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Every assigned Field Agent, listed by name. Share the code; they enter it in CCC Agent at the unit.
+          </p>
+          {codesByName.length > 0 ? (
+            <>
+              <Button type="button" variant="secondary" onClick={downloadCodes}>
+                Download codes CSV
+              </Button>
+              <div className="max-h-80 space-y-2 overflow-auto text-sm">
+                {codesByName.map((c) => (
+                  <div key={`${c.name}-${c.puCode}`} className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{c.name}</p>
+                      <p className="font-mono text-base tracking-wide">
+                        {c.code}{" "}
+                        <span className="text-muted-foreground">
+                          · {c.puCode} · {c.unitName}
+                        </span>
+                      </p>
+                    </div>
+                    {c.code.includes("-") ? (
+                      <Button type="button" size="sm" variant="outline" onClick={() => void copyText(c.code).then(() => toast.success("Copied"))}>
+                        Copy
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm">
+              No Field Agent is tied to a polling unit yet. Use <span className="font-medium">Assign one agent</span> below
+              with a name and PU code. The code will show here next to that name.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Assign one agent</CardTitle>
@@ -347,42 +398,6 @@ export function AgentRosterView({
           </div>
         </CardContent>
       </Card>
-
-      {codesByName.length > 0 && (
-        <Card className="border-amber-500/40">
-          <CardHeader>
-            <CardTitle>Codes by agent</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Every assigned Field Agent, listed by name. Share the code; they enter it in CCC Agent at the unit.
-            </p>
-            <Button type="button" variant="secondary" onClick={downloadCodes}>
-              Download codes CSV
-            </Button>
-            <div className="max-h-80 space-y-2 overflow-auto text-sm">
-              {codesByName.map((c) => (
-                <div key={`${c.name}-${c.puCode}`} className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{c.name}</p>
-                    <p className="font-mono text-base tracking-wide">
-                      {c.code}{" "}
-                      <span className="text-muted-foreground">
-                        · {c.puCode} · {c.unitName}
-                      </span>
-                    </p>
-                  </div>
-                  {c.code.includes("-") ? (
-                    <Button type="button" size="sm" variant="outline" onClick={() => void copyText(c.code).then(() => toast.success("Copied"))}>
-                      Copy
-                    </Button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

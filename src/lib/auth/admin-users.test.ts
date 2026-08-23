@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { authUserIdFromBody, parseGoTrueError, isAlreadyRegistered } from "./admin-users.ts";
+import {
+  authUserIdFromBody,
+  parseGoTrueError,
+  isAlreadyRegistered,
+  isTriggerCreateError,
+  hqCreateUserBodies,
+} from "./admin-users.ts";
 
 describe("authUserIdFromBody", () => {
   it("reads GoTrue admin createUser payloads", () => {
@@ -24,5 +30,23 @@ describe("parseGoTrueError", () => {
     assert.equal(parseGoTrueError(500, "{}"), "Auth admin HTTP 500 (500)");
     assert.equal(isAlreadyRegistered(422, "email_exists (422)"), true);
     assert.equal(isAlreadyRegistered(500, "Database error creating new user (500)"), false);
+    assert.equal(isTriggerCreateError(500, "Database error creating new user (500)"), true);
+    assert.equal(isTriggerCreateError(401, "Invalid API key"), false);
+  });
+});
+
+describe("hqCreateUserBodies", () => {
+  it("retries without role so a bad user_role cast cannot block HQ invites", () => {
+    const bodies = hqCreateUserBodies({
+      email: "fa@example.com",
+      password: "Passw0rd!aaa",
+      fullName: "Field Agent",
+      tenantId: "a0000000-0000-0000-0000-000000000001",
+      role: "polling_agent",
+    });
+    assert.equal(bodies.length, 3);
+    assert.equal(bodies[0].user_metadata.role, "polling_agent");
+    assert.equal("role" in bodies[1].user_metadata, false);
+    assert.equal("tenant_id" in bodies[2].user_metadata, false);
   });
 });

@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { inviteUser, updateUserRole, zeroCampaignData } from "@/lib/admin/actions";
+import { inviteUser, updateUserRole, zeroCampaignData, getInviteRepairSql } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
 
@@ -80,6 +80,18 @@ export function AdminView({
     }
     void navigator.clipboard.writeText(donateUrl);
     toast.success("Campaign donate page copied");
+  }
+
+  function copyInviteRepairSql() {
+    startTransition(async () => {
+      try {
+        const sql = await getInviteRepairSql();
+        await navigator.clipboard.writeText(sql);
+        toast.success("SQL copied. Paste it in the Supabase SQL editor and click Run.");
+      } catch {
+        toast.error("Could not copy the repair SQL");
+      }
+    });
   }
 
   const webhookUrl = donateUrl ? `${donateUrl.replace(/\/donate$/, "")}/api/donations/webhook` : "";
@@ -270,6 +282,22 @@ export function AdminView({
               <code className="font-mono text-foreground">{invitePassword}</code>
             </p>
           )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            If invite shows “Database error creating new user”, the cloud signup trigger needs a one-time
+            SQL fix.{" "}
+            <button type="button" className="underline" onClick={copyInviteRepairSql} disabled={pending}>
+              Copy SQL
+            </button>
+            {" · "}
+            <a
+              className="underline"
+              href="https://supabase.com/dashboard/project/ffccfeodymiwwqshphmh/sql/new"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open SQL editor
+            </a>
+          </p>
         </CardContent>
       </Card>
 

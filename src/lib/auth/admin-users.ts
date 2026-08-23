@@ -57,6 +57,43 @@ export function isAlreadyRegistered(status: number, message: string) {
   return status === 422 || /already (been )?registered|email_exists|already exists|duplicate/i.test(message);
 }
 
+export function isTriggerCreateError(status: number, message: string) {
+  return status >= 500 || /database error creating new user|signup requires an invitation/i.test(message);
+}
+
+export function hqCreateUserBodies(input: {
+  email: string;
+  password: string;
+  fullName: string;
+  tenantId: string;
+  role: UserRole;
+}) {
+  const tenantId = String(input.tenantId);
+  const full_name = input.fullName;
+  const role = input.role;
+  return [
+    {
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      app_metadata: { tenant_id: tenantId, role, hq_invite: true },
+      user_metadata: { full_name, tenant_id: tenantId, role },
+    },
+    {
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: { full_name, tenant_id: tenantId },
+    },
+    {
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: { full_name },
+    },
+  ];
+}
+
 type AdminHttpResult = { status: number; text: string };
 
 /**
@@ -138,41 +175,36 @@ export async function adminCreateAuthUser(input: {
 }): Promise<{ userId?: string; created?: boolean; error?: string }> {
   if (!authAdminConfig()) return { error: "SUPABASE_SERVICE_ROLE_KEY is not configured" };
 
-  let res: AdminHttpResult;
-  try {
-    const posted = await authAdminRequest("/admin/users", {
-      method: "POST",
-      body: {
-        email: input.email,
-        password: input.password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: input.fullName,
-          tenant_id: input.tenantId,
-          role: input.role,
-          ...(input.inviteToken ? { invite_token: input.inviteToken } : {}),
-        },
-      },
-    });
-    if (!posted) return { error: "SUPABASE_SERVICE_ROLE_KEY is not configured" };
-    res = posted;
-  } catch (e) {
-    const message = e instanceof Error && e.message.trim() ? e.message.trim() : "Auth admin request failed";
-    return { error: message };
-  }
+  const bodies = hqCreateUserBodies(input);
+  let lastError = "Could not create login";
 
-  const body = parseJson(res.text);
+  for (const body of bodies) {
+    let res: AdminHttpResult;
+    try {
+      const posted = await authAdminRequest("/admin/users", { method: "POST", body });
+      if (!posted) return { error: "SUPABASE_SERVICE_ROLE_KEY is not configured" };
+      res = posted;
+    } catch (e) {
+      lastError = e instanceof Error && e.message.trim() ? e.message.trim() : "Auth admin request failed";
+      continue;
+    }
 
-  if (res.status < 200 || res.status >= 300) {
+    if (res.status >= 200 && res.status < 300) {
+      const userId = authUserIdFromBody(parseJson(res.text)) ?? (await findAuthUserIdByEmail(input.email));
+      if (!userId) return { error: "Auth created a login but did not return a user id" };
+      return { userId, created: true };
+    }
+
     const message = parseGoTrueError(res.status, res.text);
     if (isAlreadyRegistered(res.status, message)) {
       const userId = await findAuthUserIdByEmail(input.email);
       if (userId) return { userId, created: false };
     }
-    return { error: message };
+    lastError = message;
+    if (!isTriggerCreateError(res.status, message)) return { error: message };
   }
 
-  const userId = authUserIdFromBody(body) ?? (await findAuthUserIdByEmail(input.email));
-  if (!userId) return { error: "Auth created a login but did not return a user id" };
-  return { userId, created: true };
+  const existing = await findAuthUserIdByEmail(input.email);
+  if (existing) return { userId: existing, created: false };
+  return { error: lastError };
 }

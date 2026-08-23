@@ -68,6 +68,20 @@ export async function createInvitedAuthUser(
       return { userId: existing.id as string, created: false as const };
     }
 
+    // Create the Auth user first. Inserting tenant_invites beforehand can make
+    // an invite-only handle_new_user look up a row it cannot see (RLS, auth.uid
+    // is null in the trigger) and abort with "Database error creating new user".
+    const created = await adminCreateAuthUser({
+      email,
+      password: input.password,
+      fullName: input.fullName,
+      tenantId: input.tenantId,
+      role: input.role,
+    });
+    if (created.error || !created.userId) {
+      return { error: toErrorMessage(created.error, "Could not create login") };
+    }
+
     let inviteToken: string | undefined;
     try {
       const invited = await createTenantInvite(admin, {
@@ -76,26 +90,9 @@ export async function createInvitedAuthUser(
         role: input.role,
         invitedBy: input.invitedBy,
       });
-      if (invited.error && !isMissingRelationError(invited.error, "tenant_invites")) {
-        return { error: toErrorMessage(invited.error, "Could not create invitation") };
-      }
-      inviteToken = invited.token ?? undefined;
-    } catch (e) {
-      if (!isMissingRelationError(toErrorMessage(e), "tenant_invites")) {
-        return { error: toErrorMessage(e, "Could not create invitation") };
-      }
-    }
-
-    const created = await adminCreateAuthUser({
-      email,
-      password: input.password,
-      fullName: input.fullName,
-      tenantId: input.tenantId,
-      role: input.role,
-      inviteToken,
-    });
-    if (created.error || !created.userId) {
-      return { error: toErrorMessage(created.error, "Could not create login") };
+      if (!invited.error) inviteToken = invited.token ?? undefined;
+    } catch {
+      // Join-link ledger is optional when the table was never migrated.
     }
     return { userId: created.userId, created: Boolean(created.created), inviteToken };
   } catch (e) {

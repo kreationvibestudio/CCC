@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
@@ -61,7 +63,13 @@ export async function inviteUser(formData: FormData) {
       invitedBy: adminUser.id,
     });
     if (created.error || !created.userId) {
-      return { error: toErrorMessage(created.error, "Could not create that login") };
+      const raw = toErrorMessage(created.error, "Could not create that login");
+      if (/database error creating new user|signup requires an invitation/i.test(raw)) {
+        return {
+          error: `${raw}. Paste supabase/migrations/20260823000002_handle_new_user_never_abort.sql in the Supabase SQL editor and run it, then invite again.`,
+        };
+      }
+      return { error: raw };
     }
 
     const { error: profileError } = await admin.from("profiles").upsert(
@@ -170,6 +178,14 @@ export async function getSecretsStatus() {
     cronSecret: isLiveSecret(process.env.CRON_SECRET, 16),
     paystackSecret: isLiveSecret(process.env.PAYSTACK_SECRET_KEY, 20),
   };
+}
+
+export async function getInviteRepairSql() {
+  await requirePermission("admin.users");
+  return readFile(
+    join(process.cwd(), "supabase/migrations/20260823000002_handle_new_user_never_abort.sql"),
+    "utf8"
+  );
 }
 
 const OPERATIONAL_TABLES = [

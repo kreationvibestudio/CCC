@@ -192,20 +192,24 @@ async function deletePollingUnitsById(
   ids: string[]
 ): Promise<void> {
   if (!ids.length) return;
-  const { error: resultsError } = await supabase.from("election_results").delete().in("polling_unit_id", ids);
-  if (resultsError) throw new Error(resultsError.message);
-  const { error: incidentsError } = await supabase
-    .from("incident_reports")
-    .update({ polling_unit_id: null })
-    .in("polling_unit_id", ids);
-  if (incidentsError) throw new Error(incidentsError.message);
-  const { error: reportsError } = await supabase
-    .from("agent_reports")
-    .update({ polling_unit_id: null })
-    .in("polling_unit_id", ids);
-  if (reportsError) throw new Error(reportsError.message);
-  const { error: deleteError } = await supabase.from("polling_units").delete().eq("tenant_id", tenantId).in("id", ids);
-  if (deleteError) throw new Error(deleteError.message);
+  const chunkSize = 50;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { error: resultsError } = await supabase.from("election_results").delete().in("polling_unit_id", chunk);
+    if (resultsError) throw new Error(resultsError.message);
+    const { error: incidentsError } = await supabase
+      .from("incident_reports")
+      .update({ polling_unit_id: null })
+      .in("polling_unit_id", chunk);
+    if (incidentsError) throw new Error(incidentsError.message);
+    const { error: reportsError } = await supabase
+      .from("agent_reports")
+      .update({ polling_unit_id: null })
+      .in("polling_unit_id", chunk);
+    if (reportsError) throw new Error(reportsError.message);
+    const { error: deleteError } = await supabase.from("polling_units").delete().eq("tenant_id", tenantId).in("id", chunk);
+    if (deleteError) throw new Error(deleteError.message);
+  }
 }
 
 export async function pruneNonCampaignPollingUnits(
@@ -213,7 +217,16 @@ export async function pruneNonCampaignPollingUnits(
   tenantId: string,
   limit = 400
 ): Promise<{ pruned: number; remaining: number }> {
-  const page = Math.min(Math.max(limit, 1), 1000);
+  const page = Math.min(Math.max(limit, 1), 5000);
+  const rpc = await supabase.rpc("prune_non_campaign_polling_units", {
+    p_tenant_id: tenantId,
+    p_limit: page,
+  });
+  if (!rpc.error && rpc.data && typeof rpc.data === "object") {
+    const data = rpc.data as { pruned?: number; remaining?: number };
+    return { pruned: Number(data.pruned ?? 0), remaining: Number(data.remaining ?? 0) };
+  }
+
   const { data, error } = await supabase
     .from("polling_units")
     .select("id, state, state_code, code")
@@ -253,7 +266,7 @@ export async function syncInecRegisterBatch(
   options?: { state?: string; offset?: number; limit?: number; pruneOnly?: boolean }
 ): Promise<InecSyncResult> {
   if (options?.pruneOnly) {
-    const prune = await pruneNonCampaignPollingUnits(supabase, tenantId, options.limit ?? 400);
+    const prune = await pruneNonCampaignPollingUnits(supabase, tenantId, options.limit ?? 2000);
     return {
       state: CAMPAIGN_STATE,
       fileName: "edo.json",
@@ -343,7 +356,7 @@ export async function syncInecRegisterBatch(
   let pruned = 0;
   let pruneRemaining = 0;
   if (stateRemaining === 0) {
-    const prune = await pruneNonCampaignPollingUnits(supabase, tenantId, 400);
+    const prune = await pruneNonCampaignPollingUnits(supabase, tenantId, 2000);
     pruned = prune.pruned;
     pruneRemaining = prune.remaining;
   }

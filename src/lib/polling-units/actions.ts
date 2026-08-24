@@ -51,18 +51,37 @@ export type PollingUnitSummary = {
   mapped: number;
 };
 
+async function listCampaignNames(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  column: "lga" | "ward",
+  lga?: string
+): Promise<string[]> {
+  const names = new Set<string>();
+  const pageSize = 1000;
+  for (let from = 0; from < 20000; from += pageSize) {
+    let q = applyCampaignStateFilter(
+      supabase.from("polling_units").select(column).eq("tenant_id", tenantId)
+    )
+      .not(column, "is", null)
+      .order("code");
+    if (lga) q = q.eq("lga", lga);
+    const { data } = await q.range(from, from + pageSize - 1);
+    const rows = (data ?? []) as Array<Record<string, string | null>>;
+    for (const row of rows) {
+      const value = row[column];
+      if (value) names.add(value);
+    }
+    if (rows.length < pageSize) break;
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
 export async function getPollingUnitLgas(): Promise<string[]> {
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) return [];
-  const { data } = await applyCampaignStateFilter(
-    supabase.from("polling_units").select("lga").eq("tenant_id", user.profile.tenant_id)
-  )
-    .not("lga", "is", null)
-    .limit(10000);
-  const names = [...new Set((data ?? []).map((row) => row.lga).filter(Boolean) as string[])];
-  names.sort((a, b) => a.localeCompare(b));
-  return names;
+  return listCampaignNames(supabase, user.profile.tenant_id, "lga");
 }
 
 export async function getPollingUnitWards(lga: string): Promise<string[]> {
@@ -70,14 +89,7 @@ export async function getPollingUnitWards(lga: string): Promise<string[]> {
   const user = await getCurrentUser();
   const trimmed = lga.trim();
   if (!user || !trimmed) return [];
-  const { data } = await applyCampaignStateFilter(
-    supabase.from("polling_units").select("ward").eq("tenant_id", user.profile.tenant_id).eq("lga", trimmed)
-  )
-    .not("ward", "is", null)
-    .limit(10000);
-  const names = [...new Set((data ?? []).map((row) => row.ward).filter(Boolean) as string[])];
-  names.sort((a, b) => a.localeCompare(b));
-  return names;
+  return listCampaignNames(supabase, user.profile.tenant_id, "ward", trimmed);
 }
 
 export async function getPollingUnitSummary(filters?: {
@@ -87,18 +99,41 @@ export async function getPollingUnitSummary(filters?: {
   const user = await getCurrentUser();
   if (!user) return { puCount: 0, registeredVoters: 0, mapped: 0 };
   const supabase = await createClient();
-  let base = applyCampaignStateFilter(
-    supabase.from("polling_units").select("id, registered_voters, latitude, longitude").eq("tenant_id", user.profile.tenant_id)
+
+  let countQuery = applyCampaignStateFilter(
+    supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", user.profile.tenant_id)
   );
-  if (filters?.lga) base = base.eq("lga", filters.lga);
-  if (filters?.ward) base = base.eq("ward", filters.ward);
-  const { data } = await base.limit(10000);
-  const rows = data ?? [];
-  return {
-    puCount: rows.length,
-    registeredVoters: rows.reduce((sum, row) => sum + Number(row.registered_voters ?? 0), 0),
-    mapped: rows.filter((row) => row.latitude != null && row.longitude != null).length,
-  };
+  let mappedQuery = applyCampaignStateFilter(
+    supabase
+      .from("polling_units")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", user.profile.tenant_id)
+      .not("latitude", "is", null)
+      .not("longitude", "is", null)
+  );
+  if (filters?.lga) {
+    countQuery = countQuery.eq("lga", filters.lga);
+    mappedQuery = mappedQuery.eq("lga", filters.lga);
+  }
+  if (filters?.ward) {
+    countQuery = countQuery.eq("ward", filters.ward);
+    mappedQuery = mappedQuery.eq("ward", filters.ward);
+  }
+  const [{ count: puCount }, { count: mapped }] = await Promise.all([countQuery, mappedQuery]);
+  let registeredVoters = 0;
+  const pageSize = 1000;
+  for (let from = 0; from < 20000; from += pageSize) {
+    let q = applyCampaignStateFilter(
+      supabase.from("polling_units").select("registered_voters").eq("tenant_id", user.profile.tenant_id)
+    ).order("code");
+    if (filters?.lga) q = q.eq("lga", filters.lga);
+    if (filters?.ward) q = q.eq("ward", filters.ward);
+    const { data } = await q.range(from, from + pageSize - 1);
+    const rows = data ?? [];
+    registeredVoters += rows.reduce((sum, row) => sum + Number(row.registered_voters ?? 0), 0);
+    if (rows.length < pageSize) break;
+  }
+  return { puCount: puCount ?? 0, registeredVoters, mapped: mapped ?? 0 };
 }
 
 export async function countVotingActive(): Promise<number> {

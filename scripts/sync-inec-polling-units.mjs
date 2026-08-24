@@ -17,7 +17,7 @@ const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const tenantId = process.env.TENANT_ID ?? "a0000000-0000-0000-0000-000000000001";
 const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="))?.split("=")[1];
-const limit = limitArg ? parseInt(limitArg, 10) : 1000;
+const limit = limitArg ? parseInt(limitArg, 10) : 2000;
 
 if (!url || !key) {
   console.error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");

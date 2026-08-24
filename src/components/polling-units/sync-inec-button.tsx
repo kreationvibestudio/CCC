@@ -41,7 +41,7 @@ export function SyncInecRegisterButton() {
         const res = await fetch("/api/polling-units/sync-inec", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ offset, limit: 400, pruneOnly }),
+          body: JSON.stringify({ offset, limit: pruneOnly ? 2000 : 400, pruneOnly }),
         });
         const data = (await res.json()) as SyncResponse;
         if (!res.ok) {

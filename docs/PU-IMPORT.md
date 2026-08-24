@@ -30,7 +30,10 @@ Polling Units → **Format PU codes** rewrites existing rows. Import also format
 
 HQ is confined to **Edo State**. Search, assign, maps, and Field Agent lookup only return Edo units (`EDO/…` or INEC `12/…`).
 
-Polling Units → **Load Edo INEC PUs** downloads INEC’s Edo directory and **removes units from every other state**.
+Polling Units → **Load Edo INEC PUs** downloads INEC’s Edo directory and **removes units from every other state**. Production also needs these SQL files applied once (or `npm run cloud:setup`):
+
+- `supabase/migrations/20260824000000_edo_only_polling_units.sql`
+- `supabase/migrations/20260824000001_prune_non_edo_polling_units.sql`
 
 CLI (uses `.env.local` — local DB unless that file points at production):
 
@@ -102,5 +105,7 @@ Run in Supabase SQL Editor (or local `supabase db reset`):
 
 1. `supabase/migrations/20250201000000_polling_units_geocode.sql`
 2. `supabase/migrations/20250202000000_polling_units_inec_fields.sql`
+3. `supabase/migrations/20260824000000_edo_only_polling_units.sql`
+4. `supabase/migrations/20260824000001_prune_non_edo_polling_units.sql`
 
 Adds `geocode_status`, INEC code columns, and indexes.

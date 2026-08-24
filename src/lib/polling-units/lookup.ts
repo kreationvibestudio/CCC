@@ -82,23 +82,30 @@ export function unitMatchesLookupQuery(unit: PollingUnitLookupRow, raw: string):
 export function pollingUnitSearchOrFilter(raw: string): string {
   const query = sanitizePuLookupQuery(raw);
   if (query.length < 2) return "";
-  const clauses = [`code.ilike."%${query}%"`, `pu_code.ilike."%${query}%"`, `name.ilike."%${query}%"`];
-  for (const variant of codeLookupVariants(query).slice(0, 6)) {
-    const safe = sanitizePuLookupQuery(variant);
-    if (!safe) continue;
-    clauses.push(`code.eq."${safe}"`, `pu_code.eq."${safe}"`);
-  }
   const parsed = parsePollingUnitCode(query);
+  const clauses: string[] = [];
+
   if (parsed) {
-    clauses.push(`and(ward_code.eq.${parsed.ward},pu_code.eq.${parsed.pu})`);
+    const formatted = formatPollingUnitCodeFromParts(parsed);
     const delim = inecNumericCodeFromParts(parsed);
+    clauses.push(`code.eq."${formatted}"`, `code.ilike."%${formatted}%"`);
     if (delim) {
       const [stateCode, lgCode, wardCode, puCode] = delim.split("/");
+      clauses.push(`code.eq."${delim}"`);
       clauses.push(
         `and(state_code.eq.${stateCode},lg_code.eq.${lgCode},ward_code.eq.${wardCode},pu_code.eq.${puCode})`
       );
+      clauses.push(`and(lg_code.eq.${lgCode},ward_code.eq.${wardCode},pu_code.eq.${puCode})`);
+    }
+    clauses.push(`and(ward_code.eq.${parsed.ward},pu_code.eq.${parsed.pu},lg_code.eq.${parsed.lga})`);
+  } else {
+    clauses.push(`code.ilike."%${query}%"`, `pu_code.ilike."%${query}%"`, `name.ilike."%${query}%"`);
+    const padded = padPuCode(query);
+    if (padded && /^\d+$/.test(query.replace(/\s/g, ""))) {
+      clauses.push(`pu_code.eq."${padded}"`);
     }
   }
+
   return [...new Set(clauses)].join(",");
 }
 

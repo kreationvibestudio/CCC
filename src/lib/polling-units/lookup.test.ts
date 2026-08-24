@@ -41,6 +41,8 @@ describe("polling unit lookup", () => {
     assert.match(filter, /37\/06\/04\/028/);
     assert.match(filter, /ward_code\.eq\.04/);
     assert.match(filter, /pu_code\.eq\.028/);
-    assert.match(filter, /name\.ilike/);
+    assert.doesNotMatch(filter, /pu_code\.eq\."028"/);
+    const loose = pollingUnitSearchOrFilter("HILTON");
+    assert.match(loose, /name\.ilike/);
   });
 });

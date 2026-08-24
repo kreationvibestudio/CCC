@@ -8,6 +8,7 @@ import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
 import { parsePollingUnitStatus } from "@/lib/agent/pu-status";
 import { haversineMeters } from "@/lib/agent/geo";
 import { assertPollingUnitInTenant } from "@/lib/tenancy";
+import { formatPollingUnitCode } from "@/lib/polling-units/code";
 
 /** User session for auth; service role for writes so missing INSERT policies cannot block agents. */
 async function agentDb() {
@@ -162,10 +163,21 @@ export type AgentPollingUnit = {
   name: string;
   ward: string;
   lga: string;
+  state?: string | null;
+  state_code?: string | null;
+  lg_code?: string | null;
+  ward_code?: string | null;
   latitude: number | null;
   longitude: number | null;
   distance_m?: number | null;
 };
+
+function presentAgentUnit<T extends AgentPollingUnit>(row: T): T {
+  const code = formatPollingUnitCode(row);
+  return { ...row, code, pu_code: code };
+}
+
+const AGENT_PU_COLS = "id, code, pu_code, name, ward, lga, state, latitude, longitude, state_code, lg_code, ward_code";
 
 function sanitizePuQuery(raw: string) {
   return raw.trim().slice(0, 48).replace(/[%_,()]/g, "");
@@ -185,10 +197,12 @@ export async function findNearestPollingUnits(lat: number, lng: number): Promise
   });
 
   if (!rpc.error && Array.isArray(rpc.data) && rpc.data.length) {
-    return (rpc.data as AgentPollingUnit[]).map((row) => ({
-      ...row,
-      distance_m: row.distance_m != null ? Number(row.distance_m) : null,
-    }));
+    return (rpc.data as AgentPollingUnit[]).map((row) =>
+      presentAgentUnit({
+        ...row,
+        distance_m: row.distance_m != null ? Number(row.distance_m) : null,
+      })
+    );
   }
 
   const tenantId = user.profile.tenant_id;
@@ -197,7 +211,7 @@ export async function findNearestPollingUnits(lat: number, lng: number): Promise
     const dLng = km / (111.32 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
     const { data, error } = await supabase
       .from("polling_units")
-      .select("id, code, pu_code, name, ward, lga, latitude, longitude")
+      .select(AGENT_PU_COLS)
       .eq("tenant_id", tenantId)
       .not("latitude", "is", null)
       .not("longitude", "is", null)
@@ -208,10 +222,12 @@ export async function findNearestPollingUnits(lat: number, lng: number): Promise
       .limit(80);
     if (error || !data?.length) continue;
     return (data as AgentPollingUnit[])
-      .map((row) => ({
-        ...row,
-        distance_m: haversineMeters(lat, lng, Number(row.latitude), Number(row.longitude)),
-      }))
+      .map((row) =>
+        presentAgentUnit({
+          ...row,
+          distance_m: haversineMeters(lat, lng, Number(row.latitude), Number(row.longitude)),
+        })
+      )
       .sort((a, b) => (a.distance_m ?? 0) - (b.distance_m ?? 0))
       .slice(0, 8);
   }
@@ -226,7 +242,7 @@ export async function searchPollingUnitsByCode(query: string): Promise<AgentPoll
 
   const supabase = await createClient();
   const tenantId = user.profile.tenant_id;
-  const cols = "id, code, pu_code, name, ward, lga, latitude, longitude";
+  const cols = AGENT_PU_COLS;
 
   async function match(column: "code" | "pu_code", pattern: string) {
     const { data } = await supabase
@@ -251,6 +267,7 @@ export async function searchPollingUnitsByCode(query: string): Promise<AgentPoll
 
   const qLower = q.toLowerCase();
   return [...map.values()]
+    .map(presentAgentUnit)
     .sort((a, b) => {
       const score = (u: AgentPollingUnit) => {
         const code = u.code.toLowerCase();
@@ -269,10 +286,10 @@ export async function getAssignedPollingUnits(userId: string, tenantId: string):
   const supabase = await createClient();
   const { data } = await supabase
     .from("polling_units")
-    .select("id, code, pu_code, name, ward, lga, latitude, longitude")
+    .select(AGENT_PU_COLS)
     .eq("tenant_id", tenantId)
     .eq("assigned_agent_id", userId)
     .order("code")
     .limit(40);
-  return (data ?? []) as AgentPollingUnit[];
+  return ((data ?? []) as AgentPollingUnit[]).map(presentAgentUnit);
 }

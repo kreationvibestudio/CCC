@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { parsePartyVotes, RESULT_PARTIES, partyLabel, totalPartyVotes } from "@/lib/elections/parties";
+import { formatPollingUnitCode } from "@/lib/polling-units/code";
 import { formatDateTime } from "@/lib/utils";
 import type { IncidentRow, ResultRow } from "@/lib/situation-room/race";
 
@@ -18,7 +19,7 @@ function person(
 
 function puLabel(pu: ResultRow["polling_units"] | IncidentRow["polling_units"]) {
   if (!pu) return "Not linked";
-  return [pu.pu_code || pu.code, pu.name, pu.ward, pu.lga].filter(Boolean).join(" · ");
+  return [formatPollingUnitCode(pu), pu.name, pu.ward, pu.lga].filter(Boolean).join(" · ");
 }
 
 function voteRows(raw: unknown) {

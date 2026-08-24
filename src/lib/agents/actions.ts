@@ -10,8 +10,15 @@ import { hasPermission, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { issueAgentAccessCode } from "@/lib/agent/code-login";
 import { isMissingRelationError } from "@/lib/public-error";
+import {
+  formatPollingUnitCode,
+  formatPollingUnitCodeFromParts,
+  parsePollingUnitCode,
+  withDisplayCode,
+} from "@/lib/polling-units/code";
 
-const PU_COLS = "id, code, pu_code, name, ward, lga, assigned_agent_id, latitude, longitude";
+const PU_COLS =
+  "id, code, pu_code, name, ward, lga, state, assigned_agent_id, latitude, longitude, state_code, lg_code, ward_code";
 const KEEP_ROLES = new Set([
   "super_administrator",
   "candidate",
@@ -58,22 +65,52 @@ async function findPuByCode(
 ) {
   const code = raw.trim();
   if (!code) return null;
-  const { data: byCode } = await supabase
-    .from("polling_units")
-    .select(PU_COLS)
-    .eq("tenant_id", tenantId)
-    .eq("code", code)
-    .limit(1)
-    .maybeSingle();
-  if (byCode) return byCode;
+  const parsed = parsePollingUnitCode(code);
+  const formatted = parsed ? formatPollingUnitCodeFromParts(parsed) : "";
+  const candidates = [...new Set([code, formatted, code.toUpperCase()].filter(Boolean))];
+
+  for (const candidate of candidates) {
+    const { data: byCode } = await supabase
+      .from("polling_units")
+      .select(PU_COLS)
+      .eq("tenant_id", tenantId)
+      .eq("code", candidate)
+      .limit(1)
+      .maybeSingle();
+    if (byCode) return withDisplayCode(byCode);
+  }
+
+  if (parsed) {
+    let q = supabase.from("polling_units").select(PU_COLS).eq("tenant_id", tenantId).eq("pu_code", parsed.pu).limit(20);
+    if (parsed.ward) q = q.eq("ward_code", parsed.ward);
+    const { data: rows } = await q;
+    const match = (rows ?? []).find((row) => formatPollingUnitCode(row) === formatted);
+    if (match) return withDisplayCode(match);
+
+    const numeric = code.toUpperCase().split(/[/-]/).filter(Boolean);
+    if (numeric.length === 4 && numeric.every((part) => /^\d+$/.test(part))) {
+      const { data: inec } = await supabase
+        .from("polling_units")
+        .select(PU_COLS)
+        .eq("tenant_id", tenantId)
+        .eq("state_code", numeric[0].padStart(2, "0"))
+        .eq("lg_code", numeric[1].padStart(2, "0"))
+        .eq("ward_code", numeric[2].padStart(2, "0"))
+        .eq("pu_code", numeric[3].padStart(3, "0"))
+        .limit(1)
+        .maybeSingle();
+      if (inec) return withDisplayCode(inec);
+    }
+  }
+
   const { data: byPu } = await supabase
     .from("polling_units")
     .select(PU_COLS)
     .eq("tenant_id", tenantId)
     .eq("pu_code", code)
-    .limit(1)
-    .maybeSingle();
-  return byPu;
+    .limit(2);
+  if (byPu?.length === 1) return withDisplayCode(byPu[0]);
+  return null;
 }
 
 export type AssignmentRow = {
@@ -191,10 +228,11 @@ export async function listAgentAssignments(input?: {
     rows: units.map((u) => {
       const agent = u.assigned_agent_id ? names.get(u.assigned_agent_id) : null;
       const code = u.assigned_agent_id ? codes.get(u.assigned_agent_id) : null;
+      const display = formatPollingUnitCode(u);
       return {
         id: u.id,
-        code: u.code,
-        pu_code: u.pu_code,
+        code: display,
+        pu_code: display,
         name: u.name,
         ward: u.ward,
         lga: u.lga,
@@ -226,7 +264,7 @@ export async function listAgentCodesByName(): Promise<{
     .map((row) => ({
       name: row.agent_name as string,
       code: row.agent_code || (row.agent_code_hint ? `…${row.agent_code_hint}` : "—"),
-      puCode: row.pu_code || row.code,
+      puCode: row.code,
       unitName: row.name,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
@@ -265,7 +303,7 @@ export async function assignPollingAgent(input: {
     const fullName =
       (input.fullName ?? "").trim() ||
       (emailInput ? emailInput.split("@")[0] : "") ||
-      `Agent ${pu.pu_code || pu.code}`;
+      `Agent ${pu.code}`;
     if (fullName.length < 2) return { error: "Agent name is required" };
 
     let existing: { id: string; role: string; email: string } | undefined;
@@ -355,7 +393,7 @@ export async function assignPollingAgent(input: {
     return {
       created,
       agentCode: issued.code,
-      puCode: pu.pu_code || pu.code,
+      puCode: pu.code,
       email,
       fullName,
       missingCoordinates: pu.latitude == null || pu.longitude == null,

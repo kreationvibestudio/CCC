@@ -6,9 +6,10 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-actions";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
+import { formatPollingUnitCode, formatPollingUnitCodeFromParts, parsePollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
 
 const LIST_COLS =
-  "id, name, code, pu_code, ward, lga, state, registered_voters, latitude, longitude, risk_level, ward_code, lg_code, geocode_status, address, assigned_agent_id";
+  "id, name, code, pu_code, ward, lga, state, registered_voters, latitude, longitude, risk_level, ward_code, lg_code, state_code, geocode_status, address, assigned_agent_id";
 
 function sanitizeFilter(raw: string) {
   return raw.trim().slice(0, 64).replace(/[%_,()"]/g, "");
@@ -28,6 +29,7 @@ export type PollingUnitListItem = {
   risk_level: string | null;
   ward_code?: string | null;
   lg_code?: string | null;
+  state_code?: string | null;
   geocode_status?: string | null;
   address?: string | null;
   live_status?: string;
@@ -143,7 +145,10 @@ export async function queryPollingUnits(input: {
   if (lga) q = q.eq("lga", lga);
   if (ward) q = q.eq("ward", ward);
   if (search.length >= 2) {
-    q = q.or(`code.ilike."%${search}%",pu_code.ilike."%${search}%",name.ilike."%${search}%"`);
+    const parsed = parsePollingUnitCode(search);
+    const formatted = parsed ? formatPollingUnitCodeFromParts(parsed) : "";
+    const extra = formatted && formatted !== search.toUpperCase() ? `,code.ilike."%${formatted}%"` : "";
+    q = q.or(`code.ilike."%${search}%",pu_code.ilike."%${search}%",name.ilike."%${search}%"${extra}`);
   }
   if (input.mappedOnly) {
     q = q.not("latitude", "is", null).not("longitude", "is", null);
@@ -155,7 +160,7 @@ export async function queryPollingUnits(input: {
   const { data, error, count } = await q.range(from, to);
   if (error) return { rows: [], total: 0 };
 
-  const units = (data ?? []) as PollingUnitListItem[];
+  const units = (data ?? []).map((row) => withDisplayCode(row as PollingUnitListItem));
   const ids = units.map((u) => u.id);
   if (ids.length) {
     const { data: statuses } = await supabase
@@ -182,7 +187,9 @@ export async function getPollingUnitStatuses(tenantId: string) {
 }
 
 export async function getPollingUnit(id: string) {
-  return getRecord<Record<string, unknown>>("polling_units", id);
+  const row = await getRecord<Record<string, unknown>>("polling_units", id);
+  if (!row) return row;
+  return { ...row, code: formatPollingUnitCode(row as PollingUnitListItem) } as Record<string, unknown>;
 }
 
 export async function createPollingUnit(formData: FormData) {
@@ -191,9 +198,18 @@ export async function createPollingUnit(formData: FormData) {
   const supabase = await createClient();
   const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
   const lng = formData.get("longitude") ? Number(formData.get("longitude")) : null;
-  const { error } = await supabase.from("polling_units").insert({
+  const payload = {
     tenant_id: user.profile.tenant_id,
-    code: formData.get("code") as string,
+    code: formatPollingUnitCode({
+      code: String(formData.get("code") ?? ""),
+      state: String(formData.get("state") || "Edo"),
+      lga: String(formData.get("lga") ?? ""),
+      ward: String(formData.get("ward") ?? ""),
+      state_code: (formData.get("state_code") as string) || null,
+      lg_code: (formData.get("lg_code") as string) || null,
+      ward_code: (formData.get("ward_code") as string) || null,
+      pu_code: (formData.get("pu_code") as string) || null,
+    }),
     name: formData.get("name") as string,
     ward: formData.get("ward") as string,
     lga: formData.get("lga") as string,
@@ -211,7 +227,8 @@ export async function createPollingUnit(formData: FormData) {
     logistics: (formData.get("logistics") as string) || null,
     assigned_agent_id: (formData.get("assigned_agent_id") as string) || null,
     geocode_status: lat && lng ? "done" : "pending",
-  });
+  };
+  const { error } = await supabase.from("polling_units").insert(payload);
   if (error) return { error: error.message };
   revalidatePath("/polling-units");
   revalidatePath("/maps");
@@ -227,7 +244,16 @@ export async function updatePollingUnit(id: string, formData: FormData) {
     "polling_units",
     id,
     {
-      code: formData.get("code"),
+      code: formatPollingUnitCode({
+        code: String(formData.get("code") ?? ""),
+        state: String(formData.get("state") || "Edo"),
+        lga: String(formData.get("lga") ?? ""),
+        ward: String(formData.get("ward") ?? ""),
+        state_code: (formData.get("state_code") as string) || null,
+        lg_code: (formData.get("lg_code") as string) || null,
+        ward_code: (formData.get("ward_code") as string) || null,
+        pu_code: (formData.get("pu_code") as string) || null,
+      }),
       name: formData.get("name"),
       ward: formData.get("ward"),
       lga: formData.get("lga"),

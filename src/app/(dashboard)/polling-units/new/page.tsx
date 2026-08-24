@@ -22,7 +22,7 @@ export default function NewPollingUnitPage() {
           <form action={action} className="space-y-4">
             <div className="space-y-1">
               <Label htmlFor="code">PU Code</Label>
-              <Input id="code" name="code" placeholder="12/04/01/001" required />
+              <Input id="code" name="code" placeholder="FCT/AMAC/01/001" required />
             </div>
             <div className="space-y-1">
               <Label htmlFor="name">Location</Label>

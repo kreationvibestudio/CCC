@@ -11,6 +11,7 @@ import {
 } from "@/lib/agent/access-code";
 import { AGENT_LOGIN_RADIUS_M, haversineMeters, isWithinAgentLoginRadius } from "@/lib/agent/geo";
 import { isMissingRelationError } from "@/lib/public-error";
+import { formatPollingUnitCode } from "@/lib/polling-units/code";
 
 export { AGENT_LOGIN_RADIUS_M };
 
@@ -92,7 +93,7 @@ export async function loginWithAgentCode(input: {
     admin.from("profiles").select("id, email, full_name, role, tenant_id").eq("id", row.profile_id).maybeSingle(),
     admin
       .from("polling_units")
-      .select("id, code, pu_code, name, ward, lga, latitude, longitude, assigned_agent_id, tenant_id")
+      .select("id, code, pu_code, name, ward, lga, state, latitude, longitude, assigned_agent_id, tenant_id, state_code, lg_code, ward_code")
       .eq("id", row.polling_unit_id)
       .maybeSingle(),
   ]);
@@ -113,7 +114,7 @@ export async function loginWithAgentCode(input: {
   if (!isWithinAgentLoginRadius(distanceM)) {
     const km = (distanceM / 1000).toFixed(1);
     return {
-      error: `You are ${km} km from ${pu.pu_code || pu.code}. Sign in at your assigned polling unit (within ${(AGENT_LOGIN_RADIUS_M / 1000).toFixed(1)} km).`,
+      error: `You are ${km} km from ${formatPollingUnitCode(pu)}. Sign in at your assigned polling unit (within ${(AGENT_LOGIN_RADIUS_M / 1000).toFixed(1)} km).`,
     };
   }
 
@@ -135,8 +136,8 @@ export async function loginWithAgentCode(input: {
     },
     unit: {
       id: pu.id,
-      code: pu.code,
-      pu_code: pu.pu_code,
+      code: formatPollingUnitCode(pu),
+      pu_code: formatPollingUnitCode(pu),
       name: pu.name,
       ward: pu.ward,
       lga: pu.lga,

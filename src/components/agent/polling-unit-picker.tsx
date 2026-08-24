@@ -35,7 +35,7 @@ function UnitButton({
         selected ? "border-primary bg-primary/10" : "border-border hover:bg-muted/60"
       }`}
     >
-      <span className="font-medium">{unit.pu_code || unit.code}</span>
+      <span className="font-medium">{unit.code}</span>
       <span className="text-muted-foreground"> — {unit.name}</span>
       <span className="mt-0.5 block text-xs text-muted-foreground">
         {unit.ward}, {unit.lga}
@@ -145,7 +145,7 @@ export function PollingUnitPicker({
       {selected && (
         <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
           <p className="font-medium">
-            Selected: {selected.pu_code || selected.code} — {selected.name}
+            Selected: {selected.code} — {selected.name}
           </p>
           <p className="text-xs text-muted-foreground">
             {selected.ward}, {selected.lga}

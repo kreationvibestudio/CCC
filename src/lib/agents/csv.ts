@@ -57,6 +57,6 @@ export function parseAgentAssignmentCsv(text: string): AgentCsvRow[] {
 }
 
 export const AGENT_CSV_TEMPLATE = `pu_code,full_name,phone,email
-12/03/005,Jane Agent,08030000001,
-12/03/006,John Agent,08030000002,
+FCT/AMAC/01/001,Jane Agent,08030000001,
+FCT/AMAC/01/002,John Agent,08030000002,
 `;

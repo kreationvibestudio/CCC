@@ -17,6 +17,15 @@ Includes **Edo Central** senatorial LGAs:
 
 `edo-esan-polling-units.csv` remains a tiny sample for docs/demos only.
 
+The full polling unit code is **STATE/LGA/WARD/PU**, padded, for example:
+
+- `FCT/AMAC/01/001` — FCT, Abuja Municipal Area Council (AMAC), City Centre ward, unit 001
+- `FCT/AMAC/04/028` — FCT, AMAC, Wuse ward, unit 028
+
+INEC’s internal delimitation id is numeric (`37/06/04/028`). HQ stores and shows the campaign form above. AMAC is INEC’s “MUNICIPAL” area council (LGA code 06). Ward and PU are two- and three-digit INEC serials.
+
+Polling Units → **Format PU codes** rewrites existing rows. Import also formats on the way in.
+
 ## Official INEC CSV columns
 
 ```csv

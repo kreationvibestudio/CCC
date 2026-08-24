@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Upload } from "lucide-react";
 import { GeocodePinsButton } from "@/components/polling-units/geocode-pins-button";
+import { FormatPuCodesButton } from "@/components/polling-units/format-pu-codes-button";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
@@ -131,6 +132,7 @@ export function PollingUnitsView({
     <div className="space-y-6">
       <PageHeader title="Polling Units" description="Search the full register by LGA, ward, or PU code">
         <div className="flex flex-wrap gap-2">
+          <FormatPuCodesButton />
           <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} />
           <Button variant="outline" asChild>
             <Link href="/polling-units/agents">Assign agents</Link>
@@ -210,7 +212,7 @@ export function PollingUnitsView({
             emptyMessage="No polling units match those filters."
             onRowClick={(row) => router.push(`/polling-units/${row.id}`)}
             columns={[
-              { key: "code", header: "Code" },
+              { key: "code", header: "Code", render: (u) => <span className="font-mono">{u.code}</span> },
               { key: "pu_code", header: "PU" },
               { key: "name", header: "Location" },
               { key: "ward", header: "Ward" },

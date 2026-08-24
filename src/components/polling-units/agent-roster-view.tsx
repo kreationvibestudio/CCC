@@ -350,7 +350,7 @@ export function AgentRosterView({
           <form action={handleAssign} className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="pu_code">PU code</Label>
-              <Input id="pu_code" name="pu_code" placeholder="12/03/005 or INEC PU code" required disabled={pending} />
+              <Input id="pu_code" name="pu_code" placeholder="FCT/AMAC/01/001" required disabled={pending} />
             </div>
             <div className="space-y-1">
               <Label htmlFor="full_name">Agent name</Label>
@@ -417,7 +417,7 @@ export function AgentRosterView({
           </div>
           {gaps.map((u) => (
             <p key={u.id} className="text-sm">
-              <span className="font-medium">{u.pu_code || u.code}</span> — {u.name} · {u.ward}, {u.lga}
+              <span className="font-medium">{u.code}</span> — {u.name} · {u.ward}, {u.lga}
               {u.latitude == null || u.longitude == null ? " · no map pin" : ""}
             </p>
           ))}
@@ -446,7 +446,7 @@ export function AgentRosterView({
                   {row.agent_code || (row.agent_code_hint ? `…${row.agent_code_hint}` : "No code yet")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {row.pu_code || row.code} — {row.name} · {row.ward}, {row.lga}
+                  {row.code} — {row.name} · {row.ward}, {row.lga}
                   {row.agent_email && !row.agent_email.endsWith("@ccc.agent") ? ` · ${row.agent_email}` : ""}
                   {row.agent_phone ? ` · ${row.agent_phone}` : ""}
                   {row.has_coordinates ? "" : " · no map pin"}

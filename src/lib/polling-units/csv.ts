@@ -1,3 +1,5 @@
+import { formatPollingUnitCode, padPuCode } from "@/lib/polling-units/code";
+
 /** Raw row from INEC CSV or legacy simplified CSV. */
 export type PollingUnitCsvRow = Record<string, string | undefined>;
 
@@ -61,9 +63,8 @@ export function normalizePollingUnitRow(raw: PollingUnitCsvRow): NormalizedPolli
   const lat = raw.latitude ? parseFloat(raw.latitude) : null;
   const lng = raw.longitude ? parseFloat(raw.longitude) : null;
 
-  return {
+  const formatted = formatPollingUnitCode({
     code,
-    name: location,
     ward,
     lga,
     state,
@@ -71,6 +72,18 @@ export function normalizePollingUnitRow(raw: PollingUnitCsvRow): NormalizedPolli
     lg_code: lgCode,
     ward_code: wardCode || raw.ward?.trim() || null,
     pu_code: puCode,
+  });
+
+  return {
+    code: formatted || code,
+    name: location,
+    ward,
+    lga,
+    state,
+    state_code: stateCode,
+    lg_code: lgCode,
+    ward_code: wardCode || raw.ward?.trim() || null,
+    pu_code: padPuCode(puCode) || puCode,
     address: raw.address?.trim() || location,
     registered_voters: raw.registered_voters ? parseInt(raw.registered_voters, 10) : 0,
     latitude: lat != null && !Number.isNaN(lat) ? lat : null,

@@ -6,8 +6,15 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-actions";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
-import { formatPollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
+import { formatPollingUnitCode, parsePollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
 import { pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
+import {
+  applyCampaignStateFilter,
+  CAMPAIGN_STATE,
+  CAMPAIGN_STATE_CODE,
+  isCampaignPollingUnit,
+  isCampaignState,
+} from "@/lib/polling-units/scope";
 
 const LIST_COLS =
   "id, name, code, pu_code, ward, lga, state, registered_voters, latitude, longitude, risk_level, ward_code, lg_code, state_code, geocode_status, address, assigned_agent_id";
@@ -46,61 +53,52 @@ export type PollingUnitSummary = {
 
 export async function getPollingUnitLgas(): Promise<string[]> {
   const supabase = await createClient();
-  const rpc = await supabase.rpc("distinct_polling_lgas");
-  if (!rpc.error && Array.isArray(rpc.data)) {
-    return rpc.data
-      .map((row: { lga?: string }) => row.lga)
-      .filter((name): name is string => Boolean(name));
-  }
-  const { data } = await supabase.from("lgas").select("name").order("name");
-  return (data ?? []).map((row) => row.name).filter(Boolean);
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data } = await applyCampaignStateFilter(
+    supabase.from("polling_units").select("lga").eq("tenant_id", user.profile.tenant_id)
+  )
+    .not("lga", "is", null)
+    .limit(10000);
+  const names = [...new Set((data ?? []).map((row) => row.lga).filter(Boolean) as string[])];
+  names.sort((a, b) => a.localeCompare(b));
+  return names;
 }
 
 export async function getPollingUnitWards(lga: string): Promise<string[]> {
   const supabase = await createClient();
+  const user = await getCurrentUser();
   const trimmed = lga.trim();
-  if (!trimmed) return [];
-  const rpc = await supabase.rpc("distinct_polling_wards", { p_lga: trimmed });
-  if (!rpc.error && Array.isArray(rpc.data)) {
-    return rpc.data
-      .map((row: { ward?: string }) => row.ward)
-      .filter((name): name is string => Boolean(name));
-  }
-  return [];
+  if (!user || !trimmed) return [];
+  const { data } = await applyCampaignStateFilter(
+    supabase.from("polling_units").select("ward").eq("tenant_id", user.profile.tenant_id).eq("lga", trimmed)
+  )
+    .not("ward", "is", null)
+    .limit(10000);
+  const names = [...new Set((data ?? []).map((row) => row.ward).filter(Boolean) as string[])];
+  names.sort((a, b) => a.localeCompare(b));
+  return names;
 }
 
 export async function getPollingUnitSummary(filters?: {
   lga?: string;
   ward?: string;
 }): Promise<PollingUnitSummary> {
-  const supabase = await createClient();
-  const rpc = await supabase.rpc("polling_units_summary", {
-    p_lga: filters?.lga || null,
-    p_ward: filters?.ward || null,
-  });
-  const payload = rpc.data as { pu_count?: number; registered_voters?: number; mapped?: number } | null;
-  if (!rpc.error && payload) {
-    return {
-      puCount: Number(payload.pu_count ?? 0),
-      registeredVoters: Number(payload.registered_voters ?? 0),
-      mapped: Number(payload.mapped ?? 0),
-    };
-  }
   const user = await getCurrentUser();
   if (!user) return { puCount: 0, registeredVoters: 0, mapped: 0 };
-  const [{ count: puCount }, { count: mapped }] = await Promise.all([
-    supabase
-      .from("polling_units")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", user.profile.tenant_id),
-    supabase
-      .from("polling_units")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", user.profile.tenant_id)
-      .not("latitude", "is", null)
-      .not("longitude", "is", null),
-  ]);
-  return { puCount: puCount ?? 0, registeredVoters: 0, mapped: mapped ?? 0 };
+  const supabase = await createClient();
+  let base = applyCampaignStateFilter(
+    supabase.from("polling_units").select("id, registered_voters, latitude, longitude").eq("tenant_id", user.profile.tenant_id)
+  );
+  if (filters?.lga) base = base.eq("lga", filters.lga);
+  if (filters?.ward) base = base.eq("ward", filters.ward);
+  const { data } = await base.limit(10000);
+  const rows = data ?? [];
+  return {
+    puCount: rows.length,
+    registeredVoters: rows.reduce((sum, row) => sum + Number(row.registered_voters ?? 0), 0),
+    mapped: rows.filter((row) => row.latitude != null && row.longitude != null).length,
+  };
 }
 
 export async function countVotingActive(): Promise<number> {
@@ -130,7 +128,6 @@ export async function queryPollingUnits(input: {
   const lga = sanitizeFilter(input.lga ?? "");
   const ward = sanitizeFilter(input.ward ?? "");
   const search = sanitizeFilter(input.search ?? "");
-  if (!lga && !ward && search.length < 2) return { rows: [], total: 0 };
 
   const page = Math.max(0, input.page ?? 0);
   const pageSize = Math.min(Math.max(input.pageSize ?? 40, 1), 500);
@@ -138,11 +135,12 @@ export async function queryPollingUnits(input: {
   const to = from + pageSize - 1;
 
   const supabase = await createClient();
-  let q = supabase
-    .from("polling_units")
-    .select(LIST_COLS, { count: "exact" })
-    .eq("tenant_id", user.profile.tenant_id)
-    .order("code");
+  let q = applyCampaignStateFilter(
+    supabase
+      .from("polling_units")
+      .select(LIST_COLS, { count: "exact" })
+      .eq("tenant_id", user.profile.tenant_id)
+  ).order("code");
   if (lga) q = q.eq("lga", lga);
   if (ward) q = q.eq("ward", ward);
   if (search.length >= 2) {
@@ -190,9 +188,27 @@ export async function getPollingUnit(id: string) {
   return { ...row, code: formatPollingUnitCode(row as PollingUnitListItem) } as Record<string, unknown>;
 }
 
+function edoOnlyFormError(formData: FormData): string | null {
+  const parsed = parsePollingUnitCode(String(formData.get("code") ?? ""));
+  if (parsed?.state && !isCampaignState(parsed.state)) {
+    return "Polling units are confined to Edo State";
+  }
+  const stateCode = String(formData.get("state_code") ?? "").trim();
+  if (stateCode && !isCampaignState(stateCode)) {
+    return "Polling units are confined to Edo State";
+  }
+  const stateName = String(formData.get("state") ?? "").trim();
+  if (stateName && !isCampaignState(stateName)) {
+    return "Polling units are confined to Edo State";
+  }
+  return null;
+}
+
 export async function createPollingUnit(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = edoOnlyFormError(formData);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
   const lng = formData.get("longitude") ? Number(formData.get("longitude")) : null;
@@ -200,10 +216,10 @@ export async function createPollingUnit(formData: FormData) {
     tenant_id: user.profile.tenant_id,
     code: formatPollingUnitCode({
       code: String(formData.get("code") ?? ""),
-      state: String(formData.get("state") || "Edo"),
+      state: CAMPAIGN_STATE,
       lga: String(formData.get("lga") ?? ""),
       ward: String(formData.get("ward") ?? ""),
-      state_code: (formData.get("state_code") as string) || null,
+      state_code: CAMPAIGN_STATE_CODE,
       lg_code: (formData.get("lg_code") as string) || null,
       ward_code: (formData.get("ward_code") as string) || null,
       pu_code: (formData.get("pu_code") as string) || null,
@@ -211,8 +227,8 @@ export async function createPollingUnit(formData: FormData) {
     name: formData.get("name") as string,
     ward: formData.get("ward") as string,
     lga: formData.get("lga") as string,
-    state: (formData.get("state") as string) || "Edo",
-    state_code: (formData.get("state_code") as string) || null,
+    state: CAMPAIGN_STATE,
+    state_code: CAMPAIGN_STATE_CODE,
     lg_code: (formData.get("lg_code") as string) || null,
     ward_code: (formData.get("ward_code") as string) || null,
     pu_code: (formData.get("pu_code") as string) || null,
@@ -236,6 +252,8 @@ export async function createPollingUnit(formData: FormData) {
 export async function updatePollingUnit(id: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = edoOnlyFormError(formData);
+  if (blocked) return { error: blocked };
   const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
   const lng = formData.get("longitude") ? Number(formData.get("longitude")) : null;
   return updateRecord(
@@ -244,10 +262,10 @@ export async function updatePollingUnit(id: string, formData: FormData) {
     {
       code: formatPollingUnitCode({
         code: String(formData.get("code") ?? ""),
-        state: String(formData.get("state") || "Edo"),
+        state: CAMPAIGN_STATE,
         lga: String(formData.get("lga") ?? ""),
         ward: String(formData.get("ward") ?? ""),
-        state_code: (formData.get("state_code") as string) || null,
+        state_code: CAMPAIGN_STATE_CODE,
         lg_code: (formData.get("lg_code") as string) || null,
         ward_code: (formData.get("ward_code") as string) || null,
         pu_code: (formData.get("pu_code") as string) || null,
@@ -255,8 +273,8 @@ export async function updatePollingUnit(id: string, formData: FormData) {
       name: formData.get("name"),
       ward: formData.get("ward"),
       lga: formData.get("lga"),
-      state: formData.get("state") || "Edo",
-      state_code: formData.get("state_code") || null,
+      state: CAMPAIGN_STATE,
+      state_code: CAMPAIGN_STATE_CODE,
       lg_code: formData.get("lg_code") || null,
       ward_code: formData.get("ward_code") || null,
       pu_code: formData.get("pu_code") || null,
@@ -298,7 +316,7 @@ export async function getCampaignLocations(tenantId: string) {
 export async function importPollingUnitsCsv(csvText: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
-  const rows = parsePollingUnitsCsv(csvText);
+  const rows = parsePollingUnitsCsv(csvText).filter((row) => isCampaignPollingUnit(row));
   const supabase = await createClient();
   const { imported } = await upsertPollingUnitRows(supabase, user.profile.tenant_id, rows);
   revalidatePath("/polling-units");

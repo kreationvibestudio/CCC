@@ -1,9 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatPollingUnitCode, padPuCode, padWardCode } from "./code.ts";
+import { CAMPAIGN_STATE, CAMPAIGN_STATE_CODE, isCampaignPollingUnit } from "./scope.ts";
 import {
-  INEC_STATE_FILES,
   loadInecStateUnits,
-  nextInecState,
   resolveInecState,
   type InecRegisterUnit,
   type InecStateMeta,
@@ -42,6 +41,8 @@ export type InecSyncResult = {
   stateRemaining: number;
   nextState: string | null;
   catalogStates: number;
+  pruned: number;
+  pruneRemaining: number;
   done: boolean;
 };
 
@@ -185,13 +186,76 @@ async function loadExistingForBatch(
   return rows;
 }
 
+export async function pruneNonCampaignPollingUnits(
+  supabase: SupabaseClient,
+  tenantId: string,
+  limit = 400
+): Promise<{ pruned: number; remaining: number }> {
+  const page = Math.min(Math.max(limit, 1), 1000);
+  const { data, error } = await supabase
+    .from("polling_units")
+    .select("id, state, state_code, code")
+    .eq("tenant_id", tenantId)
+    .or(`state_code.neq.${CAMPAIGN_STATE_CODE},state_code.is.null`)
+    .limit(page);
+  if (error) throw new Error(error.message);
+  const fetched = (data ?? []) as Array<{ id: string; state: string | null; state_code: string | null; code: string }>;
+  const ids = fetched.filter((row) => !isCampaignPollingUnit(row)).map((row) => row.id);
+  const moreOnPage = fetched.length >= page;
+  if (ids.length) {
+    const { error: deleteError } = await supabase.from("polling_units").delete().eq("tenant_id", tenantId).in("id", ids);
+    if (deleteError) throw new Error(deleteError.message);
+    return { pruned: ids.length, remaining: moreOnPage ? 1 : 0 };
+  }
+  const fallback = await supabase
+    .from("polling_units")
+    .select("id, state, state_code, code")
+    .eq("tenant_id", tenantId)
+    .not("state", "ilike", "%EDO%")
+    .limit(page);
+  if (fallback.error) throw new Error(fallback.error.message);
+  const extraFetched = (fallback.data ?? []) as Array<{
+    id: string;
+    state: string | null;
+    state_code: string | null;
+    code: string;
+  }>;
+  const extra = extraFetched.filter((row) => !isCampaignPollingUnit(row)).map((row) => row.id);
+  if (!extra.length) return { pruned: 0, remaining: 0 };
+  const { error: deleteError } = await supabase.from("polling_units").delete().eq("tenant_id", tenantId).in("id", extra);
+  if (deleteError) throw new Error(deleteError.message);
+  return { pruned: extra.length, remaining: extraFetched.length >= page ? 1 : 0 };
+}
+
 export async function syncInecRegisterBatch(
   supabase: SupabaseClient,
   tenantId: string,
-  options?: { state?: string; offset?: number; limit?: number }
+  options?: { state?: string; offset?: number; limit?: number; pruneOnly?: boolean }
 ): Promise<InecSyncResult> {
-  const meta = resolveInecState(options?.state) ?? INEC_STATE_FILES[0];
-  if (!meta) throw new Error("INEC state list is empty");
+  if (options?.pruneOnly) {
+    const prune = await pruneNonCampaignPollingUnits(supabase, tenantId, options.limit ?? 400);
+    return {
+      state: CAMPAIGN_STATE,
+      fileName: "edo.json",
+      processed: 0,
+      inserted: 0,
+      updated: 0,
+      failed: 0,
+      offset: 0,
+      nextOffset: 0,
+      stateTotal: 0,
+      stateRemaining: 0,
+      nextState: null,
+      catalogStates: 1,
+      pruned: prune.pruned,
+      pruneRemaining: prune.remaining,
+      done: prune.remaining === 0,
+    };
+  }
+  const meta = resolveInecState(options?.state || CAMPAIGN_STATE) ?? resolveInecState(CAMPAIGN_STATE);
+  if (!meta || meta.token !== CAMPAIGN_STATE) {
+    throw new Error("Polling units are confined to Edo State");
+  }
   const limit = Math.min(Math.max(options?.limit ?? 250, 1), 400);
   const offset = Math.max(options?.offset ?? 0, 0);
   const units = await loadInecStateUnits(meta.token);
@@ -256,7 +320,13 @@ export async function syncInecRegisterBatch(
 
   const nextOffset = offset + batch.length;
   const stateRemaining = Math.max(units.length - nextOffset, 0);
-  const following = stateRemaining > 0 ? meta : nextInecState(meta.token);
+  let pruned = 0;
+  let pruneRemaining = 0;
+  if (stateRemaining === 0) {
+    const prune = await pruneNonCampaignPollingUnits(supabase, tenantId, 400);
+    pruned = prune.pruned;
+    pruneRemaining = prune.remaining;
+  }
   return {
     state: meta.token,
     fileName: meta.fileName,
@@ -268,8 +338,10 @@ export async function syncInecRegisterBatch(
     nextOffset,
     stateTotal: units.length,
     stateRemaining,
-    nextState: following?.token ?? null,
-    catalogStates: INEC_STATE_FILES.length,
-    done: !following || (stateRemaining === 0 && !nextInecState(meta.token)),
+    nextState: stateRemaining > 0 ? meta.token : null,
+    catalogStates: 1,
+    pruned,
+    pruneRemaining,
+    done: stateRemaining === 0 && pruneRemaining === 0,
   };
 }

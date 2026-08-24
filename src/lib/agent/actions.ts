@@ -8,8 +8,9 @@ import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
 import { parsePollingUnitStatus } from "@/lib/agent/pu-status";
 import { haversineMeters } from "@/lib/agent/geo";
 import { assertPollingUnitInTenant } from "@/lib/tenancy";
-import { formatPollingUnitCode } from "@/lib/polling-units/code";
+import { formatPollingUnitCode, parsePollingUnitCode } from "@/lib/polling-units/code";
 import { pollingUnitSearchOrFilter, rankPollingUnitMatches, sanitizePuLookupQuery } from "@/lib/polling-units/lookup";
+import { applyCampaignStateFilter, isCampaignPollingUnit, isCampaignState } from "@/lib/polling-units/scope";
 
 /** User session for auth; service role for writes so missing INSERT policies cannot block agents. */
 async function agentDb() {
@@ -198,29 +199,32 @@ export async function findNearestPollingUnits(lat: number, lng: number): Promise
   });
 
   if (!rpc.error && Array.isArray(rpc.data) && rpc.data.length) {
-    return (rpc.data as AgentPollingUnit[]).map((row) =>
-      presentAgentUnit({
-        ...row,
-        distance_m: row.distance_m != null ? Number(row.distance_m) : null,
-      })
-    );
+    return (rpc.data as AgentPollingUnit[])
+      .filter((row) => isCampaignPollingUnit(row))
+      .map((row) =>
+        presentAgentUnit({
+          ...row,
+          distance_m: row.distance_m != null ? Number(row.distance_m) : null,
+        })
+      );
   }
 
   const tenantId = user.profile.tenant_id;
   for (const km of [2, 8, 25]) {
     const dLat = km / 111.32;
     const dLng = km / (111.32 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
-    const { data, error } = await supabase
-      .from("polling_units")
-      .select(AGENT_PU_COLS)
-      .eq("tenant_id", tenantId)
-      .not("latitude", "is", null)
-      .not("longitude", "is", null)
-      .gte("latitude", lat - dLat)
-      .lte("latitude", lat + dLat)
-      .gte("longitude", lng - dLng)
-      .lte("longitude", lng + dLng)
-      .limit(80);
+    const { data, error } = await applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select(AGENT_PU_COLS)
+        .eq("tenant_id", tenantId)
+        .not("latitude", "is", null)
+        .not("longitude", "is", null)
+        .gte("latitude", lat - dLat)
+        .lte("latitude", lat + dLat)
+        .gte("longitude", lng - dLng)
+        .lte("longitude", lng + dLng)
+    ).limit(80);
     if (error || !data?.length) continue;
     return (data as AgentPollingUnit[])
       .map((row) =>
@@ -240,15 +244,14 @@ export async function searchPollingUnitsByCode(query: string): Promise<AgentPoll
   if (!user) return [];
   const q = sanitizePuQuery(query);
   if (q.length < 2) return [];
+  const parsed = parsePollingUnitCode(q);
+  if (parsed?.state && !isCampaignState(parsed.state)) return [];
 
   const supabase = await createClient();
   const tenantId = user.profile.tenant_id;
-  const { data, error } = await supabase
-    .from("polling_units")
-    .select(AGENT_PU_COLS)
-    .eq("tenant_id", tenantId)
-    .or(pollingUnitSearchOrFilter(q))
-    .limit(40);
+  const { data, error } = await applyCampaignStateFilter(
+    supabase.from("polling_units").select(AGENT_PU_COLS).eq("tenant_id", tenantId).or(pollingUnitSearchOrFilter(q))
+  ).limit(40);
 
   if (error) return [];
   return rankPollingUnitMatches((data ?? []) as AgentPollingUnit[], q)
@@ -265,5 +268,7 @@ export async function getAssignedPollingUnits(userId: string, tenantId: string):
     .eq("assigned_agent_id", userId)
     .order("code")
     .limit(40);
-  return ((data ?? []) as AgentPollingUnit[]).map(presentAgentUnit);
+  return ((data ?? []) as AgentPollingUnit[])
+    .filter((row) => isCampaignPollingUnit(row))
+    .map(presentAgentUnit);
 }

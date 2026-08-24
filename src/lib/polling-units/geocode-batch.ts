@@ -5,6 +5,7 @@ import {
   type GeocodeHit,
   type GeocodeProviderName,
 } from "./geocode";
+import { applyCampaignStateFilter } from "./scope.ts";
 
 export type PendingGeocodeUnit = {
   id: string;
@@ -52,24 +53,32 @@ export async function countPollingUnitPins(
   tenantId: string
 ): Promise<{ total: number; mapped: number; remaining: number; failed: number }> {
   const [{ count: total }, { count: mapped }, { count: remaining }, { count: failed }] = await Promise.all([
-    supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
-    supabase
-      .from("polling_units")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .not("latitude", "is", null)
-      .not("longitude", "is", null),
-    supabase
-      .from("polling_units")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .or("latitude.is.null,longitude.is.null"),
-    supabase
-      .from("polling_units")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("geocode_status", "failed")
-      .or("latitude.is.null,longitude.is.null"),
+    applyCampaignStateFilter(
+      supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
+    ),
+    applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .not("latitude", "is", null)
+        .not("longitude", "is", null)
+    ),
+    applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .or("latitude.is.null,longitude.is.null")
+    ),
+    applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("geocode_status", "failed")
+        .or("latitude.is.null,longitude.is.null")
+    ),
   ]);
   return {
     total: total ?? 0,
@@ -92,13 +101,13 @@ export async function geocodePendingForTenant(
   const limit = Math.min(Math.max(options?.limit ?? geocodeBatchLimit(providers), 1), 40);
   const counts = await countPollingUnitPins(supabase, tenantId);
 
-  let query = supabase
-    .from("polling_units")
-    .select(UNIT_COLS)
-    .eq("tenant_id", tenantId)
-    .or("latitude.is.null,longitude.is.null")
-    .order("code")
-    .limit(limit);
+  let query = applyCampaignStateFilter(
+    supabase
+      .from("polling_units")
+      .select(UNIT_COLS)
+      .eq("tenant_id", tenantId)
+      .or("latitude.is.null,longitude.is.null")
+  ).order("code").limit(limit);
 
   if (!options?.retryFailed) {
     query = query.or("geocode_status.is.null,geocode_status.eq.pending,geocode_status.eq.done");

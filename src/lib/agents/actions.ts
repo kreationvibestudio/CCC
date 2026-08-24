@@ -12,6 +12,7 @@ import { issueAgentAccessCode } from "@/lib/agent/code-login";
 import { isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
 import { findPollingUnitByCode, pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
+import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
 
 const PU_COLS =
   "id, code, pu_code, name, ward, lga, state, assigned_agent_id, latitude, longitude, state_code, lg_code, ward_code";
@@ -85,11 +86,13 @@ export async function getAgentCoverage() {
   const supabase = db();
   const tenantId = auth.user.profile.tenant_id;
   const [{ count: assignedPus }, { count: agents }] = await Promise.all([
-    supabase
-      .from("polling_units")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .not("assigned_agent_id", "is", null),
+    applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .not("assigned_agent_id", "is", null)
+    ),
     supabase
       .from("profiles")
       .select("id", { count: "exact", head: true })
@@ -114,12 +117,13 @@ export async function listAgentAssignments(input?: {
   const to = from + pageSize - 1;
   const search = (input?.search ?? "").trim().slice(0, 64);
 
-  let q = supabase
-    .from("polling_units")
-    .select(PU_COLS, { count: "exact" })
-    .eq("tenant_id", tenantId)
-    .not("assigned_agent_id", "is", null)
-    .order("code");
+  let q = applyCampaignStateFilter(
+    supabase
+      .from("polling_units")
+      .select(PU_COLS, { count: "exact" })
+      .eq("tenant_id", tenantId)
+      .not("assigned_agent_id", "is", null)
+  ).order("code");
   if (search.length >= 2) {
     const safe = search.replace(/[%_,()"]/g, "");
     const { data: nameHits } = await supabase

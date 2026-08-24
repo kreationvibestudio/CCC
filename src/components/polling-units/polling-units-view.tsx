@@ -70,7 +70,7 @@ export function PollingUnitsView({
     });
   }, [lga]);
 
-  const canQuery = Boolean(lga || ward || debouncedSearch.length >= 2);
+  const canQuery = true;
 
   useEffect(() => {
     setPage(0);
@@ -131,7 +131,7 @@ export function PollingUnitsView({
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Polling Units" description="Search the full register by LGA, ward, or PU code">
+      <PageHeader title="Polling Units" description="Edo State register — search by LGA, ward, or PU code">
         <div className="flex flex-wrap gap-2">
           <SyncInecRegisterButton />
           <FormatPuCodesButton />
@@ -177,14 +177,14 @@ export function PollingUnitsView({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="FCT/AMAC/04/028, 37/06/04/028, or name…"
+          placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
           className="max-w-xs"
         />
       </div>
 
       {!canQuery ? (
         <p className="text-sm text-muted-foreground">
-          Select an LGA or type at least 2 characters of a PU code. Loading every unit at once would freeze the page.
+          Select an LGA or type at least 2 characters of a PU code.
         </p>
       ) : pending && rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Loading polling units…</p>

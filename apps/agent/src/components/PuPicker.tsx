@@ -109,8 +109,8 @@ export function PuPicker({
     <View style={styles.block}>
       <Text style={styles.section}>Polling unit</Text>
       <Text style={styles.hint}>
-        Uses your assigned unit when HQ has tied you to one. GPS and PU-code search remain available if you
-        are sent to a different unit. The full national catalog is never downloaded.
+        Uses your assigned unit when HQ has tied you to one. GPS and PU-code search stay on Edo State
+        only — other states are not in this campaign.
       </Text>
 
       {selected ? (
@@ -169,7 +169,7 @@ export function PuPicker({
       <View style={styles.row}>
         <TextInput
           style={[styles.input, { flex: 1 }]}
-          placeholder="FCT/AMAC/04/028 or 37/06/04/028"
+          placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
           placeholderTextColor={colors.muted}
           value={query}
           onChangeText={setQuery}

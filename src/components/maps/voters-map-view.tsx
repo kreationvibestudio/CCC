@@ -90,14 +90,14 @@ export function VotersMapView({ lgas }: { lgas: string[] }) {
     <div className="space-y-4">
       <PageHeader
         title="Voter Maps"
-        description="Pick an LGA or search a PU code — pins are color-coded by live status"
+        description="Edo State — pick an LGA or search a PU code. Pins are color-coded by live status"
       />
 
       <div className="flex flex-wrap items-end gap-3">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search PU code or name…"
+          placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
           className="max-w-xs"
         />
         <GeoFilters

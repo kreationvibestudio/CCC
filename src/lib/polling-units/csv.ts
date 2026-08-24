@@ -1,4 +1,5 @@
 import { formatPollingUnitCode, padPuCode } from "@/lib/polling-units/code";
+import { isCampaignPollingUnit } from "@/lib/polling-units/scope";
 
 /** Raw row from INEC CSV or legacy simplified CSV. */
 export type PollingUnitCsvRow = Record<string, string | undefined>;
@@ -55,6 +56,7 @@ export function normalizePollingUnitRow(raw: PollingUnitCsvRow): NormalizedPolli
     code = `${stateCode}/${lgCode}/${wardCode}/${puCode}`;
   }
   if (!code) return null;
+  if (!isCampaignPollingUnit({ state, state_code: stateCode, code })) return null;
 
   const location = raw.location?.trim() || raw.name?.trim() || code;
   const ward = raw.ward_des?.trim() || raw.ward?.trim() || "";

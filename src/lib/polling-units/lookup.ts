@@ -11,6 +11,7 @@ import {
   parsePollingUnitCode,
   type PollingUnitCodeInput,
 } from "./code.ts";
+import { applyCampaignStateFilter, isCampaignPollingUnit, isCampaignState } from "./scope.ts";
 
 export type PollingUnitLookupRow = PollingUnitCodeInput & {
   id: string;
@@ -117,73 +118,75 @@ export async function findPollingUnitByCode<T extends PollingUnitLookupRow>(
 ): Promise<T | null> {
   const query = raw.trim();
   if (!query) return null;
+  const parsedEarly = parsePollingUnitCode(query);
+  if (parsedEarly?.state && !isCampaignState(parsedEarly.state)) return null;
+
+  const accept = (row: T | null | undefined): T | null =>
+    row && isCampaignPollingUnit(row) ? row : null;
 
   for (const candidate of codeLookupVariants(query)) {
-    const { data } = await supabase
-      .from("polling_units")
-      .select(columns)
-      .eq("tenant_id", tenantId)
-      .eq("code", candidate)
-      .limit(2);
+    const { data } = await applyCampaignStateFilter(
+      supabase.from("polling_units").select(columns).eq("tenant_id", tenantId).eq("code", candidate)
+    ).limit(2);
     const rows = (data ?? []) as unknown as T[];
-    if (rows.length === 1) return rows[0];
+    if (rows.length === 1) return accept(rows[0]);
     const match = rows.find((row) => unitMatchesLookupQuery(row, query));
-    if (match) return match;
+    if (match) return accept(match);
   }
 
   const parsed = parsePollingUnitCode(query);
   if (parsed) {
-    const { data } = await supabase
-      .from("polling_units")
-      .select(columns)
-      .eq("tenant_id", tenantId)
-      .eq("pu_code", parsed.pu)
-      .eq("ward_code", parsed.ward)
-      .limit(40);
+    const { data } = await applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select(columns)
+        .eq("tenant_id", tenantId)
+        .eq("pu_code", parsed.pu)
+        .eq("ward_code", parsed.ward)
+    ).limit(40);
     const matches = ((data ?? []) as unknown as T[]).filter((row) => unitMatchesLookupQuery(row, query));
-    if (matches.length === 1) return matches[0];
+    if (matches.length === 1) return accept(matches[0]);
     const formatted = formatPollingUnitCodeFromParts(parsed);
     const byDisplay = matches.find((row) => formatPollingUnitCode(row) === formatted);
-    if (byDisplay) return byDisplay;
+    if (byDisplay) return accept(byDisplay);
 
     const delim = inecNumericCodeFromParts(parsed);
     if (delim) {
       const [stateCode, lgCode, wardCode, puCode] = delim.split("/");
-      const { data: inec } = await supabase
-        .from("polling_units")
-        .select(columns)
-        .eq("tenant_id", tenantId)
-        .eq("state_code", stateCode)
-        .eq("lg_code", lgCode)
-        .eq("ward_code", wardCode)
-        .eq("pu_code", puCode)
-        .limit(2);
+      const { data: inec } = await applyCampaignStateFilter(
+        supabase
+          .from("polling_units")
+          .select(columns)
+          .eq("tenant_id", tenantId)
+          .eq("state_code", stateCode)
+          .eq("lg_code", lgCode)
+          .eq("ward_code", wardCode)
+          .eq("pu_code", puCode)
+      ).limit(2);
       const rows = (inec ?? []) as unknown as T[];
-      if (rows.length === 1) return rows[0];
+      if (rows.length === 1) return accept(rows[0]);
     }
   }
 
   const padded = padPuCode(query);
   const digitsOnly = query.replace(/\s/g, "");
   if (padded && /^\d+$/.test(digitsOnly) && !query.includes("/")) {
-    const { data } = await supabase
-      .from("polling_units")
-      .select(columns)
-      .eq("tenant_id", tenantId)
-      .eq("pu_code", padded)
-      .limit(3);
-    if (data?.length === 1) return data[0] as unknown as T;
+    const { data } = await applyCampaignStateFilter(
+      supabase.from("polling_units").select(columns).eq("tenant_id", tenantId).eq("pu_code", padded)
+    ).limit(3);
+    if (data?.length === 1) return accept(data[0] as unknown as T);
   }
 
   if (/[A-Za-z]/.test(query) && query.length >= 4) {
-    const { data } = await supabase
-      .from("polling_units")
-      .select(columns)
-      .eq("tenant_id", tenantId)
-      .ilike("name", `%${sanitizePuLookupQuery(query)}%`)
-      .limit(8);
+    const { data } = await applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select(columns)
+        .eq("tenant_id", tenantId)
+        .ilike("name", `%${sanitizePuLookupQuery(query)}%`)
+    ).limit(8);
     const matches = ((data ?? []) as unknown as T[]).filter((row) => unitMatchesLookupQuery(row, query));
-    if (matches.length === 1) return matches[0];
+    if (matches.length === 1) return accept(matches[0]);
   }
 
   return null;

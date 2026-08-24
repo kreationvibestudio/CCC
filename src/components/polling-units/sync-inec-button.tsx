@@ -14,10 +14,11 @@ type SyncResponse = {
   inserted?: number;
   updated?: number;
   failed?: number;
+  pruned?: number;
   nextOffset?: number;
   stateTotal?: number;
   stateRemaining?: number;
-  nextState?: string | null;
+  pruneRemaining?: number;
   done?: boolean;
 };
 
@@ -28,55 +29,58 @@ export function SyncInecRegisterButton() {
 
   async function run() {
     setRunning(true);
-    setProgress("Downloading INEC register…");
+    setProgress("Loading Edo INEC register…");
     let inserted = 0;
     let updated = 0;
     let failed = 0;
-    let state: string | undefined;
+    let pruned = 0;
     let offset = 0;
+    let pruneOnly = false;
     try {
       for (let i = 0; i < 900; i += 1) {
         const res = await fetch("/api/polling-units/sync-inec", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ state, offset, limit: 400 }),
+          body: JSON.stringify({ offset, limit: 400, pruneOnly }),
         });
         const data = (await res.json()) as SyncResponse;
         if (!res.ok) {
-          toast.error(data.error || "Could not load the INEC register");
+          toast.error(data.error || "Could not load Edo polling units");
           break;
         }
         inserted += data.inserted ?? 0;
         updated += data.updated ?? 0;
         failed += data.failed ?? 0;
+        pruned += data.pruned ?? 0;
         const loaded = (data.stateTotal ?? 0) - (data.stateRemaining ?? 0);
         setProgress(
-          `${data.state ?? ""} ${loaded.toLocaleString()} / ${(data.stateTotal ?? 0).toLocaleString()} · +${inserted.toLocaleString()} new`
+          pruneOnly
+            ? `Removing other states… ${pruned.toLocaleString()} removed`
+            : `Edo ${loaded.toLocaleString()} / ${(data.stateTotal ?? 0).toLocaleString()}`
         );
         if (data.done) break;
-        if ((data.processed ?? 0) === 0 && !data.nextState) break;
         if ((data.stateRemaining ?? 0) > 0) {
-          state = data.state;
           offset = data.nextOffset ?? 0;
+          pruneOnly = false;
         } else {
-          state = data.nextState ?? undefined;
+          pruneOnly = true;
           offset = 0;
         }
       }
-      if (inserted + updated > 0) {
+      if (inserted + updated + pruned > 0) {
         toast.success(
-          `INEC register loaded: ${inserted.toLocaleString()} added, ${updated.toLocaleString()} codes corrected${
-            failed ? `, ${failed} failed` : ""
+          `Edo register ready: ${inserted.toLocaleString()} added, ${updated.toLocaleString()} updated${
+            pruned ? `, ${pruned.toLocaleString()} non-Edo units removed` : ""
           }`
         );
       } else if (failed > 0) {
-        toast.error(`INEC sync failed for ${failed} polling units`);
+        toast.error(`Edo PU sync failed for ${failed} polling units`);
       } else {
-        toast("Polling units already match the INEC register");
+        toast("Edo polling units already match the INEC register");
       }
       router.refresh();
     } catch {
-      toast.error("INEC sync stopped — keep this tab open and try again");
+      toast.error("Edo PU sync stopped — keep this tab open and try again");
     } finally {
       setRunning(false);
       setProgress("");
@@ -86,7 +90,7 @@ export function SyncInecRegisterButton() {
   return (
     <Button type="button" variant="default" disabled={running} onClick={() => void run()}>
       <Landmark className="mr-2 h-4 w-4" />
-      {running ? progress || "Loading INEC register…" : "Load official INEC PUs"}
+      {running ? progress || "Loading Edo PUs…" : "Load Edo INEC PUs"}
     </Button>
   );
 }

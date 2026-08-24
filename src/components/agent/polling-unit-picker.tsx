@@ -181,7 +181,7 @@ export function PollingUnitPicker({
             id="pu-code-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="FCT/AMAC/04/028 or 37/06/04/028"
+            placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
             autoComplete="off"
           />
           <Button type="submit" variant="secondary" disabled={pending}>

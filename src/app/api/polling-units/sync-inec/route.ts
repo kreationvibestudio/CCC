@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission } from "@/types/auth";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { INEC_STATE_FILES } from "@/lib/polling-units/inec-register";
+import { applyCampaignStateFilter, CAMPAIGN_STATE } from "@/lib/polling-units/scope";
 import { syncInecRegisterBatch } from "@/lib/polling-units/inec-sync";
 
 export const runtime = "nodejs";
@@ -16,15 +16,14 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const supabase = createServiceClient();
-  const { count } = await supabase
-    .from("polling_units")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", user.profile.tenant_id);
+  const { count } = await applyCampaignStateFilter(
+    supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", user.profile.tenant_id)
+  );
   return NextResponse.json({
     success: true,
     puCount: count ?? 0,
-    catalogStates: INEC_STATE_FILES.length,
-    firstState: INEC_STATE_FILES[0]?.token ?? "FCT",
+    catalogStates: 1,
+    firstState: CAMPAIGN_STATE,
   });
 }
 
@@ -35,23 +34,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let state: string | undefined;
   let offset = 0;
   let limit = 400;
+  let pruneOnly = false;
   try {
-    const body = (await req.json()) as { state?: string; offset?: number; limit?: number };
-    if (typeof body.state === "string" && body.state.trim()) state = body.state.trim();
+    const body = (await req.json()) as { offset?: number; limit?: number; pruneOnly?: boolean };
     if (typeof body.offset === "number") offset = body.offset;
     if (typeof body.limit === "number") limit = body.limit;
+    pruneOnly = Boolean(body.pruneOnly);
   } catch {
-    // empty body starts at FCT
+    // empty body starts Edo ingest
   }
 
   try {
     const result = await syncInecRegisterBatch(createServiceClient(), user.profile.tenant_id, {
-      state,
+      state: CAMPAIGN_STATE,
       offset,
       limit,
+      pruneOnly,
     });
     revalidatePath("/polling-units");
     revalidatePath("/polling-units/agents");

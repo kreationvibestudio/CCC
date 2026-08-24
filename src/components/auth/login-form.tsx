@@ -84,6 +84,8 @@ export function LoginForm() {
         </form>
         <div className="mt-4 text-center text-sm text-muted-foreground">
           <Link href="/forgot-password" className="hover:text-primary">Forgot password?</Link>
+          {" · "}
+          <Link href="/register" className="hover:text-primary">Create account</Link>
         </div>
       </CardContent>
     </Card>

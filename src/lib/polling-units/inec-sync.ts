@@ -186,6 +186,28 @@ async function loadExistingForBatch(
   return rows;
 }
 
+async function deletePollingUnitsById(
+  supabase: SupabaseClient,
+  tenantId: string,
+  ids: string[]
+): Promise<void> {
+  if (!ids.length) return;
+  const { error: resultsError } = await supabase.from("election_results").delete().in("polling_unit_id", ids);
+  if (resultsError) throw new Error(resultsError.message);
+  const { error: incidentsError } = await supabase
+    .from("incident_reports")
+    .update({ polling_unit_id: null })
+    .in("polling_unit_id", ids);
+  if (incidentsError) throw new Error(incidentsError.message);
+  const { error: reportsError } = await supabase
+    .from("agent_reports")
+    .update({ polling_unit_id: null })
+    .in("polling_unit_id", ids);
+  if (reportsError) throw new Error(reportsError.message);
+  const { error: deleteError } = await supabase.from("polling_units").delete().eq("tenant_id", tenantId).in("id", ids);
+  if (deleteError) throw new Error(deleteError.message);
+}
+
 export async function pruneNonCampaignPollingUnits(
   supabase: SupabaseClient,
   tenantId: string,
@@ -203,8 +225,7 @@ export async function pruneNonCampaignPollingUnits(
   const ids = fetched.filter((row) => !isCampaignPollingUnit(row)).map((row) => row.id);
   const moreOnPage = fetched.length >= page;
   if (ids.length) {
-    const { error: deleteError } = await supabase.from("polling_units").delete().eq("tenant_id", tenantId).in("id", ids);
-    if (deleteError) throw new Error(deleteError.message);
+    await deletePollingUnitsById(supabase, tenantId, ids);
     return { pruned: ids.length, remaining: moreOnPage ? 1 : 0 };
   }
   const fallback = await supabase
@@ -222,8 +243,7 @@ export async function pruneNonCampaignPollingUnits(
   }>;
   const extra = extraFetched.filter((row) => !isCampaignPollingUnit(row)).map((row) => row.id);
   if (!extra.length) return { pruned: 0, remaining: 0 };
-  const { error: deleteError } = await supabase.from("polling_units").delete().eq("tenant_id", tenantId).in("id", extra);
-  if (deleteError) throw new Error(deleteError.message);
+  await deletePollingUnitsById(supabase, tenantId, extra);
   return { pruned: extra.length, remaining: extraFetched.length >= page ? 1 : 0 };
 }
 

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand/logo";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,7 +51,10 @@ export function JoinForm({
 
   return (
     <Card className="w-full max-w-md">
-      <CardHeader>
+      <CardHeader className="text-center">
+        <div className="mx-auto mb-3">
+          <BrandLogo size={96} className="mx-auto" />
+        </div>
         <CardTitle>Join {tenantName}</CardTitle>
         <CardDescription>Create your login for this campaign workspace only.</CardDescription>
       </CardHeader>

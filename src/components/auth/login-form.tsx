@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Shield, Loader2 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/logo";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { safeInternalPath } from "@/lib/auth/bearer";
 
@@ -43,10 +44,10 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md border-border/50 war-room-glow">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-          <Shield className="h-6 w-6 text-primary" />
+        <div className="mx-auto mb-3">
+          <BrandLogo size={128} priority className="mx-auto" />
         </div>
-        <CardTitle className="text-2xl">Campaign Command Center</CardTitle>
+        <CardTitle className="sr-only">Campaign Command Center</CardTitle>
         <CardDescription>Sign in to your campaign war room</CardDescription>
       </CardHeader>
       <CardContent>

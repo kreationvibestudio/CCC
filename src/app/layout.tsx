@@ -17,7 +17,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Campaign Command Center",
-  description: "AI-powered political campaign management for Nigerian elections",
+  description: "Analyze · Mobilize · Win — smart tools for smarter campaigns",
+  icons: {
+    icon: "/ccc-logo.webp",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

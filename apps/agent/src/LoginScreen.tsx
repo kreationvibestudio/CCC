@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -8,7 +9,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from "react-native";
 import * as Location from "expo-location";
 import { AgentAuthError, agentApi } from "./api";
@@ -91,9 +91,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
-        <View style={styles.mark}>
-          <Text style={styles.markText}>CCC</Text>
-        </View>
+        <Image source={require("../assets/icon.png")} style={styles.logo} accessibilityLabel="Campaign Command Center" />
         <Text style={styles.title}>CCC Agent</Text>
         <Text style={styles.sub}>
           Enter the code HQ assigned to your polling unit. You must be at that unit — GPS is checked at sign-in.
@@ -155,16 +153,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   inner: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 },
-  mark: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: colors.primaryMuted,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  markText: { color: "#93c5fd", fontWeight: "800", fontSize: 18 },
+  logo: { width: 112, height: 112, alignSelf: "center", marginBottom: 4, borderRadius: 16 },
   title: { color: colors.text, fontSize: 28, fontWeight: "700" },
   sub: { color: colors.muted, marginBottom: 12, lineHeight: 20 },
   input: {

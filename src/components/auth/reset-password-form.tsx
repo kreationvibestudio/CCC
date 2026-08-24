@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Shield } from "lucide-react";
+import { BrandLogo } from "@/components/brand/logo";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export function ResetPasswordForm() {
@@ -39,8 +40,8 @@ export function ResetPasswordForm() {
   return (
     <Card className="w-full border-border/50 war-room-glow">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-          <Shield className="h-6 w-6 text-primary" />
+        <div className="mx-auto mb-3">
+          <BrandLogo size={96} className="mx-auto" />
         </div>
         <CardTitle className="text-2xl">Set a new password</CardTitle>
         <CardDescription>Choose a password of at least 8 characters</CardDescription>

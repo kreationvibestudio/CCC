@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { BrandLogo } from "@/components/brand/logo";
 import { Shield, Layers, ChevronLeft, ChevronRight } from "lucide-react";
 
 export function Sidebar() {
@@ -58,10 +59,10 @@ export function Sidebar() {
   const sidebarContent = (
     <div className="flex h-full flex-col">
       <div className={cn("flex h-14 items-center border-b border-border px-4", collapsed && "justify-center px-2")}>
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <Shield className="h-6 w-6 shrink-0 text-primary" />
+        <Link href="/dashboard" className="flex items-center gap-2 min-w-0">
+          <BrandLogo size={collapsed ? 32 : 40} className="shrink-0 rounded-md" />
           {!collapsed && (
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <span className="text-sm font-bold leading-none truncate max-w-[11rem]">
                 {user?.workspace?.name ?? "CCC"}
               </span>
@@ -192,7 +193,7 @@ export function MobileSidebarTrigger() {
       className="lg:hidden"
       onClick={() => document.querySelector<HTMLButtonElement>("[data-sidebar-toggle]")?.click()}
     >
-      <Shield className="h-5 w-5" />
+      <BrandLogo size={22} />
     </Button>
   );
 }

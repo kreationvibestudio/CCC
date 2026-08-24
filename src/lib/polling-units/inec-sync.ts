@@ -135,31 +135,52 @@ function needsUpdate(row: ExistingPollingUnit, unit: InecRegisterUnit) {
   );
 }
 
-async function loadExistingForState(
+async function loadByCodes(
   supabase: SupabaseClient,
   tenantId: string,
-  meta: InecStateMeta
+  codes: string[]
 ): Promise<ExistingPollingUnit[]> {
   const rows: ExistingPollingUnit[] = [];
-  const stateFilter = [
-    `state.eq.${meta.token}`,
-    `state.ilike."%${meta.inecName}%"`,
-    `state_code.eq.${meta.inecCode}`,
-  ];
-  if (meta.token === "FCT") stateFilter.push('state.ilike."%ABUJA%"');
-  let from = 0;
-  for (;;) {
+  for (let i = 0; i < codes.length; i += 80) {
+    const slice = codes.slice(i, i + 80);
+    if (!slice.length) continue;
     const { data, error } = await supabase
       .from("polling_units")
       .select(EXISTING_COLS)
       .eq("tenant_id", tenantId)
-      .or(stateFilter.join(","))
-      .range(from, from + 999);
+      .in("code", slice);
     if (error) throw new Error(error.message);
-    const chunk = (data ?? []) as ExistingPollingUnit[];
-    rows.push(...chunk);
-    if (chunk.length < 1000) break;
-    from += 1000;
+    rows.push(...((data ?? []) as ExistingPollingUnit[]));
+  }
+  return rows;
+}
+
+async function loadExistingForBatch(
+  supabase: SupabaseClient,
+  tenantId: string,
+  meta: InecStateMeta,
+  batch: InecRegisterUnit[]
+): Promise<ExistingPollingUnit[]> {
+  const codes = [...new Set(batch.flatMap((unit) => [unit.displayCode, unit.delimitation]))];
+  const rows = await loadByCodes(supabase, tenantId, codes);
+  const seen = new Set(rows.map((row) => row.id));
+
+  const puCodes = [...new Set(batch.map((unit) => unit.puCode))];
+  for (let i = 0; i < puCodes.length; i += 80) {
+    const slice = puCodes.slice(i, i + 80);
+    const { data, error } = await supabase
+      .from("polling_units")
+      .select(EXISTING_COLS)
+      .eq("tenant_id", tenantId)
+      .eq("state_code", meta.inecCode)
+      .in("pu_code", slice);
+    if (error) break;
+    for (const row of (data ?? []) as ExistingPollingUnit[]) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        rows.push(row);
+      }
+    }
   }
   return rows;
 }
@@ -175,7 +196,7 @@ export async function syncInecRegisterBatch(
   const offset = Math.max(options?.offset ?? 0, 0);
   const units = await loadInecStateUnits(meta.token);
   const batch = units.slice(offset, offset + limit);
-  const existing = await loadExistingForState(supabase, tenantId, meta);
+  const existing = await loadExistingForBatch(supabase, tenantId, meta, batch);
   const used = new Set<string>();
   const updates: Array<{ id: string; unit: InecRegisterUnit }> = [];
   const inserts: InecRegisterUnit[] = [];

@@ -21,7 +21,7 @@ const args = process.argv.slice(2);
 const stateArg = args.find((a) => a.startsWith("--state="))?.split("=")[1];
 const limitArg = args.find((a) => a.startsWith("--limit="))?.split("=")[1];
 const all = args.includes("--all") || !stateArg;
-const limit = limitArg ? parseInt(limitArg, 10) : 250;
+const limit = limitArg ? parseInt(limitArg, 10) : 400;
 
 if (!url || !key) {
   console.error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");

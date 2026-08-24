@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   let state: string | undefined;
   let offset = 0;
-  let limit = 250;
+  let limit = 400;
   try {
     const body = (await req.json()) as { state?: string; offset?: number; limit?: number };
     if (typeof body.state === "string" && body.state.trim()) state = body.state.trim();

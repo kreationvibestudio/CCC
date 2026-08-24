@@ -350,7 +350,7 @@ export function AgentRosterView({
           <form action={handleAssign} className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="pu_code">PU code</Label>
-              <Input id="pu_code" name="pu_code" placeholder="FCT/AMAC/01/001" required disabled={pending} />
+              <Input id="pu_code" name="pu_code" placeholder="FCT/AMAC/04/028 or 37/06/04/028" required disabled={pending} />
             </div>
             <div className="space-y-1">
               <Label htmlFor="full_name">Agent name</Label>

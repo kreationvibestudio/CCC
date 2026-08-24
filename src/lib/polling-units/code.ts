@@ -245,13 +245,47 @@ export function withDisplayCode<T extends PollingUnitCodeInput & { code: string 
   return { ...unit, code: formatPollingUnitCode(unit) };
 }
 
+export function inecStateNumericCode(raw: string | null | undefined): string {
+  const token = canonicalStateToken(raw);
+  const named = Object.entries(INEC_STATE_BY_CODE).find(([, name]) => name === token);
+  if (named) return named[0];
+  const digits = String(raw ?? "").replace(/\D/g, "").padStart(2, "0");
+  if (INEC_STATE_BY_CODE[digits]) return digits;
+  return padWardCode(raw);
+}
+
+export function inecLgaNumericCode(
+  lga: string | null | undefined,
+  state: string | null | undefined,
+  lgCode?: string | null
+): string {
+  const padded = padWardCode(lgCode) || (/^\d+$/.test(String(lga ?? "").trim()) ? padWardCode(lga) : "");
+  if (padded) return padded;
+  const stateToken = canonicalStateToken(state);
+  const lgaToken = canonicalLgaToken(lga, stateToken, lgCode);
+  if (stateToken === "FCT") {
+    const hit = Object.entries(FCT_LGA_BY_CODE).find(([, name]) => name === lgaToken);
+    if (hit) return hit[0];
+  }
+  return "";
+}
+
 export function inecNumericCode(unit: PollingUnitCodeInput): string | null {
   const state = canonicalStateToken(unit.state) || canonicalStateToken(unit.state_code);
-  const stateCode =
-    Object.entries(INEC_STATE_BY_CODE).find(([, name]) => name === state)?.[0] || padWardCode(unit.state_code);
-  const lg = padWardCode(unit.lg_code);
+  const stateCode = inecStateNumericCode(state || unit.state_code);
+  const lg = inecLgaNumericCode(unit.lga, state, unit.lg_code);
   const ward = canonicalWardCode(unit.ward_code, unit.ward, canonicalLgaToken(unit.lga, state, unit.lg_code));
-  const pu = padPuCode(unit.pu_code);
+  const pu = padPuCode(unit.pu_code) || padPuCode(parsePollingUnitCode(unit.code)?.pu);
   if (!stateCode || !lg || !ward || !pu) return null;
   return `${stateCode}/${lg}/${ward}/${pu}`;
+}
+
+export function inecNumericCodeFromParts(parts: PollingUnitCodeParts): string | null {
+  return inecNumericCode({
+    state: parts.state,
+    lga: parts.lga,
+    ward_code: parts.ward,
+    pu_code: parts.pu,
+    lg_code: parts.lga,
+  });
 }

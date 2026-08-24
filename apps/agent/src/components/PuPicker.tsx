@@ -169,7 +169,7 @@ export function PuPicker({
       <View style={styles.row}>
         <TextInput
           style={[styles.input, { flex: 1 }]}
-          placeholder="e.g. 12/03/005 or ED/…"
+          placeholder="FCT/AMAC/04/028 or 37/06/04/028"
           placeholderTextColor={colors.muted}
           value={query}
           onChangeText={setQuery}

@@ -9,6 +9,7 @@ import { parsePollingUnitStatus } from "@/lib/agent/pu-status";
 import { haversineMeters } from "@/lib/agent/geo";
 import { assertPollingUnitInTenant } from "@/lib/tenancy";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
+import { pollingUnitSearchOrFilter, rankPollingUnitMatches, sanitizePuLookupQuery } from "@/lib/polling-units/lookup";
 
 /** User session for auth; service role for writes so missing INSERT policies cannot block agents. */
 async function agentDb() {
@@ -180,7 +181,7 @@ function presentAgentUnit<T extends AgentPollingUnit>(row: T): T {
 const AGENT_PU_COLS = "id, code, pu_code, name, ward, lga, state, latitude, longitude, state_code, lg_code, ward_code";
 
 function sanitizePuQuery(raw: string) {
-  return raw.trim().slice(0, 48).replace(/[%_,()]/g, "");
+  return sanitizePuLookupQuery(raw).slice(0, 48);
 }
 
 export async function findNearestPollingUnits(lat: number, lng: number): Promise<AgentPollingUnit[]> {
@@ -242,43 +243,16 @@ export async function searchPollingUnitsByCode(query: string): Promise<AgentPoll
 
   const supabase = await createClient();
   const tenantId = user.profile.tenant_id;
-  const cols = AGENT_PU_COLS;
+  const { data, error } = await supabase
+    .from("polling_units")
+    .select(AGENT_PU_COLS)
+    .eq("tenant_id", tenantId)
+    .or(pollingUnitSearchOrFilter(q))
+    .limit(40);
 
-  async function match(column: "code" | "pu_code", pattern: string) {
-    const { data } = await supabase
-      .from("polling_units")
-      .select(cols)
-      .eq("tenant_id", tenantId)
-      .ilike(column, pattern)
-      .order(column)
-      .limit(20);
-    return (data ?? []) as AgentPollingUnit[];
-  }
-
-  const map = new Map<string, AgentPollingUnit>();
-  const add = (rows: AgentPollingUnit[]) => {
-    for (const row of rows) map.set(row.id, row);
-  };
-
-  add((await Promise.all([match("code", `${q}%`), match("pu_code", `${q}%`)])).flat());
-  if (map.size < 15) {
-    add((await Promise.all([match("code", `%${q}%`), match("pu_code", `%${q}%`)])).flat());
-  }
-
-  const qLower = q.toLowerCase();
-  return [...map.values()]
+  if (error) return [];
+  return rankPollingUnitMatches((data ?? []) as AgentPollingUnit[], q)
     .map(presentAgentUnit)
-    .sort((a, b) => {
-      const score = (u: AgentPollingUnit) => {
-        const code = u.code.toLowerCase();
-        const pu = (u.pu_code ?? "").toLowerCase();
-        if (code === qLower || pu === qLower) return 0;
-        if (code.startsWith(qLower) || pu.startsWith(qLower)) return 1;
-        return 2;
-      };
-      const diff = score(a) - score(b);
-      return diff !== 0 ? diff : a.code.localeCompare(b.code);
-    })
     .slice(0, 25);
 }
 

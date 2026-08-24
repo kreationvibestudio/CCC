@@ -10,12 +10,8 @@ import { hasPermission, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { issueAgentAccessCode } from "@/lib/agent/code-login";
 import { isMissingRelationError } from "@/lib/public-error";
-import {
-  formatPollingUnitCode,
-  formatPollingUnitCodeFromParts,
-  parsePollingUnitCode,
-  withDisplayCode,
-} from "@/lib/polling-units/code";
+import { formatPollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
+import { findPollingUnitByCode, pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
 
 const PU_COLS =
   "id, code, pu_code, name, ward, lga, state, assigned_agent_id, latitude, longitude, state_code, lg_code, ward_code";
@@ -63,54 +59,8 @@ async function findPuByCode(
   tenantId: string,
   raw: string
 ) {
-  const code = raw.trim();
-  if (!code) return null;
-  const parsed = parsePollingUnitCode(code);
-  const formatted = parsed ? formatPollingUnitCodeFromParts(parsed) : "";
-  const candidates = [...new Set([code, formatted, code.toUpperCase()].filter(Boolean))];
-
-  for (const candidate of candidates) {
-    const { data: byCode } = await supabase
-      .from("polling_units")
-      .select(PU_COLS)
-      .eq("tenant_id", tenantId)
-      .eq("code", candidate)
-      .limit(1)
-      .maybeSingle();
-    if (byCode) return withDisplayCode(byCode);
-  }
-
-  if (parsed) {
-    let q = supabase.from("polling_units").select(PU_COLS).eq("tenant_id", tenantId).eq("pu_code", parsed.pu).limit(20);
-    if (parsed.ward) q = q.eq("ward_code", parsed.ward);
-    const { data: rows } = await q;
-    const match = (rows ?? []).find((row) => formatPollingUnitCode(row) === formatted);
-    if (match) return withDisplayCode(match);
-
-    const numeric = code.toUpperCase().split(/[/-]/).filter(Boolean);
-    if (numeric.length === 4 && numeric.every((part) => /^\d+$/.test(part))) {
-      const { data: inec } = await supabase
-        .from("polling_units")
-        .select(PU_COLS)
-        .eq("tenant_id", tenantId)
-        .eq("state_code", numeric[0].padStart(2, "0"))
-        .eq("lg_code", numeric[1].padStart(2, "0"))
-        .eq("ward_code", numeric[2].padStart(2, "0"))
-        .eq("pu_code", numeric[3].padStart(3, "0"))
-        .limit(1)
-        .maybeSingle();
-      if (inec) return withDisplayCode(inec);
-    }
-  }
-
-  const { data: byPu } = await supabase
-    .from("polling_units")
-    .select(PU_COLS)
-    .eq("tenant_id", tenantId)
-    .eq("pu_code", code)
-    .limit(2);
-  if (byPu?.length === 1) return withDisplayCode(byPu[0]);
-  return null;
+  const row = await findPollingUnitByCode(supabase, tenantId, raw, PU_COLS);
+  return row ? withDisplayCode(row) : null;
 }
 
 export type AssignmentRow = {
@@ -179,7 +129,7 @@ export async function listAgentAssignments(input?: {
       .eq("role", "polling_agent")
       .ilike("full_name", `%${safe}%`);
     const nameIds = (nameHits ?? []).map((p) => p.id);
-    const puMatch = `code.ilike."%${safe}%",pu_code.ilike."%${safe}%",name.ilike."%${safe}%"`;
+    const puMatch = pollingUnitSearchOrFilter(safe);
     q = nameIds.length
       ? q.or(`${puMatch},assigned_agent_id.in.(${nameIds.join(",")})`)
       : q.or(puMatch);

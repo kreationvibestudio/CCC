@@ -6,7 +6,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-actions";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
-import { formatPollingUnitCode, formatPollingUnitCodeFromParts, parsePollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
+import { formatPollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
+import { pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
 
 const LIST_COLS =
   "id, name, code, pu_code, ward, lga, state, registered_voters, latitude, longitude, risk_level, ward_code, lg_code, state_code, geocode_status, address, assigned_agent_id";
@@ -145,10 +146,7 @@ export async function queryPollingUnits(input: {
   if (lga) q = q.eq("lga", lga);
   if (ward) q = q.eq("ward", ward);
   if (search.length >= 2) {
-    const parsed = parsePollingUnitCode(search);
-    const formatted = parsed ? formatPollingUnitCodeFromParts(parsed) : "";
-    const extra = formatted && formatted !== search.toUpperCase() ? `,code.ilike."%${formatted}%"` : "";
-    q = q.or(`code.ilike."%${search}%",pu_code.ilike."%${search}%",name.ilike."%${search}%"${extra}`);
+    q = q.or(pollingUnitSearchOrFilter(search));
   }
   if (input.mappedOnly) {
     q = q.not("latitude", "is", null).not("longitude", "is", null);

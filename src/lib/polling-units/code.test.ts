@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   formatPollingUnitCode,
+  inecNumericCode,
+  inecNumericCodeFromParts,
   isCanonicalPollingUnitCode,
   parsePollingUnitCode,
 } from "./code.ts";
@@ -34,6 +36,19 @@ describe("polling unit codes", () => {
     assert.equal(formatPollingUnitCode({ code: "37/06/04/028", lga: "Municipal", state: "FCT" }), "FCT/AMAC/04/028");
     assert.equal(formatPollingUnitCode({ code: "FC/06/04/028" }), "FCT/AMAC/04/028");
     assert.equal(formatPollingUnitCode({ code: "FC/AMAC/01/001" }), "FCT/AMAC/01/001");
+  });
+
+  it("converts campaign FCT codes to INEC delimitation 37/06/ward/pu", () => {
+    assert.equal(
+      inecNumericCode({
+        state: "FCT",
+        lga: "AMAC",
+        ward_code: "04",
+        pu_code: "028",
+      }),
+      "37/06/04/028"
+    );
+    assert.equal(inecNumericCodeFromParts(parsePollingUnitCode("FCT/AMAC/04/028")!), "37/06/04/028");
   });
 
   it("formats Edo from INEC parts plus LGA name", () => {

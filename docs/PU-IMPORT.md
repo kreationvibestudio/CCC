@@ -26,6 +26,27 @@ INEC’s internal delimitation id is numeric (`37/06/04/028`). HQ stores and sho
 
 Polling Units → **Format PU codes** rewrites existing rows. Import also formats on the way in.
 
+## Load the official INEC register
+
+Search fails with “PU does not exist” when the tenant only has a handful of demo units, or when someone pastes INEC’s numeric delimitation (`37/06/04/028`) while the row is stored as `FCT/AMAC/04/028`.
+
+HQ **Load official INEC PUs** downloads INEC’s public polling-unit directory (JayCodist snapshot of the INEC site) and:
+
+1. Corrects codes, LGA, ward, and names on units you already have
+2. Inserts every missing official PU (FCT first, then Lagos, Edo, then the rest of the 37 states — about 185,000 units nationally)
+
+Keep the tab open; it walks the register in batches. Both `FCT/AMAC/04/028` and `37/06/04/028` then find the same row.
+
+CLI (uses `.env.local` — local DB unless that file points at production):
+
+```bash
+npm run pu:sync-inec -- --state=FCT
+npm run pu:sync-inec -- --all
+```
+
+Do not commit the 80MB+ national JSON; the app fetches per-state files at runtime and caches them under `/tmp/inec-pu-register`.
+
+
 ## Official INEC CSV columns
 
 ```csv

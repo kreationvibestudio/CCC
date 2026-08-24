@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Upload } from "lucide-react";
 import { GeocodePinsButton } from "@/components/polling-units/geocode-pins-button";
 import { FormatPuCodesButton } from "@/components/polling-units/format-pu-codes-button";
+import { SyncInecRegisterButton } from "@/components/polling-units/sync-inec-button";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
@@ -132,6 +133,7 @@ export function PollingUnitsView({
     <div className="space-y-6">
       <PageHeader title="Polling Units" description="Search the full register by LGA, ward, or PU code">
         <div className="flex flex-wrap gap-2">
+          <SyncInecRegisterButton />
           <FormatPuCodesButton />
           <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} />
           <Button variant="outline" asChild>
@@ -175,7 +177,7 @@ export function PollingUnitsView({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search PU code or name…"
+          placeholder="FCT/AMAC/04/028, 37/06/04/028, or name…"
           className="max-w-xs"
         />
       </div>

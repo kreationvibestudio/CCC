@@ -5,18 +5,17 @@ import { requirePermission } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
   FacebookApiError,
-  fetchPageInfo,
   getWorkingPageToken,
   isUsableFacebookToken,
+  normalizeTokenFromSetting,
+  resolvePageAccessToken,
+  fetchPageInfo,
+  fetchPosts,
 } from "@/lib/integrations/facebook/client";
 import { syncFacebookToDatabase } from "@/lib/integrations/facebook/sync";
 
 function settingString(value: unknown) {
-  if (typeof value === "string") return value.trim();
-  if (value && typeof value === "object" && "value" in value) {
-    return String((value as { value: string }).value).trim();
-  }
-  return "";
+  return normalizeTokenFromSetting(value);
 }
 
 async function upsertSetting(tenantId: string, key: string, value: string) {
@@ -26,6 +25,50 @@ async function upsertSetting(tenantId: string, key: string, value: string) {
     { onConflict: "tenant_id,key" }
   );
   if (error) throw new Error(error.message);
+}
+
+/** Validate token the same way sync does: page info + posts fetch. */
+async function validateFacebookTokens(input: {
+  pageId: string;
+  pageAccessToken?: string;
+  userAccessToken?: string;
+}): Promise<{ pageToken: string; pageName: string; followers: number; source: string }> {
+  const pageId = input.pageId.trim();
+  const pageAccessToken = (input.pageAccessToken ?? "").trim();
+  const userAccessToken = (input.userAccessToken ?? "").trim();
+
+  if (isUsableFacebookToken(pageAccessToken)) {
+    try {
+      const pageToken = await resolvePageAccessToken(pageAccessToken, pageId);
+      const page = await fetchPageInfo(pageId, pageToken);
+      await fetchPosts(pageId, pageToken, 1);
+      return {
+        pageToken,
+        pageName: page.name,
+        followers: page.followers_count ?? page.fan_count ?? 0,
+        source: pageToken === pageAccessToken ? "page_token" : "page_token->resolved",
+      };
+    } catch (err) {
+      if (!isUsableFacebookToken(userAccessToken)) throw err;
+    }
+  }
+
+  const { pageToken, source } = await getWorkingPageToken({
+    pageId,
+    envPageToken: isUsableFacebookToken(pageAccessToken) ? pageAccessToken : null,
+    envUserToken: isUsableFacebookToken(userAccessToken) ? userAccessToken : null,
+    storedPageToken: null,
+  });
+
+  const page = await fetchPageInfo(pageId, pageToken);
+  await fetchPosts(pageId, pageToken, 1);
+
+  return {
+    pageToken,
+    pageName: page.name,
+    followers: page.followers_count ?? page.fan_count ?? 0,
+    source,
+  };
 }
 
 export async function getFacebookConnectionStatus(tenantId: string) {
@@ -68,7 +111,11 @@ export async function getFacebookConnectionStatus(tenantId: string) {
     if (row.key === "facebook_last_live_sync_at") lastLiveSyncAt = v;
   }
 
-  pageId = pageId || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+  pageId = pageId || account?.account_id?.trim() || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+  if (isUsableFacebookToken(account?.access_token_encrypted)) {
+    hasPageToken = true;
+  }
+
   const envPageToken = isUsableFacebookToken(process.env.FACEBOOK_PAGE_ACCESS_TOKEN);
   const envUserToken = isUsableFacebookToken(process.env.FACEBOOK_USER_ACCESS_TOKEN);
 
@@ -113,17 +160,17 @@ export async function saveFacebookConnection(input: {
 
     if (!pageId || pageId.length < 5) return { error: "Enter the numeric Facebook Page ID" };
     if (!isUsableFacebookToken(pageAccessToken) && !isUsableFacebookToken(userAccessToken)) {
-      return { error: "Paste a page access token (40+ characters) from Meta Graph API Explorer" };
+      return {
+        error:
+          "Paste a page access token from Graph API Explorer → GET /me/accounts (not the user token from Generate Token).",
+      };
     }
 
-    const { pageToken, source } = await getWorkingPageToken({
+    const { pageToken, pageName, followers, source } = await validateFacebookTokens({
       pageId,
-      envPageToken: isUsableFacebookToken(pageAccessToken) ? pageAccessToken : null,
-      envUserToken: isUsableFacebookToken(userAccessToken) ? userAccessToken : null,
-      storedPageToken: null,
+      pageAccessToken: isUsableFacebookToken(pageAccessToken) ? pageAccessToken : undefined,
+      userAccessToken: isUsableFacebookToken(userAccessToken) ? userAccessToken : undefined,
     });
-
-    const page = await fetchPageInfo(pageId, pageToken);
 
     await upsertSetting(tenantId, "facebook_page_id", pageId);
     await upsertSetting(tenantId, "facebook_page_access_token", pageToken);
@@ -145,10 +192,10 @@ export async function saveFacebookConnection(input: {
       await admin
         .from("social_accounts")
         .update({
-          account_name: page.name,
+          account_name: pageName,
           is_connected: true,
           access_token_encrypted: pageToken,
-          followers: page.followers_count ?? page.fan_count ?? 0,
+          followers,
         })
         .eq("id", existing.id);
     } else {
@@ -156,17 +203,19 @@ export async function saveFacebookConnection(input: {
         tenant_id: tenantId,
         platform: "facebook",
         account_id: pageId,
-        account_name: page.name,
+        account_name: pageName,
         is_connected: true,
         access_token_encrypted: pageToken,
-        followers: page.followers_count ?? page.fan_count ?? 0,
+        followers,
       });
     }
 
-    // Immediate live sync so Social Media updates now
     let syncWarning: string | undefined;
     try {
-      const result = await syncFacebookToDatabase(tenantId);
+      const result = await syncFacebookToDatabase(tenantId, {
+        validatedPageToken: pageToken,
+        validatedPageId: pageId,
+      });
       await upsertSetting(tenantId, "facebook_last_live_sync_at", new Date().toISOString());
       await upsertSetting(tenantId, "facebook_last_sync_error", "");
       syncWarning = result.commentsSkippedReason;
@@ -175,8 +224,8 @@ export async function saveFacebookConnection(input: {
       await upsertSetting(tenantId, "facebook_last_sync_error", msg.split("\n")[0] ?? msg);
       revalidatePath("/social");
       return {
-        error: `Token saved for ${page.name}, but sync failed: ${msg.split("\n")[0]}`,
-        pageName: page.name,
+        error: `Token saved for ${pageName}, but sync failed: ${msg.split("\n")[0]}`,
+        pageName,
         tokenSource: source,
       };
     }
@@ -185,8 +234,8 @@ export async function saveFacebookConnection(input: {
     revalidatePath("/admin");
     return {
       success: true as const,
-      pageName: page.name,
-      followers: page.followers_count ?? page.fan_count ?? 0,
+      pageName,
+      followers,
       tokenSource: source,
       warning: syncWarning,
     };

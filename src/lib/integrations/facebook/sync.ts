@@ -7,6 +7,7 @@ import {
   fetchPosts,
   getWorkingPageToken,
   isUsableFacebookToken,
+  normalizeTokenFromSetting,
   type FacebookSyncResult,
   FacebookApiError,
 } from "./client";
@@ -15,11 +16,7 @@ import { isSocialDemoModeEnabled, seedDemoSocialData, shouldAttemptLiveFacebookS
 const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
 function settingString(value: unknown) {
-  if (typeof value === "string") return value.trim();
-  if (value && typeof value === "object" && "value" in value) {
-    return String((value as { value: string }).value).trim();
-  }
-  return "";
+  return normalizeTokenFromSetting(value);
 }
 
 async function getFacebookConfig(tenantId: string) {
@@ -27,27 +24,42 @@ async function getFacebookConfig(tenantId: string) {
   let userToken = "";
   let pageToken = "";
 
-  try {
-    const supabase = await getDbClient();
-    const { data: settings } = await supabase
+  const supabase = await getDbClient();
+
+  const [{ data: settings }, { data: account }] = await Promise.all([
+    supabase
       .from("tenant_settings")
       .select("key, value")
       .eq("tenant_id", tenantId)
-      .in("key", ["facebook_page_id", "facebook_page_access_token", "facebook_user_access_token"]);
-    for (const row of settings ?? []) {
-      const v = settingString(row.value);
-      if (row.key === "facebook_page_id") pageId = v;
-      if (row.key === "facebook_page_access_token") pageToken = v;
-      if (row.key === "facebook_user_access_token") userToken = v;
-    }
-  } catch {
-    // fall through to env
+      .in("key", ["facebook_page_id", "facebook_page_access_token", "facebook_user_access_token"]),
+    supabase
+      .from("social_accounts")
+      .select("account_id, access_token_encrypted")
+      .eq("tenant_id", tenantId)
+      .eq("platform", "facebook")
+      .neq("account_id", "demo-hon-akhakon")
+      .order("last_synced_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  for (const row of settings ?? []) {
+    const v = settingString(row.value);
+    if (row.key === "facebook_page_id") pageId = v;
+    if (row.key === "facebook_page_access_token") pageToken = v;
+    if (row.key === "facebook_user_access_token") userToken = v;
   }
 
-  // Tenant settings win; env fills gaps (works for every workspace, not only default)
-  pageId = pageId || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+  pageId = pageId || account?.account_id?.trim() || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+  // Prefer TEXT token on social_accounts over JSONB tenant_settings
+  const stored = account?.access_token_encrypted?.trim() ?? "";
+  if (isUsableFacebookToken(stored)) {
+    pageToken = stored;
+  }
   userToken = userToken || process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() || "";
-  pageToken = pageToken || process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
+  if (!isUsableFacebookToken(pageToken)) {
+    pageToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
+  }
 
   if (!pageId || pageId.length < 5 || /^your[_-]/i.test(pageId) || pageId === "[SENSITIVE]") {
     throw new FacebookApiError(
@@ -61,7 +73,7 @@ async function getFacebookConfig(tenantId: string) {
     );
   }
 
-  return { pageId, userToken, pageToken };
+  return { pageId, userToken, pageToken, storedPageToken: stored || null };
 }
 
 function calcEngagementRate(likes: number, comments: number, shares: number, followers: number) {
@@ -77,13 +89,19 @@ async function getDbClient() {
   }
 }
 
-export async function syncFacebookToDatabase(tenantId: string): Promise<FacebookSyncResult> {
+export async function syncFacebookToDatabase(
+  tenantId: string,
+  opts?: { validatedPageToken?: string; validatedPageId?: string }
+): Promise<FacebookSyncResult> {
   let hasTenantTokens = false;
   try {
     const cfg = await getFacebookConfig(tenantId);
-    hasTenantTokens = isUsableFacebookToken(cfg.pageToken) || isUsableFacebookToken(cfg.userToken);
+    hasTenantTokens =
+      isUsableFacebookToken(opts?.validatedPageToken) ||
+      isUsableFacebookToken(cfg.pageToken) ||
+      isUsableFacebookToken(cfg.userToken);
   } catch {
-    hasTenantTokens = false;
+    hasTenantTokens = isUsableFacebookToken(opts?.validatedPageToken);
   }
 
   const preferLive = hasTenantTokens || shouldAttemptLiveFacebookSync();
@@ -93,9 +111,8 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
   }
 
   try {
-    return await syncFacebookLive(tenantId);
+    return await syncFacebookLive(tenantId, opts);
   } catch (err) {
-    // Do not hide expired-token failures behind demo data when Meta was configured
     if (!preferLive && isSocialDemoModeEnabled()) {
       return seedDemoSocialData(tenantId);
     }
@@ -103,8 +120,12 @@ export async function syncFacebookToDatabase(tenantId: string): Promise<Facebook
   }
 }
 
-async function syncFacebookLive(tenantId: string): Promise<FacebookSyncResult> {
-  const { pageId, userToken, pageToken: envPageToken } = await getFacebookConfig(tenantId);
+async function syncFacebookLive(
+  tenantId: string,
+  opts?: { validatedPageToken?: string; validatedPageId?: string }
+): Promise<FacebookSyncResult> {
+  const config = await getFacebookConfig(tenantId);
+  const pageId = opts?.validatedPageId?.trim() || config.pageId;
   const supabase = await getDbClient();
 
   const { data: existingAccount } = await supabase
@@ -115,12 +136,18 @@ async function syncFacebookLive(tenantId: string): Promise<FacebookSyncResult> {
     .eq("account_id", pageId)
     .maybeSingle();
 
-  const { pageToken, source: tokenSource } = await getWorkingPageToken({
-    pageId,
-    envPageToken,
-    envUserToken: userToken,
-    storedPageToken: existingAccount?.access_token_encrypted,
-  });
+  let pageToken = opts?.validatedPageToken?.trim() ?? "";
+  let tokenSource = "validated_page_token";
+  if (!isUsableFacebookToken(pageToken)) {
+    const resolved = await getWorkingPageToken({
+      pageId,
+      envPageToken: config.pageToken,
+      envUserToken: config.userToken,
+      storedPageToken: existingAccount?.access_token_encrypted ?? config.storedPageToken,
+    });
+    pageToken = resolved.pageToken;
+    tokenSource = resolved.source;
+  }
 
   const page = await fetchPageInfo(pageId, pageToken);
   const posts = await fetchPosts(pageId, pageToken, 25);

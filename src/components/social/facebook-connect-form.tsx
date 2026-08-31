@@ -60,8 +60,8 @@ export function FacebookConnectForm({
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">
-          Paste a <strong>never-expiring Page access token</strong> from Meta Graph API Explorer.
-          You do not need Vercel for this — HQ stores it for your workspace and syncs immediately.
+          Paste the <strong>page access token</strong> from <code>GET /me/accounts</code> — not the user
+          token shown after Generate Token. HQ stores it and syncs immediately.
         </p>
         <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
           <li>
@@ -79,8 +79,14 @@ export function FacebookConnectForm({
             Add permissions: <code>pages_show_list</code>, <code>pages_read_engagement</code>,{" "}
             <code>pages_read_user_content</code>, <code>pages_manage_engagement</code>
           </li>
-          <li>Generate a user token as a page admin, then call <code>/me/accounts</code> and copy the page token for ID {defaultPageId}</li>
-          <li>Paste page ID + page token below and save</li>
+          <li>
+            Generate Token as a page admin, then run <code>GET /me/accounts</code> and copy the{" "}
+            <code>access_token</code> for page ID {defaultPageId}
+          </li>
+          <li>
+            Paste that page token below. Or paste only a user token in the optional field and leave page
+            token empty — CCC resolves the page token via <code>/me/accounts</code>.
+          </li>
         </ol>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">

@@ -86,7 +86,31 @@ export function isUsableFacebookToken(value: string | null | undefined): value i
   if (trimmed.length < 40) return false;
   if (/^\[SENSITIVE\]$/i.test(trimmed)) return false;
   if (/^your[_-]/i.test(trimmed)) return false;
+  if (/^demo$/i.test(trimmed)) return false;
   return true;
+}
+
+/** Extract a token string from tenant_settings JSONB (handles plain strings and legacy shapes). */
+export function normalizeTokenFromSetting(value: unknown): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (typeof parsed === "string") return parsed.trim();
+      } catch {
+        return trimmed.replace(/^"|"$/g, "").trim();
+      }
+    }
+    return trimmed;
+  }
+  if (value && typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    if (typeof row.value === "string") return row.value.trim();
+    if (typeof row.access_token === "string") return row.access_token.trim();
+    if (typeof row.token === "string") return row.token.trim();
+  }
+  return "";
 }
 
 function wrapFacebookError(error: {
@@ -185,29 +209,25 @@ export async function exchangeLongLivedUserToken(shortLivedUserToken: string): P
   return json.access_token as string;
 }
 
-async function probePageToken(pageId: string, token: string): Promise<boolean> {
+async function validatePageTokenForSync(pageId: string, token: string): Promise<boolean> {
   try {
-    await graphGet<{ data: unknown[] }>(`/${pageId}/published_posts`, token, {
-      fields: "id",
-      limit: "1",
-    });
+    await fetchPageInfo(pageId, token);
+    await fetchPosts(pageId, token, 1);
     return true;
   } catch (err) {
     if (isFacebookAuthError(err)) return false;
-    // Permission / empty errors still mean the token was accepted
-    if (err instanceof FacebookApiError && (err.code === 10 || err.code === 210 || err.code === 100)) {
-      return true;
-    }
+    // Valid page token but missing optional scopes — still usable for posts list in many cases
+    if (err instanceof FacebookApiError && (err.code === 10 || err.code === 210)) return true;
     throw err;
   }
 }
 
-/** Exchange user token → page token. Skips /me/accounts if token is already a page token. */
+/** Exchange user token → page token. Validates the result can read posts (same as sync). */
 export async function resolvePageAccessToken(
   userOrPageToken: string,
   pageId: string
 ): Promise<string> {
-  if (await probePageToken(pageId, userOrPageToken)) {
+  if (await validatePageTokenForSync(pageId, userOrPageToken)) {
     return userOrPageToken;
   }
 
@@ -217,7 +237,7 @@ export async function resolvePageAccessToken(
     }>("/me/accounts", userOrPageToken, { fields: "id,access_token" });
 
     const page = accounts.data?.find((a) => a.id === pageId);
-    if (page?.access_token) {
+    if (page?.access_token && (await validatePageTokenForSync(pageId, page.access_token))) {
       return page.access_token;
     }
 
@@ -232,12 +252,14 @@ export async function resolvePageAccessToken(
     }
   }
 
-  throw new FacebookApiError(FACEBOOK_PERMISSION_HELP);
+  throw new FacebookApiError(
+    `Could not get a page token for ${pageId}. Paste the **page access_token** from Graph API Explorer → GET /me/accounts (not the user token from Generate Token).\n\n${FACEBOOK_PERMISSION_HELP}`
+  );
 }
 
 /**
- * Try env page token → stored token → refreshed user token → user token exchange.
- * Returns the first working page token.
+ * Try stored page token → tenant page token → user token exchange.
+ * Every candidate must pass the same post-fetch check used during sync.
  */
 export async function getWorkingPageToken(options: {
   pageId: string;
@@ -248,19 +270,20 @@ export async function getWorkingPageToken(options: {
   const { pageId } = options;
   const candidates: Array<{ token: string; source: string; kind: "page" | "user" }> = [];
 
-  if (isUsableFacebookToken(options.envPageToken)) {
-    candidates.push({ token: options.envPageToken, source: "env_page_token", kind: "page" });
-  }
+  // TEXT column on social_accounts is the most reliable store
   if (isUsableFacebookToken(options.storedPageToken)) {
     candidates.push({ token: options.storedPageToken, source: "stored_page_token", kind: "page" });
   }
+  if (isUsableFacebookToken(options.envPageToken)) {
+    candidates.push({ token: options.envPageToken, source: "tenant_page_token", kind: "page" });
+  }
   if (isUsableFacebookToken(options.envUserToken)) {
-    candidates.push({ token: options.envUserToken, source: "env_user_token", kind: "user" });
+    candidates.push({ token: options.envUserToken, source: "tenant_user_token", kind: "user" });
   }
 
   if (candidates.length === 0) {
     throw new FacebookApiError(
-      "Facebook is not configured with usable tokens. Set FACEBOOK_PAGE_ACCESS_TOKEN (preferred) or FACEBOOK_USER_ACCESS_TOKEN. Vercel “Sensitive” values cannot be pulled locally — set them in the Vercel dashboard."
+      "Facebook is not configured with usable tokens. Paste a page token under Social Media → Connect Facebook."
     );
   }
 
@@ -269,20 +292,26 @@ export async function getWorkingPageToken(options: {
   for (const candidate of candidates) {
     try {
       if (candidate.kind === "page") {
-        if (await probePageToken(pageId, candidate.token)) {
+        if (await validatePageTokenForSync(pageId, candidate.token)) {
           return { pageToken: candidate.token, source: candidate.source };
         }
-        errors.push(`${candidate.source}: expired or invalid`);
-        continue;
+        // Often a user token was pasted in the page field — resolve via /me/accounts
+        try {
+          const pageToken = await resolvePageAccessToken(candidate.token, pageId);
+          return { pageToken, source: `${candidate.source}->resolved_page` };
+        } catch (resolveErr) {
+          errors.push(
+            `${candidate.source}: ${resolveErr instanceof Error ? resolveErr.message.split("\n")[0] : "invalid"}`
+          );
+          continue;
+        }
       }
 
-      // User token: optionally upgrade to long-lived, then resolve page token
       let userToken = candidate.token;
       if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
         try {
           userToken = await exchangeLongLivedUserToken(candidate.token);
         } catch (err) {
-          // Keep short-lived token if exchange fails
           errors.push(
             `long_lived_exchange: ${err instanceof Error ? err.message.split("\n")[0] : "failed"}`
           );
@@ -295,10 +324,6 @@ export async function getWorkingPageToken(options: {
       errors.push(
         `${candidate.source}: ${err instanceof Error ? err.message.split("\n")[0] : "failed"}`
       );
-      if (!isFacebookAuthError(err) && !(err instanceof FacebookApiError && (err.code === 10 || err.code === 210))) {
-        // Unexpected non-auth failure on a candidate — keep trying others, but remember it
-        continue;
-      }
     }
   }
 

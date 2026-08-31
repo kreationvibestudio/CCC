@@ -209,16 +209,17 @@ export async function exchangeLongLivedUserToken(shortLivedUserToken: string): P
   return json.access_token as string;
 }
 
-async function validatePageTokenForSync(pageId: string, token: string): Promise<boolean> {
+/** True only when this token can list page posts — the same check sync uses. */
+async function tokenCanSyncPosts(pageId: string, token: string): Promise<boolean> {
   try {
-    await fetchPageInfo(pageId, token);
     await fetchPosts(pageId, token, 1);
     return true;
   } catch (err) {
+    if (err instanceof FacebookApiError && err.code === 210 && /page access token is required/i.test(err.message)) {
+      return false;
+    }
     if (isFacebookAuthError(err)) return false;
-    // Valid page token but missing optional scopes — still usable for posts list in many cases
-    if (err instanceof FacebookApiError && (err.code === 10 || err.code === 210)) return true;
-    throw err;
+    return false;
   }
 }
 
@@ -227,34 +228,33 @@ export async function resolvePageAccessToken(
   userOrPageToken: string,
   pageId: string
 ): Promise<string> {
-  if (await validatePageTokenForSync(pageId, userOrPageToken)) {
+  if (await tokenCanSyncPosts(pageId, userOrPageToken)) {
     return userOrPageToken;
   }
 
-  try {
-    const accounts = await graphGet<{
-      data: Array<{ id: string; access_token: string }>;
-    }>("/me/accounts", userOrPageToken, { fields: "id,access_token" });
+  const accounts = await graphGet<{
+    data: Array<{ id: string; access_token: string }>;
+  }>("/me/accounts", userOrPageToken, { fields: "id,access_token" });
 
-    const page = accounts.data?.find((a) => a.id === pageId);
-    if (page?.access_token && (await validatePageTokenForSync(pageId, page.access_token))) {
-      return page.access_token;
-    }
-
+  const page = accounts.data?.find((a) => a.id === pageId);
+  if (!page?.access_token) {
     if (accounts.data?.length) {
       throw new FacebookApiError(
         `Page ${pageId} not found in your account. Pages available: ${accounts.data.map((a) => a.id).join(", ")}`
       );
     }
-  } catch (err) {
-    if (err instanceof FacebookApiError && err.code !== 10 && err.code !== 210) {
-      throw err;
-    }
+    throw new FacebookApiError(
+      `Could not list your Facebook pages. The token may be expired or missing pages_show_list.\n\n${FACEBOOK_PERMISSION_HELP}`
+    );
   }
 
-  throw new FacebookApiError(
-    `Could not get a page token for ${pageId}. Paste the **page access_token** from Graph API Explorer → GET /me/accounts (not the user token from Generate Token).\n\n${FACEBOOK_PERMISSION_HELP}`
-  );
+  if (!(await tokenCanSyncPosts(pageId, page.access_token))) {
+    throw new FacebookApiError(
+      `Got a page token for ${pageId} but it cannot read posts. Re-authorize with pages_read_engagement and pages_read_user_content.\n\n${FACEBOOK_PERMISSION_HELP}`
+    );
+  }
+
+  return page.access_token;
 }
 
 /**
@@ -291,26 +291,10 @@ export async function getWorkingPageToken(options: {
 
   for (const candidate of candidates) {
     try {
-      if (candidate.kind === "page") {
-        if (await validatePageTokenForSync(pageId, candidate.token)) {
-          return { pageToken: candidate.token, source: candidate.source };
-        }
-        // Often a user token was pasted in the page field — resolve via /me/accounts
+      let tokenForResolve = candidate.token;
+      if (candidate.kind === "user" && process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
         try {
-          const pageToken = await resolvePageAccessToken(candidate.token, pageId);
-          return { pageToken, source: `${candidate.source}->resolved_page` };
-        } catch (resolveErr) {
-          errors.push(
-            `${candidate.source}: ${resolveErr instanceof Error ? resolveErr.message.split("\n")[0] : "invalid"}`
-          );
-          continue;
-        }
-      }
-
-      let userToken = candidate.token;
-      if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
-        try {
-          userToken = await exchangeLongLivedUserToken(candidate.token);
+          tokenForResolve = await exchangeLongLivedUserToken(candidate.token);
         } catch (err) {
           errors.push(
             `long_lived_exchange: ${err instanceof Error ? err.message.split("\n")[0] : "failed"}`
@@ -318,8 +302,10 @@ export async function getWorkingPageToken(options: {
         }
       }
 
-      const pageToken = await resolvePageAccessToken(userToken, pageId);
-      return { pageToken, source: `${candidate.source}->page` };
+      const pageToken = await resolvePageAccessToken(tokenForResolve, pageId);
+      const resolved =
+        pageToken !== candidate.token && pageToken !== tokenForResolve ? "->page" : "";
+      return { pageToken, source: `${candidate.source}${resolved}` };
     } catch (err) {
       errors.push(
         `${candidate.source}: ${err instanceof Error ? err.message.split("\n")[0] : "failed"}`

@@ -8,9 +8,7 @@ import {
   getWorkingPageToken,
   isUsableFacebookToken,
   normalizeTokenFromSetting,
-  resolvePageAccessToken,
   fetchPageInfo,
-  fetchPosts,
 } from "@/lib/integrations/facebook/client";
 import { syncFacebookToDatabase } from "@/lib/integrations/facebook/sync";
 
@@ -27,41 +25,22 @@ async function upsertSetting(tenantId: string, key: string, value: string) {
   if (error) throw new Error(error.message);
 }
 
-/** Validate token the same way sync does: page info + posts fetch. */
+/** Validate token the same way sync does and always resolve to a page token. */
 async function validateFacebookTokens(input: {
   pageId: string;
   pageAccessToken?: string;
   userAccessToken?: string;
 }): Promise<{ pageToken: string; pageName: string; followers: number; source: string }> {
   const pageId = input.pageId.trim();
-  const pageAccessToken = (input.pageAccessToken ?? "").trim();
-  const userAccessToken = (input.userAccessToken ?? "").trim();
-
-  if (isUsableFacebookToken(pageAccessToken)) {
-    try {
-      const pageToken = await resolvePageAccessToken(pageAccessToken, pageId);
-      const page = await fetchPageInfo(pageId, pageToken);
-      await fetchPosts(pageId, pageToken, 1);
-      return {
-        pageToken,
-        pageName: page.name,
-        followers: page.followers_count ?? page.fan_count ?? 0,
-        source: pageToken === pageAccessToken ? "page_token" : "page_token->resolved",
-      };
-    } catch (err) {
-      if (!isUsableFacebookToken(userAccessToken)) throw err;
-    }
-  }
 
   const { pageToken, source } = await getWorkingPageToken({
     pageId,
-    envPageToken: isUsableFacebookToken(pageAccessToken) ? pageAccessToken : null,
-    envUserToken: isUsableFacebookToken(userAccessToken) ? userAccessToken : null,
+    envPageToken: isUsableFacebookToken(input.pageAccessToken) ? input.pageAccessToken : null,
+    envUserToken: isUsableFacebookToken(input.userAccessToken) ? input.userAccessToken : null,
     storedPageToken: null,
   });
 
   const page = await fetchPageInfo(pageId, pageToken);
-  await fetchPosts(pageId, pageToken, 1);
 
   return {
     pageToken,

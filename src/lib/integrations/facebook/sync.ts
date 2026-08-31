@@ -10,7 +10,7 @@ import {
   type FacebookSyncResult,
   FacebookApiError,
 } from "./client";
-import { isSocialDemoModeEnabled, seedDemoSocialData } from "./demo";
+import { isSocialDemoModeEnabled, seedDemoSocialData, shouldAttemptLiveFacebookSync } from "./demo";
 
 const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
@@ -41,24 +41,23 @@ async function getFacebookConfig(tenantId: string) {
       if (row.key === "facebook_user_access_token") userToken = v;
     }
   } catch {
-    // fall through to env for the original campaign tenant
+    // fall through to env
   }
 
-  if (tenantId === DEFAULT_TENANT_ID) {
-    pageId = pageId || process.env.FACEBOOK_PAGE_ID?.trim() || "";
-    userToken = userToken || process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() || "";
-    pageToken = pageToken || process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
-  }
+  // Tenant settings win; env fills gaps (works for every workspace, not only default)
+  pageId = pageId || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+  userToken = userToken || process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() || "";
+  pageToken = pageToken || process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
 
   if (!pageId || pageId.length < 5 || /^your[_-]/i.test(pageId) || pageId === "[SENSITIVE]") {
     throw new FacebookApiError(
-      "Facebook page ID is missing for this workspace. Set tenant setting facebook_page_id (or FACEBOOK_PAGE_ID for the original campaign)."
+      "Facebook page ID is missing. Paste it under Social Media → Connect Facebook (or set FACEBOOK_PAGE_ID)."
     );
   }
 
   if (!isUsableFacebookToken(userToken) && !isUsableFacebookToken(pageToken)) {
     throw new FacebookApiError(
-      "Facebook tokens are missing for this workspace. Set tenant settings facebook_page_access_token / facebook_user_access_token."
+      "Facebook page token is missing or expired. Paste a never-expiring page token under Social Media → Connect Facebook."
     );
   }
 
@@ -79,15 +78,25 @@ async function getDbClient() {
 }
 
 export async function syncFacebookToDatabase(tenantId: string): Promise<FacebookSyncResult> {
-  if (isSocialDemoModeEnabled()) {
+  let hasTenantTokens = false;
+  try {
+    const cfg = await getFacebookConfig(tenantId);
+    hasTenantTokens = isUsableFacebookToken(cfg.pageToken) || isUsableFacebookToken(cfg.userToken);
+  } catch {
+    hasTenantTokens = false;
+  }
+
+  const preferLive = hasTenantTokens || shouldAttemptLiveFacebookSync();
+
+  if (!preferLive && isSocialDemoModeEnabled()) {
     return seedDemoSocialData(tenantId);
   }
 
   try {
     return await syncFacebookLive(tenantId);
   } catch (err) {
-    // Keep Social Media usable when Meta tokens expire or Graph is unreachable
-    if (process.env.SOCIAL_DEMO_MODE?.trim().toLowerCase() !== "false") {
+    // Do not hide expired-token failures behind demo data when Meta was configured
+    if (!preferLive && isSocialDemoModeEnabled()) {
       return seedDemoSocialData(tenantId);
     }
     throw err;
@@ -281,8 +290,8 @@ export async function syncFacebookForConfiguredTenants(): Promise<
   const supabase = await getDbClient();
   const { data: settings } = await supabase
     .from("tenant_settings")
-    .select("tenant_id")
-    .eq("key", "facebook_page_id");
+    .select("tenant_id, key")
+    .in("key", ["facebook_page_id", "facebook_page_access_token"]);
   const ids = new Set((settings ?? []).map((s) => s.tenant_id as string));
   ids.add(DEFAULT_TENANT_ID);
   const results = [];

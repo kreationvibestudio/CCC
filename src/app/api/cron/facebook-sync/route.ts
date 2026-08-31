@@ -25,6 +25,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const results = await syncFacebookForConfiguredTenants();
+    const { recordFacebookSyncOutcome } = await import("@/lib/social/facebook-connection");
+    for (const r of results) {
+      if ("error" in r) {
+        await recordFacebookSyncOutcome(r.tenantId, { ok: false, error: r.error });
+      } else if (r.tokenSource !== "demo") {
+        await recordFacebookSyncOutcome(r.tenantId, { ok: true });
+      }
+    }
     return NextResponse.json({
       success: true,
       results: results.map((r) =>

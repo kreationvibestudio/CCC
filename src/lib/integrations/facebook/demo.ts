@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { FacebookSyncResult } from "./client";
+import { isUsableFacebookToken } from "./client";
 
-const DEMO_PAGE_ID = process.env.FACEBOOK_PAGE_ID?.trim() || "671649942702174";
-const DEMO_PAGE_NAME = "Hon Akhakon Annenih";
+const DEMO_PAGE_ID = "demo-hon-akhakon";
+const DEMO_PAGE_NAME = "Hon Akhakon Annenih (demo)";
 
 const DEMO_POSTS: {
   id: string;
@@ -73,14 +74,29 @@ const DEMO_COMMENTS: { postId: string; id: string; message: string; from: string
   { postId: "demo_post_security", id: "c10", message: "When is the next community briefing?", from: "Ruth I." },
 ];
 
+function hasUsableEnvFacebookTokens() {
+  return (
+    isUsableFacebookToken(process.env.FACEBOOK_PAGE_ACCESS_TOKEN) ||
+    isUsableFacebookToken(process.env.FACEBOOK_USER_ACCESS_TOKEN)
+  );
+}
+
+/**
+ * Demo only when Meta tokens are missing.
+ * SOCIAL_DEMO_MODE=true never overrides live tokens — production must keep syncing Graph.
+ * SOCIAL_DEMO_MODE=false disables demo even when tokens are empty (errors instead).
+ */
 export function isSocialDemoModeEnabled() {
   const flag = process.env.SOCIAL_DEMO_MODE?.trim().toLowerCase();
   if (flag === "0" || flag === "false" || flag === "off") return false;
+  if (hasUsableEnvFacebookTokens()) return false;
   if (flag === "1" || flag === "true" || flag === "on") return true;
-  const page = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
-  const user = process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() || "";
-  const usable = (t: string) => t.length >= 40 && t !== "[SENSITIVE]" && !/^your[_-]/i.test(t);
-  return !usable(page) && !usable(user);
+  return true; // no usable tokens → demo for local/dev
+}
+
+/** Prefer live Graph whenever any usable token is present (env). */
+export function shouldAttemptLiveFacebookSync() {
+  return hasUsableEnvFacebookTokens();
 }
 
 async function getDbClient() {
@@ -91,7 +107,7 @@ async function getDbClient() {
   }
 }
 
-/** Seed realistic campaign social data when Meta tokens are unavailable. */
+/** Seed sample social data on a separate demo account — never overwrite live page tokens. */
 export async function seedDemoSocialData(tenantId: string): Promise<FacebookSyncResult> {
   const supabase = await getDbClient();
   const now = Date.now();
@@ -114,7 +130,6 @@ export async function seedDemoSocialData(tenantId: string): Promise<FacebookSync
         is_connected: true,
         followers,
         last_synced_at: new Date().toISOString(),
-        access_token_encrypted: "demo",
       })
       .eq("id", accountId);
     if (error) throw new Error(error.message);
@@ -129,7 +144,7 @@ export async function seedDemoSocialData(tenantId: string): Promise<FacebookSync
         is_connected: true,
         followers,
         last_synced_at: new Date().toISOString(),
-        access_token_encrypted: "demo",
+        access_token_encrypted: null,
       })
       .select("id")
       .single();
@@ -217,7 +232,7 @@ export async function seedDemoSocialData(tenantId: string): Promise<FacebookSync
     await supabase.from("activities").insert({
       tenant_id: tenantId,
       action: "facebook.sync",
-      description: `Loaded ${postsSynced} demo posts (Meta tokens not configured)`,
+      description: `Loaded ${postsSynced} demo posts (Meta page token not configured)`,
       metadata: { postsSynced, commentsSynced, tokenSource: "demo" },
     });
   } catch {

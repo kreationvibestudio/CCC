@@ -23,11 +23,11 @@ export function FacebookSyncButton() {
         return;
       }
 
-      const demo = data.tokenSource === "demo";
+      const demo = data.tokenSource === "demo" || data.demo;
       toast.success(
         demo
-          ? `Loaded ${data.postsSynced} demo posts for ${data.pageName}`
-          : `Synced ${data.postsSynced} posts from ${data.pageName} (${data.followers?.toLocaleString()} followers)`
+          ? `Loaded ${data.postsSynced} demo posts for ${data.pageName} (connect a live page token to sync real Facebook)`
+          : `Synced ${data.postsSynced} live posts from ${data.pageName} (${data.followers?.toLocaleString()} followers)`
       );
 
       if (data.warning) {

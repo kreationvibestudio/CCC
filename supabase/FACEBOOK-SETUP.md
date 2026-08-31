@@ -2,9 +2,9 @@
 
 CCC syncs the **Hon Akhakon Annenih** page into Social + Comments.
 
-**Without Meta tokens:** set `SOCIAL_DEMO_MODE=true` (default when tokens are empty). Click **Sync Facebook Now** to load campaign sample posts so Social Media and Comments stay usable.
+**Without Meta tokens (local only):** leave tokens empty. Sync can load sample posts for UI demos.
 
-**With live Facebook:** prefer a **never-expiring page token** stored in Vercel, plus optional App ID/Secret so short-lived user tokens can be refreshed automatically. Then set `SOCIAL_DEMO_MODE=false`.
+**Production / live Facebook:** paste a never-expiring page token in HQ under **Social Media → Connect Facebook** (or set Vercel env vars). Do **not** set `SOCIAL_DEMO_MODE=true` in Production when you want live Graph sync.
 
 Hard-coded page ID used in docs: `671649942702174`
 
@@ -63,7 +63,8 @@ Then redeploy.
 - Retries transient Graph API failures
 - Saves the working page token on `social_accounts` for the next sync
 - Continues posting sync if some comments fail
-- Hourly cron: `/api/cron/facebook-sync` (Vercel Cron)
+- Daily cron (06:00 UTC): `/api/cron/facebook-sync` (Vercel Cron — requires `CRON_SECRET`)
+- HQ can also paste a page token under **Social Media → Connect Facebook** and sync immediately
 
 ---
 

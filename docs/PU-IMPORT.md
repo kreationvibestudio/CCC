@@ -38,8 +38,11 @@ Polling Units → **Load Edo INEC PUs** downloads INEC’s Edo directory and **r
 CLI (uses `.env.local` — local DB unless that file points at production):
 
 ```bash
+npm run pu:bootstrap   # import Edo CSV + approximate LGA map pins for agent check-in
 npm run pu:sync-inec
 ```
+
+Field Agent check-in uses a **5 km** radius around the stored pin. GPS is preferred; when location is unavailable, soft check-in (`AGENT_LOGIN_SOFT_GPS=true`) still allows the agent code. Web login: `/agent/login`.
 
 ## Official INEC CSV columns
 

@@ -9,7 +9,7 @@ import {
   agentCodeHint,
   validateAgentCodeLogin,
 } from "@/lib/agent/access-code";
-import { AGENT_LOGIN_RADIUS_M, haversineMeters, isWithinAgentLoginRadius } from "@/lib/agent/geo";
+import { AGENT_LOGIN_RADIUS_M, haversineMeters, isAgentSoftGpsEnabled, isWithinAgentLoginRadius } from "@/lib/agent/geo";
 import { isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
 
@@ -68,13 +68,27 @@ async function mintAgentSession(email: string) {
 
 export async function loginWithAgentCode(input: {
   code: string;
-  latitude: number;
-  longitude: number;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
 }) {
-  const invalid = validateAgentCodeLogin(input);
+  const softGps = isAgentSoftGpsEnabled();
+  const lat =
+    input.latitude === null || input.latitude === undefined || input.latitude === ""
+      ? null
+      : Number(input.latitude);
+  const lng =
+    input.longitude === null || input.longitude === undefined || input.longitude === ""
+      ? null
+      : Number(input.longitude);
+  // Number(null) === 0 — never treat missing coords as the Gulf of Guinea
+  const hasGps = lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
+  const invalid = validateAgentCodeLogin({
+    code: input.code,
+    latitude: hasGps ? lat : null,
+    longitude: hasGps ? lng : null,
+    requireGps: !softGps,
+  });
   if (invalid) return { error: invalid };
-  const lat = Number(input.latitude);
-  const lng = Number(input.longitude);
 
   const admin = createServiceClient();
   const { data: row, error } = await admin
@@ -106,16 +120,29 @@ export async function loginWithAgentCode(input: {
   if (pu.assigned_agent_id !== profile.id) {
     return { error: "This code is no longer tied to a polling unit. Ask HQ to issue a new one." };
   }
-  if (pu.latitude == null || pu.longitude == null) {
-    return { error: "This polling unit has no map pin. Ask HQ to geocode it, then try again." };
-  }
 
-  const distanceM = haversineMeters(lat, lng, Number(pu.latitude), Number(pu.longitude));
-  if (!isWithinAgentLoginRadius(distanceM)) {
-    const km = (distanceM / 1000).toFixed(1);
-    return {
-      error: `You are ${km} km from ${formatPollingUnitCode(pu)}. Sign in at your assigned polling unit (within ${(AGENT_LOGIN_RADIUS_M / 1000).toFixed(1)} km).`,
-    };
+  let distanceM: number | null = null;
+  let gpsVerified = false;
+
+  if (hasGps) {
+    if (pu.latitude == null || pu.longitude == null) {
+      if (!softGps) {
+        return { error: "This polling unit has no map pin. Ask HQ to geocode it, then try again." };
+      }
+    } else {
+      distanceM = haversineMeters(lat!, lng!, Number(pu.latitude), Number(pu.longitude));
+      if (!isWithinAgentLoginRadius(distanceM)) {
+        const km = (distanceM / 1000).toFixed(1);
+        return {
+          error: `You are ${km} km from ${formatPollingUnitCode(pu)}. Sign in at your assigned polling unit (within ${(AGENT_LOGIN_RADIUS_M / 1000).toFixed(1)} km), or turn off GPS and use soft check-in.`,
+        };
+      }
+      gpsVerified = true;
+    }
+  } else if (!softGps) {
+    return { error: "Turn on location so we can confirm you are at your polling unit" };
+  } else if (pu.latitude == null || pu.longitude == null) {
+    // Soft check-in still allowed — HQ should fill pins when possible
   }
 
   const minted = await mintAgentSession(profile.email);
@@ -141,10 +168,11 @@ export async function loginWithAgentCode(input: {
       name: pu.name,
       ward: pu.ward,
       lga: pu.lga,
-      latitude: Number(pu.latitude),
-      longitude: Number(pu.longitude),
-      distance_m: Math.round(distanceM),
+      latitude: pu.latitude != null ? Number(pu.latitude) : null,
+      longitude: pu.longitude != null ? Number(pu.longitude) : null,
+      distance_m: distanceM != null ? Math.round(distanceM) : null,
     },
+    gpsVerified,
     displayCode: formatAgentCode(normalizeAgentCode(input.code)),
   };
 }

@@ -48,8 +48,15 @@ export async function updateSession(request: NextRequest) {
   const isDonateRoute = path.startsWith("/donate") || path.startsWith("/api/donations");
   const isJoinRoute = path.startsWith("/join");
   const isAgentApi = path.startsWith("/api/agent");
+  const isAgentCodeLogin = path === "/agent/login";
   const isPublicRoute =
-    path === "/" || isAuthRoute || isCheckInRoute || isDonateRoute || isJoinRoute || isAgentApi;
+    path === "/" ||
+    isAuthRoute ||
+    isCheckInRoute ||
+    isDonateRoute ||
+    isJoinRoute ||
+    isAgentApi ||
+    isAgentCodeLogin;
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();

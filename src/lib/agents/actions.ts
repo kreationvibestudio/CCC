@@ -260,6 +260,12 @@ export async function assignPollingAgent(input: {
       `Agent ${pu.code}`;
     if (fullName.length < 2) return { error: "Agent name is required" };
 
+    if (pu.latitude == null || pu.longitude == null) {
+      return {
+        error: `Polling unit ${pu.code} has no map pin yet. Run Fill missing map pins (or npm run pu:pins) before assigning an agent.`,
+      };
+    }
+
     let existing: { id: string; role: string; email: string } | undefined;
     if (emailInput) {
       const { data: existingRows } = await supabase

@@ -77,7 +77,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const agentApi = {
-  async codeLogin(code: string, latitude: number, longitude: number) {
+  async codeLogin(code: string, latitude: number | null, longitude: number | null) {
     const res = await fetch(`${API_URL}/api/agent/code-login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

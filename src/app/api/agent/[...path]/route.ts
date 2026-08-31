@@ -95,10 +95,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
   if (key === "code-login") {
     const body = await readJson(request);
+    const latRaw = body.latitude;
+    const lngRaw = body.longitude;
+    const latitude =
+      latRaw === null || latRaw === undefined || latRaw === ""
+        ? null
+        : Number(latRaw);
+    const longitude =
+      lngRaw === null || lngRaw === undefined || lngRaw === ""
+        ? null
+        : Number(lngRaw);
     const result = await loginWithAgentCode({
       code: String(body.code ?? ""),
-      latitude: Number(body.latitude),
-      longitude: Number(body.longitude),
+      latitude,
+      longitude,
     });
     if (result.error) return cors(jsonError(400, result.error));
     return cors(jsonOk(result));

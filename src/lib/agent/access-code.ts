@@ -33,12 +33,19 @@ export function isAgentCodeShape(raw: string) {
   return normalizeAgentCode(raw).length === 8;
 }
 
-export function validateAgentCodeLogin(input: { code: string; latitude: number; longitude: number }) {
+export function validateAgentCodeLogin(input: {
+  code: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  requireGps?: boolean;
+}) {
   if (!isAgentCodeShape(input.code)) {
     return "Enter the 8-character agent code HQ gave you";
   }
-  if (!Number.isFinite(Number(input.latitude)) || !Number.isFinite(Number(input.longitude))) {
-    return "Turn on location so we can confirm you are at your polling unit";
+  if (input.requireGps) {
+    if (!Number.isFinite(Number(input.latitude)) || !Number.isFinite(Number(input.longitude))) {
+      return "Turn on location so we can confirm you are at your polling unit";
+    }
   }
   return null;
 }

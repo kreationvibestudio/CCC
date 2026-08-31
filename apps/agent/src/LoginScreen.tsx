@@ -29,18 +29,16 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function readGps() {
-    const perm = await Location.requestForegroundPermissionsAsync();
-    if (perm.status !== "granted") {
-      throw new Error("Allow location so we can confirm you are at your polling unit.");
+  async function readGpsOptional(): Promise<{ latitude: number; longitude: number } | null> {
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== "granted") return null;
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (!pos) return null;
+      return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+    } catch {
+      return null;
     }
-    const last = await Location.getLastKnownPositionAsync();
-    const freshEnough = last && Date.now() - last.timestamp < 60_000;
-    const pos = freshEnough
-      ? last
-      : await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-    if (!pos) throw new Error("Could not read GPS. Stand outdoors at the unit and try again.");
-    return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
   }
 
   async function submitCode() {
@@ -51,8 +49,12 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
     }
     setLoading(true);
     try {
-      const gps = await readGps();
-      const result = await agentApi.codeLogin(code, gps.latitude, gps.longitude);
+      const gps = await readGpsOptional();
+      const result = await agentApi.codeLogin(
+        code,
+        gps?.latitude ?? null,
+        gps?.longitude ?? null
+      );
       await saveSession(result.session);
       onSignedIn();
     } catch (e) {
@@ -94,7 +96,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
         <Image source={require("../assets/icon.png")} style={styles.logo} accessibilityLabel="Campaign Command Center" />
         <Text style={styles.title}>CCC Agent</Text>
         <Text style={styles.sub}>
-          Enter the code HQ assigned to your polling unit. You must be at that unit — GPS is checked at sign-in.
+          Enter the 8-character code HQ gave you for your polling unit. Location is checked when available — you can still sign in if GPS is off.
         </Text>
         {!emailMode ? (
           <>
@@ -110,7 +112,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
             />
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Pressable style={styles.button} onPress={() => void submitCode()} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in at this unit</Text>}
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
             </Pressable>
             <Pressable onPress={() => { setEmailMode(true); setError(""); }}>
               <Text style={styles.link}>Use email and password instead</Text>

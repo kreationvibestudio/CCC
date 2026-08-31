@@ -10,6 +10,7 @@ import {
   type FacebookSyncResult,
   FacebookApiError,
 } from "./client";
+import { isSocialDemoModeEnabled, seedDemoSocialData } from "./demo";
 
 const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
@@ -78,6 +79,22 @@ async function getDbClient() {
 }
 
 export async function syncFacebookToDatabase(tenantId: string): Promise<FacebookSyncResult> {
+  if (isSocialDemoModeEnabled()) {
+    return seedDemoSocialData(tenantId);
+  }
+
+  try {
+    return await syncFacebookLive(tenantId);
+  } catch (err) {
+    // Keep Social Media usable when Meta tokens expire or Graph is unreachable
+    if (process.env.SOCIAL_DEMO_MODE?.trim().toLowerCase() !== "false") {
+      return seedDemoSocialData(tenantId);
+    }
+    throw err;
+  }
+}
+
+async function syncFacebookLive(tenantId: string): Promise<FacebookSyncResult> {
   const { pageId, userToken, pageToken: envPageToken } = await getFacebookConfig(tenantId);
   const supabase = await getDbClient();
 

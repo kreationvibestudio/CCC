@@ -31,10 +31,12 @@ export function SocialDashboard({
   accounts,
   posts,
   facebookConfigured,
+  demoMode = false,
 }: {
   accounts: SocialAccount[];
   posts: SocialPost[];
   facebookConfigured: boolean;
+  demoMode?: boolean;
 }) {
   const facebook = accounts.find((a) => a.platform === "facebook");
   const facebookPosts = posts.filter((p) => p.platform === "facebook");
@@ -57,7 +59,18 @@ export function SocialDashboard({
         </Card>
       )}
 
-      {facebookConfigured && (
+      {facebookConfigured && demoMode && (
+        <Card className="border-sky-500/30 bg-sky-500/5">
+          <CardContent className="py-4 text-sm">
+            Social Media is running in <strong>demo mode</strong> (no Meta access token yet). Click{" "}
+            <strong>Sync Facebook Now</strong> to load campaign sample posts and comments. When you
+            have a page token, set <code>FACEBOOK_PAGE_ACCESS_TOKEN</code> and set{" "}
+            <code>SOCIAL_DEMO_MODE=false</code> to pull live data.
+          </CardContent>
+        </Card>
+      )}
+
+      {facebookConfigured && !demoMode && (
         <Card className="border-emerald-500/30 bg-emerald-500/5">
           <CardContent className="py-4 text-sm">
             Facebook is configured. Click <strong>Sync Facebook Now</strong> to pull your latest posts

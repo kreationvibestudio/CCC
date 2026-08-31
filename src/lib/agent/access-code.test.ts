@@ -24,13 +24,19 @@ describe("agent access codes", () => {
     assert.equal(agentCodeHint("K7M2-P9QX"), "P9QX");
   });
 
-  it("rejects short codes and missing GPS before login", () => {
+  it("rejects short codes; GPS optional unless required", () => {
     assert.equal(
       validateAgentCodeLogin({ code: "abc", latitude: 6.5, longitude: 3.3 }),
       "Enter the 8-character agent code HQ gave you"
     );
+    assert.equal(validateAgentCodeLogin({ code: "K7M2-P9QX", latitude: null, longitude: null }), null);
     assert.match(
-      validateAgentCodeLogin({ code: "K7M2-P9QX", latitude: Number.NaN, longitude: 3.3 }) ?? "",
+      validateAgentCodeLogin({
+        code: "K7M2-P9QX",
+        latitude: Number.NaN,
+        longitude: 3.3,
+        requireGps: true,
+      }) ?? "",
       /location/i
     );
     assert.equal(validateAgentCodeLogin({ code: "K7M2-P9QX", latitude: 6.5, longitude: 3.3 }), null);

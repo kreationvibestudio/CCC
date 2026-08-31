@@ -1,6 +1,7 @@
 ﻿import { getCurrentUser } from "@/lib/auth/session";
 import { getSocialAccounts, getSocialPosts } from "@/lib/social/data";
 import { SocialDashboard } from "@/components/social/social-dashboard";
+import { isSocialDemoModeEnabled } from "@/lib/integrations/facebook/demo";
 
 export default async function SocialPage() {
   const user = await getCurrentUser();
@@ -11,7 +12,7 @@ export default async function SocialPage() {
     getSocialPosts(tenantId),
   ]);
 
-  const facebookConfigured = Boolean(
+  const liveFacebookConfigured = Boolean(
     process.env.FACEBOOK_PAGE_ID &&
       process.env.FACEBOOK_PAGE_ID.trim() !== "[SENSITIVE]" &&
       !/^your[_-]/i.test(process.env.FACEBOOK_PAGE_ID.trim()) &&
@@ -20,12 +21,15 @@ export default async function SocialPage() {
       process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() !== "[SENSITIVE]" &&
       process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() !== "[SENSITIVE]"
   );
+  const demoMode = isSocialDemoModeEnabled();
+  const facebookConfigured = liveFacebookConfigured || demoMode;
 
   return (
     <SocialDashboard
       accounts={accounts}
       posts={posts}
       facebookConfigured={facebookConfigured}
+      demoMode={demoMode && !liveFacebookConfigured}
     />
   );
 }

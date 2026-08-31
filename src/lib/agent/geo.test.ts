@@ -14,10 +14,10 @@ describe("haversineMeters", () => {
 });
 
 describe("isWithinAgentLoginRadius", () => {
-  it("allows on-site GPS and rejects a different ward", () => {
+  it("allows on-site GPS and rejects a different LGA-scale hop", () => {
     assert.equal(isWithinAgentLoginRadius(40), true);
     assert.equal(isWithinAgentLoginRadius(AGENT_LOGIN_RADIUS_M), true);
     assert.equal(isWithinAgentLoginRadius(AGENT_LOGIN_RADIUS_M + 1), false);
-    assert.equal(isWithinAgentLoginRadius(8000), false);
+    assert.equal(isWithinAgentLoginRadius(12000), false);
   });
 });

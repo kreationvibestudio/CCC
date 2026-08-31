@@ -2,7 +2,9 @@
 
 CCC syncs the **Hon Akhakon Annenih** page into Social + Comments.
 
-Goal: a **never-expiring page token** stored in Vercel, plus optional App ID/Secret so short-lived user tokens can be refreshed automatically.
+**Without Meta tokens:** set `SOCIAL_DEMO_MODE=true` (default when tokens are empty). Click **Sync Facebook Now** to load campaign sample posts so Social Media and Comments stay usable.
+
+**With live Facebook:** prefer a **never-expiring page token** stored in Vercel, plus optional App ID/Secret so short-lived user tokens can be refreshed automatically. Then set `SOCIAL_DEMO_MODE=false`.
 
 Hard-coded page ID used in docs: `671649942702174`
 

@@ -30,10 +30,18 @@ Your Facebook page **Hon Akhakon Annenih** is set up in `.env.local`. No action 
 ### Step 3 — Log in and sync
 
 1. Go to **http://localhost:3000/login**
-2. Sign in (or register a new account)
+2. Sign in (or register a new account — first user becomes Super Admin)
 3. Open **Social Media** in the left menu
-4. Click **Sync Facebook Now**
+4. Click **Sync Facebook Now** (works in demo mode without Meta tokens; add a page token later for live data)
 5. Your posts will appear on the page
+
+Field Agents: HQ issues an 8-character code under **Polling units → PU Agents**. Agents sign in at **http://localhost:3000/agent/login** (or the CCC Agent app). GPS is checked when available (5 km); code-only sign-in works if location is off.
+
+After a fresh database reset, load Edo polling units:
+
+```bash
+npm run pu:bootstrap
+```
 
 ### Step 4 — View comments (optional extra permission)
 
@@ -66,7 +74,15 @@ npx supabase db reset
 
 Then copy the anon key from `supabase start` output into `.env.local`.
 
-The first person to register becomes the campaign super administrator. Later sign-ups start as **Supporter**; an admin assigns their role on **Admin**. There is no demo login.
+The first person to register becomes the campaign super administrator. Later sign-ups start as **Supporter**; an admin assigns their role on **Admin**.
+
+Local HQ after seeding (this environment):
+
+| Role | Email | Password |
+|------|-------|----------|
+| Super Admin | `admin@demo.campaign.ng` | `DemoPassword123!` |
+
+Field Agents use codes from **PU Agents**, not this password.
 
 ---
 

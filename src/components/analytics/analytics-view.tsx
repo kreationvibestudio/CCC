@@ -86,7 +86,7 @@ export function AnalyticsView({ summary }: { summary: AnalyticsSummary }) {
           change={
             kpis.uncoveredHighRiskPus
               ? `${kpis.uncoveredHighRiskPus} high-risk PU(s) uncovered`
-              : "High-risk units covered"
+              : `${Math.max(0, groundGame.pusTotal - groundGame.agentsAssignedPus)} PU(s) still uncovered`
           }
           icon={Users}
           href="/polling-units/agents"

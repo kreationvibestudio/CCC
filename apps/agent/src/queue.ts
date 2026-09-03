@@ -1,6 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import { agentApi } from "./api";
-import { localPhoto, publicPayload } from "./payload";
+import { localMediaList, publicPayload } from "./payload";
 
 export type QueueAction = "status" | "report" | "results" | "incident";
 
@@ -50,13 +50,32 @@ export function queuedCount() {
   return row?.n ?? 0;
 }
 
+async function attachUploadedMedia(body: Record<string, unknown>, action: QueueAction) {
+  const mediaItems: Array<{ url: string; media_type: "photo" | "video" }> = [];
+  for (const item of localMediaList(body)) {
+    const uploaded = await agentApi.upload(item.uri, item.kind, item.mediaType);
+    if (item.kind === "result_sheet") {
+      body.result_sheet_url = uploaded.url;
+      continue;
+    }
+    if (item.kind === "incident") {
+      body.media_url = uploaded.url;
+      body.media_type = uploaded.media_type;
+      continue;
+    }
+    if (item.kind === "report") {
+      mediaItems.push({ url: uploaded.url, media_type: uploaded.media_type });
+    }
+  }
+  if (action === "report" && mediaItems.length) {
+    body.media_items = mediaItems;
+  }
+}
+
 async function send(action: QueueAction, payload: Record<string, unknown>) {
   const body = { ...payload };
-  const photo = localPhoto(body);
-  if (photo) {
-    const url = await agentApi.upload(photo.uri, photo.kind);
-    if (photo.kind === "result_sheet") body.result_sheet_url = url;
-    else body.media_url = url;
+  if (localMediaList(body).length) {
+    await attachUploadedMedia(body, action);
   }
   const publicBody = publicPayload(body);
   if (action === "status") await agentApi.status(publicBody);

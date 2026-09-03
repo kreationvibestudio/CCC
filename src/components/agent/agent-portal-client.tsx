@@ -13,6 +13,7 @@ import {
   type AgentPollingUnit,
 } from "@/lib/agent/actions";
 import { ResultSheetForm } from "@/components/agent/result-sheet-form";
+import { AgentReportForm } from "@/components/agent/agent-report-form";
 import { PollingUnitPicker } from "@/components/agent/polling-unit-picker";
 import { toast } from "sonner";
 import { formatDateTime } from "@/lib/utils";
@@ -164,25 +165,12 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
         <Button type="submit" disabled={pending || !puId} className="w-full">Update status</Button>
       </form>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const fd = new FormData(e.currentTarget);
-          fd.set("polling_unit_id", puId);
-          runAction(submitAgentReport, fd, "report");
-        }}
-        className="space-y-3 rounded-xl border border-border p-4"
-      >
-        <p className="font-medium">Field report</p>
-        <NativeSelect name="report_type">
-          <option value="turnout">Turnout update</option>
-          <option value="logistics">Logistics</option>
-          <option value="observation">Observation</option>
-        </NativeSelect>
-        <textarea name="content" required rows={3} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" placeholder="Report details…" />
-        <p className="text-xs text-muted-foreground">Date and time are recorded automatically when you tap submit.</p>
-        <Button type="submit" disabled={pending || !puId} className="w-full">Submit report</Button>
-      </form>
+      <AgentReportForm
+        puId={puId}
+        online={online}
+        disabled={pending || !puId}
+        onOffline={(data) => queueOffline("report", data)}
+      />
 
       <ResultSheetForm
         disabled={pending || !puId}

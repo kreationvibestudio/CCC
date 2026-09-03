@@ -5,6 +5,8 @@ import { publicPayload } from "./payload";
 import { getAccessToken, signOut } from "./session";
 import type { PartyOption } from "./parties";
 
+export type AgentMediaKind = "result_sheet" | "incident" | "report";
+
 export type AgentUnit = {
   id: string;
   code: string;
@@ -76,6 +78,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return parseAgentResponse<T>(res);
 }
 
+function uploadFilename(uri: string, kind: AgentMediaKind, mediaType: "photo" | "video") {
+  const ext = mediaType === "video" ? "mp4" : "jpg";
+  const mime = mediaType === "video" ? "video/mp4" : "image/jpeg";
+  return { name: `${kind}.${ext}`, type: mime };
+}
+
 export const agentApi = {
   async codeLogin(code: string, latitude: number | null, longitude: number | null) {
     const res = await fetch(`${API_URL}/api/agent/code-login`, {
@@ -104,22 +112,31 @@ export const agentApi = {
       method: "POST",
       body: JSON.stringify({ token, platform: Platform.OS }),
     }),
-  async upload(uri: string, kind: "result_sheet" | "incident") {
+  async upload(
+    uri: string,
+    kind: AgentMediaKind,
+    mediaType: "photo" | "video" = "photo"
+  ): Promise<{ url: string; media_type: "photo" | "video" }> {
     const token = await getAccessToken();
     const form = new FormData();
     form.append("kind", kind);
+    const file = uploadFilename(uri, kind, mediaType);
     form.append("file", {
       uri,
-      name: `${kind}.jpg`,
-      type: "image/jpeg",
+      name: file.name,
+      type: file.type,
     } as unknown as Blob);
     const res = await fetch(`${API_URL}/api/agent/media`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: form,
     });
-    const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-    if (!res.ok || json.error) throw new Error(json.error || "Upload failed");
-    return json.url!;
+    const json = (await res.json().catch(() => ({}))) as {
+      url?: string;
+      media_type?: "photo" | "video";
+      error?: string;
+    };
+    if (!res.ok || json.error || !json.url) throw new Error(json.error || "Upload failed");
+    return { url: json.url, media_type: json.media_type ?? mediaType };
   },
 };

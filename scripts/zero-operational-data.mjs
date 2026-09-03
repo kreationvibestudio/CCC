@@ -37,6 +37,7 @@ const OPERATIONAL_TABLES = [
   "incident_media",
   "incident_reports",
   "election_results",
+  "agent_report_media",
   "agent_reports",
   "polling_unit_status",
   "messages",

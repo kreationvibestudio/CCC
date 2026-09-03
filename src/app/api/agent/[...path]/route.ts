@@ -127,7 +127,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const form = await request.formData();
     const file = form.get("file");
     const kindRaw = String(form.get("kind") ?? "incident");
-    const kind = kindRaw === "result_sheet" ? "result_sheet" : "incident";
+    const kind: "result_sheet" | "incident" | "report" =
+      kindRaw === "result_sheet" ? "result_sheet" : kindRaw === "report" ? "report" : "incident";
     if (!(file instanceof File)) return cors(jsonError(400, "file is required"));
     const result = await uploadAgentMedia(agent, file, kind);
     if ("error" in result && result.error) return cors(jsonError(400, result.error));

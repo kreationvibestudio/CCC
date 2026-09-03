@@ -33,6 +33,37 @@ function capturedAtIso(formData: FormData) {
   return parsed.toISOString();
 }
 
+type ReportMediaItem = { url: string; media_type: "photo" | "video" };
+
+function parseReportMedia(formData: FormData): ReportMediaItem[] {
+  const items: ReportMediaItem[] = [];
+  const raw = String(formData.get("media_items") ?? "").trim();
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const row of parsed) {
+          if (!row || typeof row !== "object") continue;
+          const url = String((row as { url?: string }).url ?? "").trim();
+          if (!url) continue;
+          const media_type =
+            (row as { media_type?: string }).media_type === "video" ? "video" : "photo";
+          items.push({ url, media_type });
+        }
+      }
+    } catch {
+      /* ignore malformed JSON */
+    }
+  }
+  const legacyUrl = String(formData.get("media_url") ?? "").trim();
+  if (legacyUrl) {
+    const media_type =
+      String(formData.get("media_type") ?? "photo").trim() === "video" ? "video" : "photo";
+    items.push({ url: legacyUrl, media_type });
+  }
+  return items.slice(0, 5);
+}
+
 export async function submitAgentReport(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
@@ -43,6 +74,7 @@ export async function submitAgentReport(formData: FormData) {
   const puId = (formData.get("polling_unit_id") as string) || null;
   const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
   if (puError) return { error: puError };
+  const mediaItems = parseReportMedia(formData);
   const supabase = await agentDb();
   const { data, error } = await supabase.from("agent_reports").insert({
     tenant_id: user.profile.tenant_id,
@@ -53,6 +85,16 @@ export async function submitAgentReport(formData: FormData) {
     created_at: capturedAt,
   }).select("id").single();
   if (error) return { error: error.message };
+  if (data?.id && mediaItems.length) {
+    const { error: mediaError } = await supabase.from("agent_report_media").insert(
+      mediaItems.map((item) => ({
+        report_id: data.id,
+        media_type: item.media_type,
+        url: item.url,
+      }))
+    );
+    if (mediaError) return { error: mediaError.message };
+  }
   revalidateAgent();
   return { success: true as const, id: data?.id as string | undefined };
 }
@@ -80,9 +122,11 @@ export async function reportIncident(formData: FormData) {
   if (error) return { error: error.message };
   const mediaUrl = String(formData.get("media_url") ?? "").trim();
   if (data?.id && mediaUrl) {
+    const mediaType =
+      String(formData.get("media_type") ?? "photo").trim() === "video" ? "video" : "photo";
     await supabase.from("incident_media").insert({
       incident_id: data.id,
-      media_type: "photo",
+      media_type: mediaType,
       url: mediaUrl,
     });
   }

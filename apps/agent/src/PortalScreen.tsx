@@ -16,12 +16,12 @@ import { AgentAuthError, agentApi, type AgentUnit, type SessionInfo } from "./ap
 import { IncidentForm } from "./components/IncidentForm";
 import { PuPicker } from "./components/PuPicker";
 import { QueueBar } from "./components/QueueBar";
-import { ReportForm } from "./components/ReportForm";
+import { ReportForm, type ReportAttachment } from "./components/ReportForm";
 import { ResultsForm } from "./components/ResultsForm";
 import { StatusForm } from "./components/StatusForm";
 import { formatLagos } from "./lagos";
 import { FEATURED_PARTIES, OTHER_MAJOR_PARTIES, votesFromFields } from "./parties";
-import { persistQueuePhoto } from "./photos";
+import { persistQueueMedia } from "./photos";
 import { listenForHqNudges, registerPushToken } from "./push";
 import { enqueue, flushQueue, listQueue, queuedCount, type QueueAction, type QueueItem } from "./queue";
 import { signOut } from "./session";
@@ -49,6 +49,7 @@ export function PortalScreen({ onSignOut }: { onSignOut: () => void }) {
   const [turnout, setTurnout] = useState("");
   const [reportType, setReportType] = useState("observation");
   const [report, setReport] = useState("");
+  const [reportAttachments, setReportAttachments] = useState<ReportAttachment[]>([]);
   const [votes, setVotes] = useState<Record<string, string>>({});
   const [extras, setExtras] = useState<{ id: number; code: string; votes: string }[]>([]);
   const [showOthers, setShowOthers] = useState(true);
@@ -125,9 +126,39 @@ export function PortalScreen({ onSignOut }: { onSignOut: () => void }) {
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.6, allowsEditing: false });
     if (result.canceled || !result.assets[0]) return;
-    const durable = await persistQueuePhoto(result.assets[0].uri, kind);
+    const durable = await persistQueueMedia(result.assets[0].uri, kind, "photo");
     if (kind === "result_sheet") setSheetUri(durable);
     else setIncidentUri(durable);
+  }
+
+  async function pickReportPhoto() {
+    if (reportAttachments.length >= 3) return;
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (perm.status !== "granted") {
+      Alert.alert("Camera needed", "Allow camera to attach a photo to your report.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.6, allowsEditing: false });
+    if (result.canceled || !result.assets[0]) return;
+    const durable = await persistQueueMedia(result.assets[0].uri, "report", "photo");
+    setReportAttachments((prev) => [...prev, { uri: durable, mediaType: "photo" }]);
+  }
+
+  async function pickReportVideo() {
+    if (reportAttachments.length >= 3) return;
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (perm.status !== "granted") {
+      Alert.alert("Camera needed", "Allow camera to record a video for your report.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      videoMaxDuration: 45,
+      quality: 0.5,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const durable = await persistQueueMedia(result.assets[0].uri, "report", "video");
+    setReportAttachments((prev) => [...prev, { uri: durable, mediaType: "video" }]);
   }
 
   async function submit(action: QueueAction, payload: Record<string, unknown>) {
@@ -167,7 +198,7 @@ export function PortalScreen({ onSignOut }: { onSignOut: () => void }) {
       if (online) {
         setBusy(true);
         try {
-          payload.result_sheet_url = await agentApi.upload(sheetUri, "result_sheet");
+          payload.result_sheet_url = (await agentApi.upload(sheetUri, "result_sheet", "photo")).url;
         } catch (e) {
           payload._localPhoto = sheetUri;
           payload._photoKind = "result_sheet";
@@ -185,6 +216,47 @@ export function PortalScreen({ onSignOut }: { onSignOut: () => void }) {
     await submit("results", payload);
   }
 
+  async function submitReport() {
+    const payload: Record<string, unknown> = {
+      polling_unit_id: puId,
+      report_type: reportType,
+      content: report,
+    };
+    if (reportAttachments.length) {
+      if (online) {
+        setBusy(true);
+        try {
+          const media_items = [];
+          for (const item of reportAttachments) {
+            const uploaded = await agentApi.upload(item.uri, "report", item.mediaType);
+            media_items.push({ url: uploaded.url, media_type: uploaded.media_type });
+          }
+          payload.media_items = media_items;
+        } catch (e) {
+          payload._localMedia = reportAttachments.map((item) => ({
+            uri: item.uri,
+            kind: "report",
+            mediaType: item.mediaType,
+          }));
+          enqueue("report", { ...payload, captured_at: new Date().toISOString() });
+          refreshQueue();
+          setBusy(false);
+          Alert.alert("Saved offline", e instanceof Error ? e.message : "Media will upload when you reconnect");
+          return;
+        }
+      } else {
+        payload._localMedia = reportAttachments.map((item) => ({
+          uri: item.uri,
+          kind: "report",
+          mediaType: item.mediaType,
+        }));
+      }
+    }
+    await submit("report", payload);
+    setReport("");
+    setReportAttachments([]);
+  }
+
   async function submitIncident() {
     const payload: Record<string, unknown> = {
       polling_unit_id: puId || undefined,
@@ -199,7 +271,9 @@ export function PortalScreen({ onSignOut }: { onSignOut: () => void }) {
       if (online) {
         setBusy(true);
         try {
-          payload.media_url = await agentApi.upload(incidentUri, "incident");
+          const uploaded = await agentApi.upload(incidentUri, "incident", "photo");
+          payload.media_url = uploaded.url;
+          payload.media_type = uploaded.media_type;
         } catch (e) {
           payload._localPhoto = incidentUri;
           payload._photoKind = "incident";
@@ -278,12 +352,16 @@ export function PortalScreen({ onSignOut }: { onSignOut: () => void }) {
           <ReportForm
             reportType={reportType}
             report={report}
+            attachments={reportAttachments}
             disabled={busy || !puId}
             onType={setReportType}
             onReport={setReport}
-            onSubmit={() =>
-              void submit("report", { polling_unit_id: puId, report_type: reportType, content: report })
+            onPickPhoto={() => void pickReportPhoto()}
+            onPickVideo={() => void pickReportVideo()}
+            onRemoveAttachment={(index) =>
+              setReportAttachments((prev) => prev.filter((_, i) => i !== index))
             }
+            onSubmit={() => void submitReport()}
           />
         ) : null}
         {tab === "results" ? (

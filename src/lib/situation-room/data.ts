@@ -66,7 +66,7 @@ export async function getSituationRoomData(tenantId: string) {
       .limit(3000),
     supabase
       .from("agent_reports")
-      .select("*, profiles(full_name)")
+      .select("*, profiles(full_name), agent_report_media(id, media_type, url)")
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false })
       .limit(40),

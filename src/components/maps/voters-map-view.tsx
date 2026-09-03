@@ -155,6 +155,71 @@ export function VotersMapView({
     }
   }
 
+  async function alignInecGps() {
+    setPinning(true);
+    try {
+      let totalAligned = 0;
+      let lastRemainingApprox: number | null = null;
+      let catalog = 0;
+      let offset = 0;
+      for (let i = 0; i < 80; i += 1) {
+        const res = await fetch("/api/polling-units/geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inec: true, force: true, limit: 300, offset }),
+        });
+        const raw = await res.text();
+        let data: {
+          error?: string;
+          geocoded?: number;
+          remaining?: number;
+          remainingApprox?: number;
+          mapped?: number;
+          total?: number;
+          catalog?: number;
+          nextOffset?: number;
+        } = {};
+        try {
+          data = raw ? (JSON.parse(raw) as typeof data) : {};
+        } catch {
+          toast.error(res.ok ? "INEC align returned an invalid response" : `INEC align failed (HTTP ${res.status})`);
+          return;
+        }
+        if (!res.ok) {
+          toast.error(data.error || `INEC align failed (HTTP ${res.status})`);
+          return;
+        }
+        totalAligned += data.geocoded ?? 0;
+        lastRemainingApprox = data.remainingApprox ?? lastRemainingApprox;
+        catalog = data.catalog ?? catalog;
+        offset = data.nextOffset ?? offset;
+        if (typeof data.mapped === "number") setMappedUnits(data.mapped);
+        if (typeof data.total === "number") setTotalUnits(data.total);
+        if (!(data.remaining ?? 0)) break;
+      }
+      if (totalAligned > 0) {
+        toast.success(
+          `Aligned ${totalAligned.toLocaleString()} pins to INEC GPS` +
+            (catalog ? ` · catalog ${catalog.toLocaleString()}` : "") +
+            (lastRemainingApprox ? ` · ${lastRemainingApprox.toLocaleString()} still approx` : "")
+        );
+      } else {
+        toast.message(
+          catalog
+            ? lastRemainingApprox
+              ? "Catalog applied — some units still need INEC GPS (npm run pu:fetch-gps -- --resume)"
+              : "Pins already match INEC GPS"
+            : "INEC GPS catalog missing — run npm run pu:fetch-gps"
+        );
+      }
+      setLiveTick((n) => n + 1);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "INEC align failed");
+    } finally {
+      setPinning(false);
+    }
+  }
+
   useEffect(() => {
     if (!lga) {
       setWards([]);
@@ -342,6 +407,10 @@ export function VotersMapView({
             Clear filters
           </Button>
         )}
+        <Button type="button" variant="default" size="sm" disabled={pinning} onClick={alignInecGps}>
+          <MapPin className="mr-2 h-4 w-4" />
+          {pinning ? "Aligning…" : "Align to INEC GPS"}
+        </Button>
         {mappedUnits < totalUnits ? (
           <Button type="button" variant="secondary" size="sm" disabled={pinning} onClick={dropApproxPins}>
             <MapPin className="mr-2 h-4 w-4" />

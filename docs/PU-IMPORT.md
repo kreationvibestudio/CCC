@@ -87,20 +87,30 @@ To fill map pins after import, see below.
 
 ## Fill missing map pins (latitude / longitude)
 
-INEC’s public CSV has **names, not GPS**. Field Agent login needs a pin (within 1.5 km), so HQ can geocode every unit that is still blank.
+INEC’s public CSV has **names, not GPS**. The map used to drop **approximate LGA-centroid pins** (jittered) so Field Agent check-in could work — those do **not** sit on the real buildings.
 
-Open **Polling Units** and click **Fill missing pins**. Keep the tab open; it walks the register in small batches. OpenStreetMap (Photon / Nominatim) is used when no Google/Mapbox key is set. Add `GOOGLE_GEOCODING_API_KEY` on Vercel for faster, usually tighter matches.
+### Align to official INEC CVR GPS (recommended)
 
-CLI (uses `.env.local` — local DB unless that file points at production):
+Pull coordinates from the INEC Continuous Voter Registration locator (`cvr.inecnigeria.org`) and write them into `polling_units`:
+
+```bash
+npm run pu:fetch-gps            # scrape Edo → supabase/data/edo-polling-unit-gps.csv
+npm run pu:fetch-gps -- --resume
+npm run pu:apply-gps -- --force --all
+```
+
+On **Maps** / **Polling Units**, use **Align to INEC GPS** (same CSV apply via `/api/polling-units/geocode` with `{ inec: true }`).
+
+### Street geocode / approx fallback
+
+Open **Polling Units** and click **Fill missing pins** (Photon / Nominatim, or Google when `GOOGLE_GEOCODING_API_KEY` is set). **Drop approx pins** remains a fast last resort only.
 
 ```bash
 npm run pu:geocode -- --all
 npm run pu:geocode -- --retry-failed --all
 ```
 
-This is **the best public match**, not INEC’s internal survey GPS (that dataset is not published). Typical hits are the named school, street, or ward — enough for the 1.5 km check-in radius. Import a CSV with `latitude,longitude` columns if you later get official coordinates; existing import already stores those columns.
-
-The old geocoder always searched “Edo, Nigeria”. It now uses each row’s own state (FCT, Lagos, Edo, …) and prefers street names inside INEC location strings (e.g. Gana Street in Maitama, not a hotel in Garki).
+Street geocode is **a best public match**, not INEC’s survey GPS. Prefer `pu:fetch-gps` + **Align to INEC GPS** when the catalog is available.
 
 ## Apply migrations
 

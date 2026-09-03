@@ -50,3 +50,4 @@ next-env.d.ts
 /apps/agent/dist
 /apps/agent/ios
 /apps/agent/android
+.edo-cvr-gps-progress.json

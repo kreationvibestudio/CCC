@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export function PageHeader({
@@ -28,20 +29,17 @@ export function StatCard({
   change,
   icon: Icon,
   className,
+  href,
 }: {
   title: string;
   value: string | number;
   change?: string;
   icon?: React.ComponentType<{ className?: string }>;
   className?: string;
+  href?: string;
 }) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
-        className
-      )}
-    >
+  const body = (
+    <>
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-muted-foreground">{title}</p>
         {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
@@ -50,8 +48,24 @@ export function StatCard({
       {change && (
         <p className="mt-1 text-xs text-muted-foreground">{change}</p>
       )}
-    </div>
+    </>
   );
+
+  const styles = cn(
+    "block rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
+    href && "cursor-pointer hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    className
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={styles} aria-label={`${title}: ${value}`}>
+        {body}
+      </Link>
+    );
+  }
+
+  return <div className={styles}>{body}</div>;
 }
 
 export function EmptyState({

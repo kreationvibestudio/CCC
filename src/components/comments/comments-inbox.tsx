@@ -35,14 +35,16 @@ const SENTIMENT_VARIANT: Record<string, "success" | "secondary" | "destructive">
 export function CommentsInbox({
   comments,
   team,
+  initialStatus = "all",
 }: {
   comments: Comment[];
   team: TeamMember[];
+  initialStatus?: string;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState(initialStatus);
   const [sentiment, setSentiment] = useState("all");
   const [replyOpen, setReplyOpen] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");

@@ -125,6 +125,7 @@ type ProfileRow = {
   email: string;
   role: string;
   ward: string | null;
+  lga: string | null;
   created_at: string;
 };
 
@@ -558,10 +559,20 @@ export function AdminView({
                         {p.full_name}
                         {isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">(you)</span> : null}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {p.email}
-                        {p.ward ? ` · ${p.ward}` : ""}
-                      </p>
+                      <dl className="mt-1 grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-3">
+                        <div>
+                          <dt className="inline font-medium text-foreground/70">Email: </dt>
+                          <dd className="inline break-all">{p.email || "—"}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline font-medium text-foreground/70">Ward: </dt>
+                          <dd className="inline">{p.ward?.trim() || "—"}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline font-medium text-foreground/70">LGA: </dt>
+                          <dd className="inline">{p.lga?.trim() || "—"}</dd>
+                        </div>
+                      </dl>
                     </div>
                   </div>
                   <form action={handleRoleChange} className="flex items-center gap-2">

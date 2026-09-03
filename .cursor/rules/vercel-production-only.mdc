@@ -1,0 +1,25 @@
+---
+description: Deploy straight to Vercel production via main; skip preview deployments
+alwaysApply: true
+---
+
+# Vercel production only (skip preview)
+
+Ship changes to **production** on Vercel. Do **not** rely on or wait for Preview deployments.
+
+## How production deploys
+
+1. Merge the PR into `main` (see auto-merge rule).
+2. Vercel auto-deploys **Production** from `main` only (`vercel.json` `git.deploymentEnabled`).
+3. Production URL: `https://ccc-three-kappa.vercel.app`
+
+## Do / don't
+
+- **Do** treat merge-to-`main` as the production release step.
+- **Do** confirm the GitHub "Production" deployment succeeded when reporting ship status.
+- **Don't** open, share, or wait on Vercel Preview URLs for agent feature branches.
+- **Don't** ask the user to promote a preview — production comes from `main`.
+
+## CLI note
+
+If a manual production redeploy is required and `VERCEL_TOKEN` is available: `npx vercel deploy --prod --yes`. Prefer the GitHub → `main` path when possible.

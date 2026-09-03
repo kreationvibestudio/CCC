@@ -74,6 +74,41 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
     }
   }
 
+  async function runApprox() {
+    setRunning(true);
+    setProgress("Dropping approx pins…");
+    let pinned = 0;
+    try {
+      for (let i = 0; i < 20; i += 1) {
+        const res = await fetch("/api/polling-units/geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approx: true, limit: 500 }),
+        });
+        const data = (await res.json()) as GeocodeResponse;
+        if (!res.ok) {
+          toast.error(data.error || "Could not drop approx pins");
+          break;
+        }
+        pinned += data.geocoded ?? 0;
+        const left = data.remaining ?? 0;
+        setRemaining(left);
+        setProgress(
+          `${(data.mapped ?? 0).toLocaleString()} / ${(data.total ?? 0).toLocaleString()} pinned · ${left.toLocaleString()} left`
+        );
+        if (left === 0 || !(data.geocoded ?? 0)) break;
+      }
+      if (pinned > 0) toast.success(`Dropped ${pinned.toLocaleString()} approx map pin${pinned === 1 ? "" : "s"}`);
+      else toast("Every polling unit already has a map pin");
+      router.refresh();
+    } catch {
+      toast.error("Approx pin fill stopped — try again");
+    } finally {
+      setRunning(false);
+      setProgress("");
+    }
+  }
+
   const missing = remaining > 0;
 
   return (
@@ -83,9 +118,14 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
         {running ? progress || "Filling map pins…" : missing ? `Fill ${remaining.toLocaleString()} missing pins` : "Map pins complete"}
       </Button>
       {missing ? (
-        <Button type="button" variant="outline" disabled={running} onClick={() => run(true)}>
-          Retry failed
-        </Button>
+        <>
+          <Button type="button" variant="outline" disabled={running} onClick={() => run(true)}>
+            Retry failed
+          </Button>
+          <Button type="button" variant="secondary" disabled={running} onClick={() => runApprox()}>
+            Drop approx pins (fast)
+          </Button>
+        </>
       ) : null}
     </div>
   );

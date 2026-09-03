@@ -1,54 +1,105 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { ExternalLink, MapPin, Radio, X } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-shell";
 import { GeoFilters } from "@/components/shared/geo-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ExternalLink, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePollingUnitStatusRealtime } from "@/hooks/use-tenant-realtime";
+import { getPollingUnitWards } from "@/lib/polling-units/actions";
 import {
-  getPollingUnitWards,
-  queryPollingUnits,
-  type PollingUnitListItem,
-} from "@/lib/polling-units/actions";
+  getFieldStatusMapData,
+  type FieldMapPin,
+  type FieldStatusCounts,
+} from "@/lib/maps/field-status";
+import { cn } from "@/lib/utils";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
   ssr: false,
-  loading: () => <div className="h-[480px] animate-pulse rounded-xl bg-muted" />,
+  loading: () => <div className="h-[560px] animate-pulse rounded-xl bg-muted" />,
 });
 
-const LEGEND = [
+/** Primary election-day statuses the map is built to show. */
+export const FIELD_STATUS_LEGEND = [
   { status: "voting_in_progress", label: "Voting", color: "#22c55e" },
   { status: "voting_finished", label: "Voting finished", color: "#0d9488" },
   { status: "delayed", label: "Delayed", color: "#eab308" },
   { status: "minor_issue", label: "Minor issue", color: "#f97316" },
   { status: "serious_incident", label: "Incident", color: "#ef4444" },
   { status: "results_uploaded", label: "Results", color: "#3b82f6" },
-  { status: "not_active", label: "Not active", color: "#94a3b8" },
-];
+] as const;
 
-const MAP_LIMIT = 400;
+const OPTIONAL_STATUS = { status: "not_active", label: "Not active", color: "#94a3b8" } as const;
 
-export function VotersMapView({ lgas }: { lgas: string[] }) {
+const DEFAULT_ACTIVE = new Set(FIELD_STATUS_LEGEND.map((s) => s.status));
+
+function labelForStatus(status: string) {
+  const hit = [...FIELD_STATUS_LEGEND, OPTIONAL_STATUS].find((s) => s.status === status);
+  return hit?.label ?? status.replace(/_/g, " ");
+}
+
+export function VotersMapView({
+  lgas,
+  initial,
+}: {
+  lgas: string[];
+  initial: Awaited<ReturnType<typeof getFieldStatusMapData>>;
+}) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [lga, setLga] = useState("");
   const [ward, setWard] = useState("");
   const [wards, setWards] = useState<string[]>([]);
-  const [units, setUnits] = useState<PollingUnitListItem[]>([]);
-  const [total, setTotal] = useState(0);
+  const [pins, setPins] = useState<FieldMapPin[]>(initial.pins);
+  const [counts, setCounts] = useState<FieldStatusCounts>(initial.counts);
+  const [mappedUnits, setMappedUnits] = useState(initial.mappedUnits);
+  const [totalUnits, setTotalUnits] = useState(initial.totalUnits);
+  const [activeStatuses, setActiveStatuses] = useState<Set<string>>(() => new Set(DEFAULT_ACTIVE));
+  const [showInactive, setShowInactive] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [liveTick, setLiveTick] = useState(0);
+
+  const [pinning, setPinning] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  async function dropApproxPins() {
+    setPinning(true);
+    try {
+      let totalPinned = 0;
+      for (let i = 0; i < 20; i += 1) {
+        const res = await fetch("/api/polling-units/geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approx: true, limit: 500 }),
+        });
+        const data = (await res.json()) as { error?: string; geocoded?: number; remaining?: number };
+        if (!res.ok) {
+          toast.error(data.error || "Could not drop map pins");
+          break;
+        }
+        totalPinned += data.geocoded ?? 0;
+        if (!(data.remaining ?? 0) || !(data.geocoded ?? 0)) break;
+      }
+      toast.success(totalPinned ? `Pinned ${totalPinned.toLocaleString()} polling units` : "Pins already complete");
+      setLiveTick((n) => n + 1);
+    } catch {
+      toast.error("Pin fill failed");
+    } finally {
+      setPinning(false);
+    }
+  }
 
   useEffect(() => {
     if (!lga) {
@@ -60,44 +111,108 @@ export function VotersMapView({ lgas }: { lgas: string[] }) {
     });
   }, [lga]);
 
-  const canQuery = Boolean(lga || ward || debouncedSearch.length >= 2);
-
-  useEffect(() => {
-    if (!canQuery) {
-      setUnits([]);
-      setTotal(0);
-      setSelectedId(null);
-      return;
-    }
+  const reload = useCallback(() => {
     startTransition(async () => {
-      const result = await queryPollingUnits({
+      const data = await getFieldStatusMapData({
         lga,
         ward,
         search: debouncedSearch,
-        page: 0,
-        pageSize: MAP_LIMIT,
-        mappedOnly: true,
       });
-      setUnits(result.rows);
-      setTotal(result.total);
+      setPins(data.pins);
+      setCounts(data.counts);
+      setMappedUnits(data.mappedUnits);
+      setTotalUnits(data.totalUnits);
     });
-  }, [canQuery, lga, ward, debouncedSearch]);
+  }, [lga, ward, debouncedSearch]);
 
-  const selected = units.find((u) => u.id === selectedId);
+  useEffect(() => {
+    reload();
+  }, [reload, liveTick]);
+
+  usePollingUnitStatusRealtime(initial.tenantId, () => {
+    setLiveTick((n) => n + 1);
+  });
+
+  const visiblePins = useMemo(() => {
+    return pins.filter((p) => {
+      if (p.live_status === "not_active") return showInactive;
+      return activeStatuses.has(p.live_status);
+    });
+  }, [pins, activeStatuses, showInactive]);
+
+  const selected = pins.find((u) => u.id === selectedId) ?? visiblePins.find((u) => u.id === selectedId);
   const handleMarkerClick = useCallback((id: string) => setSelectedId(id), []);
+
+  function toggleStatus(status: string) {
+    setActiveStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  }
+
+  const activeFieldCount = FIELD_STATUS_LEGEND.reduce((sum, s) => sum + (counts[s.status] ?? 0), 0);
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Voter Maps"
-        description="Edo State — pick an LGA or search a PU code. Pins are color-coded by live status"
-      />
+        title="Field Status Map"
+        description="Live polling-unit pins — Voting, finished, delayed, issues, incidents, and results"
+      >
+        <p className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm">
+          <Radio className="h-4 w-4 text-emerald-500" />
+          <span>
+            <span className="font-medium">{mappedUnits.toLocaleString()}</span>
+            <span className="text-muted-foreground"> / {totalUnits.toLocaleString()} PUs mapped</span>
+            {activeFieldCount > 0 ? (
+              <span className="text-muted-foreground"> · {activeFieldCount.toLocaleString()} live field signals</span>
+            ) : null}
+          </span>
+        </p>
+      </PageHeader>
+
+      <div className="flex flex-wrap gap-2">
+        {FIELD_STATUS_LEGEND.map((item) => {
+          const on = activeStatuses.has(item.status);
+          const n = counts[item.status] ?? 0;
+          return (
+            <button
+              key={item.status}
+              type="button"
+              onClick={() => toggleStatus(item.status)}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                on ? "border-transparent text-white" : "border-border bg-card text-muted-foreground opacity-60"
+              )}
+              style={on ? { background: item.color } : undefined}
+              aria-pressed={on}
+            >
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-white/90" style={!on ? { background: item.color } : undefined} />
+              {item.label}
+              <span className={cn("tabular-nums", on ? "text-white/90" : "")}>{n}</span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setShowInactive((v) => !v)}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium",
+            showInactive ? "border-slate-400 bg-slate-500 text-white" : "border-border bg-card text-muted-foreground"
+          )}
+          aria-pressed={showInactive}
+        >
+          {OPTIONAL_STATUS.label}
+          <span className="tabular-nums">{counts.not_active}</span>
+        </button>
+      </div>
 
       <div className="flex flex-wrap items-end gap-3">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
+          placeholder="Search PU code or name…"
           className="max-w-xs"
         />
         <GeoFilters
@@ -111,47 +226,58 @@ export function VotersMapView({ lgas }: { lgas: string[] }) {
           }}
           onWardChange={setWard}
         />
-      </div>
-
-      <div className="flex flex-wrap gap-3 text-xs">
-        {LEGEND.map((item) => (
-          <span key={item.status} className="flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded-full" style={{ background: item.color }} />
-            {item.label}
-          </span>
-        ))}
+        {(lga || ward || debouncedSearch) && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setLga("");
+              setWard("");
+              setSearch("");
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
+        {mappedUnits < totalUnits ? (
+          <Button type="button" variant="secondary" size="sm" disabled={pinning} onClick={dropApproxPins}>
+            <MapPin className="mr-2 h-4 w-4" />
+            {pinning ? "Pinning…" : `Pin ${(totalUnits - mappedUnits).toLocaleString()} missing`}
+          </Button>
+        ) : null}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <CampaignMap
-            markers={units.map((u) => ({
+            markers={visiblePins.map((u) => ({
               id: u.id,
-              lat: u.latitude!,
-              lng: u.longitude!,
+              lat: u.latitude,
+              lng: u.longitude,
               label: u.name,
-              sublabel: u.code,
+              sublabel: `${u.code} · ${labelForStatus(u.live_status)}`,
               status: u.live_status,
             }))}
-            height={480}
-            cluster={units.length > 15}
+            height={560}
+            cluster={visiblePins.length > 20}
             selectedId={selectedId ?? undefined}
             onMarkerClick={handleMarkerClick}
             emptyHint={
-              canQuery
-                ? pending
-                  ? "Finding polling units…"
-                  : "No mapped units match that search."
-                : "Select an LGA or search a PU code to drop pins."
+              pending
+                ? "Loading polling units…"
+                : mappedUnits === 0
+                  ? "No coordinates yet — run npm run pu:pins (or geocode) for this tenant."
+                  : "No pins match the selected statuses / filters."
             }
           />
         </div>
 
-        <Card className="h-[480px] overflow-y-auto">
+        <Card className="h-[560px] overflow-y-auto">
           <CardContent className="p-4">
             {selected ? (
               <div className="space-y-3">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold">{selected.name}</p>
                     <p className="text-xs text-muted-foreground">{selected.code}</p>
@@ -163,26 +289,30 @@ export function VotersMapView({ lgas }: { lgas: string[] }) {
                 <p className="text-sm">
                   {selected.ward}, {selected.lga}, {selected.state}
                 </p>
-                {selected.address && <p className="text-xs text-muted-foreground">{selected.address}</p>}
                 <div className="flex flex-wrap gap-2">
-                  <Badge>{(selected.registered_voters ?? 0).toLocaleString()} voters</Badge>
-                  <Badge variant="secondary">{(selected.live_status ?? "not_active").replace(/_/g, " ")}</Badge>
-                  {selected.turnout != null && selected.turnout > 0 && (
-                    <Badge variant="outline">{selected.turnout} turnout</Badge>
-                  )}
+                  <Badge>{selected.registered_voters.toLocaleString()} voters</Badge>
+                  <Badge
+                    style={{
+                      background:
+                        FIELD_STATUS_LEGEND.find((s) => s.status === selected.live_status)?.color ??
+                        OPTIONAL_STATUS.color,
+                      color: "#fff",
+                    }}
+                  >
+                    {labelForStatus(selected.live_status)}
+                  </Badge>
+                  {selected.turnout > 0 && <Badge variant="outline">{selected.turnout} turnout</Badge>}
                 </div>
-                {selected.latitude && selected.longitude && (
-                  <Button variant="outline" size="sm" asChild>
-                    <a
-                      href={`https://maps.google.com/?q=${selected.latitude},${selected.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      Directions
-                    </a>
-                  </Button>
-                )}
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href={`https://maps.google.com/?q=${selected.latitude},${selected.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Directions
+                  </a>
+                </Button>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -191,25 +321,47 @@ export function VotersMapView({ lgas }: { lgas: string[] }) {
                 >
                   View full details
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => router.push("/situation-room")}
+                >
+                  Open Situation Room
+                </Button>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {canQuery
-                  ? `${units.length.toLocaleString()} on the map${total > units.length ? ` of ${total.toLocaleString()} matches — narrow by ward or search` : ""}.`
-                  : "Click a marker after you filter or search."}
+                {visiblePins.length.toLocaleString()} pin{visiblePins.length === 1 ? "" : "s"} on the map.
+                Click a marker or a unit below. Toggle status chips to focus Voting / Delayed / Incident /
+                Results.
               </p>
             )}
+
             <div className="mt-4 space-y-2 border-t border-border pt-4">
-              {units.slice(0, 12).map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  className="block w-full rounded-lg border border-border p-2 text-left text-sm hover:bg-muted"
-                  onClick={() => setSelectedId(u.id)}
-                >
-                  <span className="font-medium">{u.code}</span> — {u.name}
-                </button>
-              ))}
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Active field units
+              </p>
+              {visiblePins
+                .filter((u) => u.live_status !== "not_active")
+                .slice(0, 40)
+                .map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    className="block w-full rounded-lg border border-border p-2 text-left text-sm hover:bg-muted"
+                    onClick={() => setSelectedId(u.id)}
+                  >
+                    <span className="font-medium">{u.code}</span>
+                    <span className="text-muted-foreground"> — {labelForStatus(u.live_status)}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{u.name}</span>
+                  </button>
+                ))}
+              {!visiblePins.some((u) => u.live_status !== "not_active") && (
+                <p className="text-xs text-muted-foreground">
+                  No live field statuses yet. Agents update these from the Agent Portal / Situation Room.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

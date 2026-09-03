@@ -26,6 +26,16 @@ const STATUS_COLORS: Record<string, string> = {
   not_active: "#94a3b8",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  voting_in_progress: "Voting",
+  voting_finished: "Voting finished",
+  delayed: "Delayed",
+  minor_issue: "Minor issue",
+  serious_incident: "Incident",
+  results_uploaded: "Results",
+  not_active: "Not active",
+};
+
 const EDO_CENTER: [number, number] = [6.34, 5.63];
 
 function colorIcon(color: string) {
@@ -94,8 +104,9 @@ export function CampaignMap({
       if (!Number.isFinite(m.lat) || !Number.isFinite(m.lng)) continue;
       const color = STATUS_COLORS[m.status ?? "not_active"] ?? STATUS_COLORS.not_active;
       const marker = L.marker([m.lat, m.lng], { icon: colorIcon(color) });
+      const statusLabel = m.status ? STATUS_LABELS[m.status] ?? m.status.replace(/_/g, " ") : "";
       marker.bindPopup(
-        `<strong>${m.label}</strong>${m.sublabel ? `<br/>${m.sublabel}` : ""}${m.status ? `<br/><em>${m.status.replace(/_/g, " ")}</em>` : ""}`
+        `<strong>${m.label}</strong>${m.sublabel ? `<br/>${m.sublabel}` : ""}${statusLabel && !m.sublabel?.includes(statusLabel) ? `<br/><em>${statusLabel}</em>` : ""}`
       );
       if (onMarkerClick) {
         marker.on("click", () => onMarkerClick(m.id));

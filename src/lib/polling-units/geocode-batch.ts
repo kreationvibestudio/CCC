@@ -6,6 +6,48 @@ import {
   type GeocodeProviderName,
 } from "./geocode";
 import { applyCampaignStateFilter } from "./scope.ts";
+import { approxPinForPollingUnit } from "./approx-pins.ts";
+
+export async function fillApproxPinsForTenant(
+  supabase: SupabaseClient,
+  tenantId: string,
+  options?: { limit?: number }
+): Promise<{ updated: number; remaining: number; mapped: number; total: number }> {
+  const limit = Math.min(Math.max(options?.limit ?? 500, 1), 1000);
+  const { data, error } = await applyCampaignStateFilter(
+    supabase
+      .from("polling_units")
+      .select("id, code, name, ward, lga")
+      .eq("tenant_id", tenantId)
+      .or("latitude.is.null,longitude.is.null")
+      .order("code")
+      .limit(limit)
+  );
+  if (error) throw new Error(error.message);
+
+  let updated = 0;
+  for (const row of data ?? []) {
+    const pin = approxPinForPollingUnit(row);
+    const { error: patchError } = await supabase
+      .from("polling_units")
+      .update({
+        latitude: pin.latitude,
+        longitude: pin.longitude,
+        geocode_status: "done",
+      })
+      .eq("id", row.id)
+      .eq("tenant_id", tenantId);
+    if (!patchError) updated += 1;
+  }
+
+  const counts = await countPollingUnitPins(supabase, tenantId);
+  return {
+    updated,
+    remaining: counts.remaining,
+    mapped: counts.mapped,
+    total: counts.total,
+  };
+}
 
 export type PendingGeocodeUnit = {
   id: string;
@@ -35,7 +77,7 @@ export type GeocodeBatchResult = {
   remaining: number;
   mapped: number;
   total: number;
-  provider: GeocodeProviderName;
+  provider: GeocodeProviderName | "approx";
   samples: GeocodeSample[];
 };
 

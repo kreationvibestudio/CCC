@@ -57,8 +57,15 @@ export const MODULES: Record<string, ModuleConfig> = {
   maps: {
     slug: "maps",
     title: "Voter Maps",
-    description: "Leaflet map of polling units with search and Google Maps links for directions.",
-    features: ["Search by ward", "Search by PU code", "Open in Google Maps", "Polling unit pins", "Campaign offices", "Assistance centers"],
+    description: "Live field-status map of polling units — Voting, finished, delayed, issues, incidents, results.",
+    features: [
+      "Status filter chips",
+      "Voting / finished / delayed",
+      "Minor issue & incident",
+      "Results uploaded",
+      "Live status updates",
+      "PU search & directions",
+    ],
   },
   "situation-room": {
     slug: "situation-room",

@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { inviteUser, updateUserRole, zeroCampaignData, getInviteRepairSql, updateCampaignDates, getCampaignDatesMigrationSql } from "@/lib/admin/actions";
+import { inviteUser, updateUserRole, zeroCampaignData, getInviteRepairSql, updateCampaignDates, getCampaignDatesMigrationSql, deleteTeamMembers } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
 
@@ -162,6 +162,7 @@ export function AdminView({
   campaignEndDate,
   electionDate,
   needsCampaignStartMigration = false,
+  currentUserId,
 }: {
   profiles: ProfileRow[];
   auditCount: number;
@@ -173,10 +174,50 @@ export function AdminView({
   campaignEndDate: string | null;
   electionDate: string | null;
   needsCampaignStartMigration?: boolean;
+  currentUserId: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [invitePassword, setInvitePassword] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const deletableProfiles = profiles.filter((p) => p.id !== currentUserId);
+  const allSelected =
+    deletableProfiles.length > 0 && deletableProfiles.every((p) => selectedIds.includes(p.id));
+
+  function toggleAll(checked: boolean) {
+    setSelectedIds(checked ? deletableProfiles.map((p) => p.id) : []);
+  }
+
+  function toggleOne(id: string, checked: boolean) {
+    setSelectedIds((prev) => (checked ? [...new Set([...prev, id])] : prev.filter((x) => x !== id)));
+  }
+
+  function handleDeleteSelected() {
+    if (!selectedIds.length) {
+      toast.error("Select at least one team member");
+      return;
+    }
+    const names = profiles
+      .filter((p) => selectedIds.includes(p.id))
+      .map((p) => p.full_name || p.email)
+      .join(", ");
+    if (!window.confirm(`Delete ${selectedIds.length === 1 ? names : `${selectedIds.length} team members`}?\n\nThis permanently removes their login and cannot be undone.`)) {
+      return;
+    }
+    const fd = new FormData();
+    for (const id of selectedIds) fd.append("user_ids", id);
+    startTransition(async () => {
+      const result = await deleteTeamMembers(fd);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.message ?? `Deleted ${result.deleted} team member(s)`);
+      setSelectedIds([]);
+      router.refresh();
+    });
+  }
 
   function copyDonateLink() {
     const url = paystackCheckoutUrl || donateUrl;
@@ -467,43 +508,85 @@ export function AdminView({
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
           <CardTitle>Team members</CardTitle>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-primary"
+                checked={allSelected}
+                disabled={pending || !deletableProfiles.length}
+                onChange={(e) => toggleAll(e.target.checked)}
+              />
+              Select all
+            </label>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={pending || selectedIds.length === 0}
+              onClick={handleDeleteSelected}
+            >
+              {pending ? "Deleting…" : `Delete${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {profiles.map((p) => (
-            <div
-              key={p.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
-            >
-              <div>
-                <p className="font-medium">{p.full_name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {p.email}
-                  {p.ward ? ` · ${p.ward}` : ""}
-                </p>
-              </div>
-              <form action={handleRoleChange} className="flex items-center gap-2">
-                <input type="hidden" name="user_id" value={p.id} />
-                <NativeSelect
-                  name="role"
-                  defaultValue={p.role}
-                  className="w-auto"
-                  disabled={pending}
+          {profiles.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No team members yet.</p>
+          ) : (
+            profiles.map((p) => {
+              const isSelf = p.id === currentUserId;
+              return (
+                <div
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
                 >
-                  {ROLE_OPTIONS.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </NativeSelect>
-                <Button type="submit" size="sm" variant="secondary" disabled={pending}>
-                  Save
-                </Button>
-                <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
-              </form>
-            </div>
-          ))}
+                  <div className="flex min-w-0 items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 shrink-0 accent-primary"
+                      checked={selectedIds.includes(p.id)}
+                      disabled={pending || isSelf}
+                      title={isSelf ? "You cannot delete your own account" : `Select ${p.full_name}`}
+                      onChange={(e) => toggleOne(p.id, e.target.checked)}
+                      aria-label={`Select ${p.full_name}`}
+                    />
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {p.full_name}
+                        {isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">(you)</span> : null}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {p.email}
+                        {p.ward ? ` · ${p.ward}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <form action={handleRoleChange} className="flex items-center gap-2">
+                    <input type="hidden" name="user_id" value={p.id} />
+                    <NativeSelect
+                      name="role"
+                      defaultValue={p.role}
+                      className="w-auto"
+                      disabled={pending}
+                    >
+                      {ROLE_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                    <Button type="submit" size="sm" variant="secondary" disabled={pending}>
+                      Save
+                    </Button>
+                    <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
+                  </form>
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
 

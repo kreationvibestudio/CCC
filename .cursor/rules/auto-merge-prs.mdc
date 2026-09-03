@@ -1,0 +1,27 @@
+---
+description: Always merge pull requests when CI is green unless the user says otherwise
+alwaysApply: true
+---
+
+# Auto merge pull requests
+
+After opening or updating a PR for work on this repo, **merge it into `main` once checks are green** — do not wait for a separate "merge PR" message.
+
+## Workflow
+
+1. Create the feature branch, commit, push, and open/update the PR (draft only while still actively iterating mid-task).
+2. When the work for that branch is finished and CI/Vercel checks are successful:
+   - Mark the PR ready for review if it is still a draft.
+   - Merge with a normal merge commit (`gh pr merge <n> --merge`).
+3. Confirm the merge landed on `main` and mention the production deploy implication in the summary.
+
+## Safety
+
+- Resolve merge conflicts first (rebase/merge `main`, push, re-check CI) before merging.
+- Do **not** force-push to `main`.
+- Do **not** enable GitHub `--auto` merge queues unless the user asks for that specifically; merge when green.
+- Skip auto-merge only if the user says **"don't merge"**, **"keep as draft"**, or the change is explicitly exploratory/WIP.
+
+## Example
+
+Finish a feature → push → open PR → CI green → merge PR → report merge commit / that production will pick it up.

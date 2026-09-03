@@ -21,12 +21,18 @@ export default async function AdminPage() {
   const base = appBaseUrl();
   const storedLink =
     typeof linkSetting?.value === "string" ? linkSetting.value : "";
+  const publicBase =
+    base ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}` : "");
   return (
     <AdminView
       profiles={profiles}
       auditCount={auditCount}
       secrets={secrets}
       donateUrl={base && user.workspace?.slug ? `${base}/donate/${user.workspace.slug}` : ""}
+      volunteerUrl={
+        publicBase && user.workspace?.slug ? `${publicBase}/volunteer/${user.workspace.slug}` : ""
+      }
       paystackCheckoutUrl={paystackPaymentLinkFromSetting(storedLink)}
     />
   );

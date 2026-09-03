@@ -51,12 +51,14 @@ export function AdminView({
   auditCount,
   secrets,
   donateUrl,
+  volunteerUrl,
   paystackCheckoutUrl,
 }: {
   profiles: ProfileRow[];
   auditCount: number;
   secrets: SecretsStatus;
   donateUrl: string;
+  volunteerUrl: string;
   paystackCheckoutUrl: string;
 }) {
   const router = useRouter();
@@ -80,6 +82,15 @@ export function AdminView({
     }
     void navigator.clipboard.writeText(donateUrl);
     toast.success("Campaign donate page copied");
+  }
+
+  function copyVolunteerSignupPage() {
+    if (!volunteerUrl) {
+      toast.error("Set NEXT_PUBLIC_APP_URL to get a volunteer signup page");
+      return;
+    }
+    void navigator.clipboard.writeText(volunteerUrl);
+    toast.success("Volunteer signup link copied");
   }
 
   function copyInviteRepairSql() {
@@ -150,6 +161,47 @@ export function AdminView({
         title="Administration"
         description="Invite team members, assign roles, and check production secrets"
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Public volunteer signup</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Share this link on{" "}
+            <a
+              className="underline underline-offset-2"
+              href="https://akhakonanenih.info"
+              target="_blank"
+              rel="noreferrer"
+            >
+              akhakonanenih.info
+            </a>{" "}
+            (for example a “Volunteer” button in Get in touch). New signups appear under Volunteers.
+          </p>
+          <div className="space-y-1">
+            <Label>Signup page</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input readOnly value={volunteerUrl || "Set NEXT_PUBLIC_APP_URL first"} />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={copyVolunteerSignupPage}
+                disabled={!volunteerUrl}
+              >
+                Copy link
+              </Button>
+              {volunteerUrl ? (
+                <Button type="button" variant="outline" asChild>
+                  <a href={volunteerUrl} target="_blank" rel="noreferrer">
+                    Open
+                  </a>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

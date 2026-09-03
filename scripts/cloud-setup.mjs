@@ -48,6 +48,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260823000004_agent_access_code_display.sql",
   "supabase/migrations/20260824000000_edo_only_polling_units.sql",
   "supabase/migrations/20260824000001_prune_non_edo_polling_units.sql",
+  "supabase/migrations/20260903160000_campaign_start_date.sql",
 ];
 
 loadEnvLocal();

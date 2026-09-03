@@ -10,9 +10,88 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { inviteUser, updateUserRole, zeroCampaignData, getInviteRepairSql } from "@/lib/admin/actions";
+import { inviteUser, updateUserRole, zeroCampaignData, getInviteRepairSql, updateCampaignDates } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
+
+function toDateInputValue(iso: string | null): string {
+  if (!iso) return "";
+  return iso.slice(0, 10);
+}
+
+function CampaignDatesCard({
+  campaignStartDate,
+  campaignEndDate,
+  electionDate,
+}: {
+  campaignStartDate: string | null;
+  campaignEndDate: string | null;
+  electionDate: string | null;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    start(async () => {
+      const result = await updateCampaignDates(fd);
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success("Campaign dates saved");
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Campaign dates</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label htmlFor="campaign_start_date">Campaign start</Label>
+            <Input
+              id="campaign_start_date"
+              name="campaign_start_date"
+              type="date"
+              defaultValue={toDateInputValue(campaignStartDate)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="campaign_end_date">Campaign end</Label>
+            <Input
+              id="campaign_end_date"
+              name="campaign_end_date"
+              type="date"
+              defaultValue={toDateInputValue(campaignEndDate)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="election_date">Election day</Label>
+            <Input
+              id="election_date"
+              name="election_date"
+              type="date"
+              defaultValue={toDateInputValue(electionDate)}
+            />
+          </div>
+          <div className="sm:col-span-3">
+            <Button type="submit" disabled={pending} size="sm">
+              {pending ? "Saving…" : "Save dates"}
+            </Button>
+            <p className="mt-2 text-xs text-muted-foreground">
+              These dates power the countdown timers on the Executive Dashboard.
+            </p>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 
 type ProfileRow = {
   id: string;
@@ -52,12 +131,18 @@ export function AdminView({
   secrets,
   donateUrl,
   paystackCheckoutUrl,
+  campaignStartDate,
+  campaignEndDate,
+  electionDate,
 }: {
   profiles: ProfileRow[];
   auditCount: number;
   secrets: SecretsStatus;
   donateUrl: string;
   paystackCheckoutUrl: string;
+  campaignStartDate: string | null;
+  campaignEndDate: string | null;
+  electionDate: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -341,6 +426,12 @@ export function AdminView({
           ))}
         </CardContent>
       </Card>
+
+      <CampaignDatesCard
+        campaignStartDate={campaignStartDate}
+        campaignEndDate={campaignEndDate}
+        electionDate={electionDate}
+      />
 
       <Card>
         <CardHeader>

@@ -104,6 +104,37 @@ export async function inviteUser(formData: FormData) {
   }
 }
 
+export async function updateCampaignDates(formData: FormData) {
+  try {
+    const adminUser = await requirePermission("admin.users");
+    const campaignStart = String(formData.get("campaign_start_date") ?? "").trim() || null;
+    const campaignEnd = String(formData.get("campaign_end_date") ?? "").trim() || null;
+    const electionDate = String(formData.get("election_date") ?? "").trim() || null;
+
+    const admin = createServiceClient();
+    const { error } = await admin
+      .from("tenants")
+      .update({
+        campaign_start_date: campaignStart || null,
+        campaign_end_date: campaignEnd || null,
+        election_date: electionDate || null,
+      })
+      .eq("id", adminUser.profile.tenant_id);
+    if (error) return { error: toErrorMessage(error, "Could not save campaign dates") };
+
+    await logAudit("admin.campaign_dates", "tenant", adminUser.profile.tenant_id, {
+      campaign_start_date: campaignStart,
+      campaign_end_date: campaignEnd,
+      election_date: electionDate,
+    });
+    revalidatePath("/dashboard");
+    revalidatePath("/admin");
+    return { success: true as const };
+  } catch (e) {
+    return { error: toErrorMessage(e, "Could not save campaign dates") };
+  }
+}
+
 export async function updateUserRole(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");

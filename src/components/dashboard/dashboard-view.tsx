@@ -59,6 +59,53 @@ function Countdown({ label, targetDate }: { label: string; targetDate: string | 
   );
 }
 
+function CampaignProgress({ startDate, endDate }: { startDate: string | null; endDate: string | null }) {
+  const [pct, setPct] = useState(0);
+  const [daysElapsed, setDaysElapsed] = useState(0);
+  const [totalDays, setTotalDays] = useState(0);
+
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    const total = end - start;
+    if (total <= 0) return;
+    const elapsed = Date.now() - start;
+    const p = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+    setPct(p);
+    setDaysElapsed(Math.max(0, Math.floor(elapsed / 86400000)));
+    setTotalDays(Math.floor(total / 86400000));
+  }, [startDate, endDate]);
+
+  if (!startDate || !endDate) return null;
+
+  return (
+    <Card className="sm:col-span-2 lg:col-span-2">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Clock className="h-4 w-4" /> Campaign progress
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>Day {daysElapsed} of {totalDays}</span>
+          <span>{pct}% complete</span>
+        </div>
+        <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>{new Date(startDate).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</span>
+          <span>{new Date(endDate).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function DashboardView({ data }: { data: DashboardData }) {
   const { stats, briefing, activities, engagementTrend, issueBreakdown } = data;
   const fundraisingPct = stats.fundraisingGoal
@@ -80,6 +127,10 @@ export function DashboardView({ data }: { data: DashboardData }) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Countdown label="Election Countdown" targetDate={data.electionDate} />
         <Countdown label="Campaign End" targetDate={data.campaignEndDate} />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CampaignProgress startDate={data.campaignStartDate} endDate={data.campaignEndDate} />
         <StatCard title="Sentiment Score" value={`${stats.sentimentScore}%`} icon={TrendingUp} change="From live comments" />
         <StatCard title="Pending Comments" value={stats.pendingComments} icon={MessageSquare} change="Needs response" />
       </div>

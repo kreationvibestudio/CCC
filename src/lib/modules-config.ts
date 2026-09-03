@@ -75,8 +75,15 @@ export const MODULES: Record<string, ModuleConfig> = {
   analytics: {
     slug: "analytics",
     title: "Analytics",
-    description: "Cross-module performance dashboards and AI insights.",
-    features: ["Social analytics", "Volunteer metrics", "Geographic performance", "Donation trends", "Engagement rates", "AI insights"],
+    description: "Election decision board — preventive calls from sentiment, coverage, and ground-game gaps.",
+    features: [
+      "Calls to make now",
+      "Misinfo & comment backlog",
+      "PU coverage gaps",
+      "Hot issues & ward pressure",
+      "Volunteer readiness",
+      "Sentiment trajectory",
+    ],
   },
   reports: {
     slug: "reports",

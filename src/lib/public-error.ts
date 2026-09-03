@@ -31,3 +31,16 @@ export function isMissingRelationError(message: string | undefined, relation: st
     haystack.includes("pgrst205")
   );
 }
+
+/** PostgREST when a column was never migrated (PGRST204 / schema cache). */
+export function isMissingColumnError(message: string | undefined, column: string) {
+  if (!message) return false;
+  const haystack = message.toLowerCase();
+  const name = column.toLowerCase();
+  return haystack.includes(name) && (
+    haystack.includes("schema cache") ||
+    haystack.includes("does not exist") ||
+    haystack.includes("pgrst204") ||
+    haystack.includes("could not find")
+  );
+}

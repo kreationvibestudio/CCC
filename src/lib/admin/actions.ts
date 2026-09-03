@@ -8,7 +8,8 @@ import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
-import { toErrorMessage } from "@/lib/public-error";
+import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
+import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[];
 const KEEP_ROLES = new Set<string>([
@@ -104,6 +105,64 @@ export async function inviteUser(formData: FormData) {
   }
 }
 
+export async function updateCampaignDates(formData: FormData) {
+  try {
+    const adminUser = await requirePermission("admin.users");
+    const campaignStart = String(formData.get("campaign_start_date") ?? "").trim() || null;
+    const campaignEnd = String(formData.get("campaign_end_date") ?? "").trim() || null;
+    const electionDate = String(formData.get("election_date") ?? "").trim() || null;
+
+    const admin = createServiceClient();
+    const withStart = await admin
+      .from("tenants")
+      .update({
+        campaign_start_date: campaignStart || null,
+        campaign_end_date: campaignEnd || null,
+        election_date: electionDate || null,
+      })
+      .eq("id", adminUser.profile.tenant_id);
+    if (withStart.error && isMissingColumnError(withStart.error.message, "campaign_start_date")) {
+      const withoutStart = await admin
+        .from("tenants")
+        .update({
+          campaign_end_date: campaignEnd || null,
+          election_date: electionDate || null,
+        })
+        .eq("id", adminUser.profile.tenant_id);
+      if (withoutStart.error) {
+        return { error: toErrorMessage(withoutStart.error, "Could not save campaign dates") };
+      }
+      return {
+        error:
+          "Campaign end and election day were saved, but campaign start needs SQL. Run supabase/migrations/20260903160000_campaign_start_date.sql in the Supabase SQL editor (or use Copy campaign dates SQL on this page).",
+      };
+    }
+    if (withStart.error) return { error: toErrorMessage(withStart.error, "Could not save campaign dates") };
+
+    await logAudit("admin.campaign_dates", "tenant", adminUser.profile.tenant_id, {
+      campaign_start_date: campaignStart,
+      campaign_end_date: campaignEnd,
+      election_date: electionDate,
+    });
+    revalidatePath("/dashboard");
+    revalidatePath("/admin");
+    return { success: true as const };
+  } catch (e) {
+    return { error: toErrorMessage(e, "Could not save campaign dates") };
+  }
+}
+
+export async function getCampaignDatesMigrationSql() {
+  await requirePermission("admin.users");
+  return `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS campaign_start_date TIMESTAMPTZ;
+
+UPDATE tenants SET
+  campaign_start_date = '2026-08-19T00:00:00+01:00',
+  campaign_end_date   = '2027-01-14T23:59:59+01:00',
+  election_date       = '2027-01-16T00:00:00+01:00'
+WHERE slug = 'campaign';`;
+}
+
 export async function updateUserRole(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
@@ -145,6 +204,90 @@ export async function updateUserRole(formData: FormData) {
     return { success: true as const };
   } catch (e) {
     return { error: toErrorMessage(e, "Role update failed") };
+  }
+}
+
+async function clearProfileReferences(admin: ReturnType<typeof createServiceClient>, userId: string, tenantId: string) {
+  await admin.from("polling_units").update({ assigned_agent_id: null }).eq("tenant_id", tenantId).eq("assigned_agent_id", userId);
+  await admin.from("polling_units").update({ assigned_supervisor_id: null }).eq("tenant_id", tenantId).eq("assigned_supervisor_id", userId);
+  await admin.from("comments").update({ assigned_to: null }).eq("tenant_id", tenantId).eq("assigned_to", userId);
+  const revoked = await admin
+    .from("agent_access_codes")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("profile_id", userId)
+    .is("revoked_at", null);
+  if (revoked.error && !isMissingRelationError(revoked.error.message, "agent_access_codes")) {
+    return revoked.error.message;
+  }
+  return null;
+}
+
+export async function deleteTeamMembers(formData: FormData) {
+  try {
+    const adminUser = await requirePermission("admin.users");
+    const rawIds = formData.getAll("user_ids").map((v) => String(v).trim()).filter(Boolean);
+    const uniqueIds = [...new Set(rawIds)];
+    if (!uniqueIds.length) return { error: "Select at least one team member to delete" };
+    if (uniqueIds.includes(adminUser.id)) {
+      return { error: "You cannot delete your own account" };
+    }
+
+    const admin = createServiceClient();
+    const { data: rows, error: findError } = await admin
+      .from("profiles")
+      .select("id, email, full_name, role, tenant_id")
+      .eq("tenant_id", adminUser.profile.tenant_id)
+      .in("id", uniqueIds);
+    if (findError) return { error: toErrorMessage(findError, "Could not load team members") };
+    if (!rows?.length) return { error: "No matching team members found in this campaign" };
+    if (rows.length !== uniqueIds.length) {
+      return { error: "One or more selected users are not in this campaign" };
+    }
+
+    for (const row of rows) {
+      if (row.role === "super_administrator" && adminUser.role !== "super_administrator") {
+        return { error: `Only a super administrator can delete ${row.email}` };
+      }
+    }
+
+    const deleted: string[] = [];
+    for (const row of rows) {
+      const clearError = await clearProfileReferences(admin, row.id, adminUser.profile.tenant_id);
+      if (clearError) return { error: clearError };
+
+      const removed = await adminDeleteAuthUser(row.id);
+      if (removed.error) {
+        // Auth user may already be gone — still remove the profile row.
+        const { error: profileError } = await admin
+          .from("profiles")
+          .delete()
+          .eq("id", row.id)
+          .eq("tenant_id", adminUser.profile.tenant_id);
+        if (profileError && !/not found|0 rows/i.test(profileError.message)) {
+          return { error: toErrorMessage(removed.error || profileError, `Could not delete ${row.email}`) };
+        }
+      }
+
+      await logAudit("admin.delete_user", "user", row.id, {
+        email: row.email,
+        full_name: row.full_name,
+        role: row.role,
+      });
+      deleted.push(row.email);
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/polling-units/agents");
+    revalidatePath("/agent");
+    return {
+      success: true as const,
+      deleted: deleted.length,
+      message: deleted.length === 1
+        ? `Deleted ${deleted[0]}`
+        : `Deleted ${deleted.length} team members`,
+    };
+  } catch (e) {
+    return { error: toErrorMessage(e, "Could not delete team members") };
   }
 }
 

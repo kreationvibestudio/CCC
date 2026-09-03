@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateBriefingFromComments } from "@/lib/ai/briefing";
+import { isMissingColumnError } from "@/lib/public-error";
 
 export interface DashboardStats {
   supporters: number;
@@ -38,6 +39,7 @@ export interface DashboardData {
   tenantName: string;
   electionDate: string | null;
   campaignEndDate: string | null;
+  campaignStartDate: string | null;
   stats: DashboardStats;
   activities: DashboardActivity[];
   briefing: DashboardBriefing | null;
@@ -48,8 +50,27 @@ export interface DashboardData {
 export async function getDashboardData(tenantId: string): Promise<DashboardData> {
   const supabase = await createClient();
 
+  const tenantWithStart = await supabase
+    .from("tenants")
+    .select("name, election_date, campaign_end_date, campaign_start_date, fundraising_goal")
+    .eq("id", tenantId)
+    .single();
+  const tenantRes = isMissingColumnError(tenantWithStart.error?.message, "campaign_start_date")
+    ? await supabase
+        .from("tenants")
+        .select("name, election_date, campaign_end_date, fundraising_goal")
+        .eq("id", tenantId)
+        .single()
+    : tenantWithStart;
+  const tenant = tenantRes.data as {
+    name?: string;
+    election_date?: string | null;
+    campaign_end_date?: string | null;
+    campaign_start_date?: string | null;
+    fundraising_goal?: number | null;
+  } | null;
+
   const [
-    { data: tenant },
     volunteersRes,
     contactsRes,
     puRes,
@@ -62,7 +83,6 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
     briefingRes,
     coordinatorsRes,
   ] = await Promise.all([
-    supabase.from("tenants").select("name, election_date, campaign_end_date, fundraising_goal").eq("id", tenantId).single(),
     supabase.from("volunteers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
     supabase.from("contacts").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
     supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
@@ -136,6 +156,7 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
     tenantName: tenant?.name ?? "Campaign Command Center",
     electionDate: tenant?.election_date ?? null,
     campaignEndDate: tenant?.campaign_end_date ?? null,
+    campaignStartDate: tenant?.campaign_start_date ?? null,
     stats: {
       supporters: contactsRes.count ?? 0,
       volunteers: volunteersRes.count ?? 0,

@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { inviteUser, updateUserRole, zeroCampaignData, getInviteRepairSql, updateCampaignDates } from "@/lib/admin/actions";
+import { inviteUser, updateUserRole, zeroCampaignData, getInviteRepairSql, updateCampaignDates, getCampaignDatesMigrationSql } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
 
@@ -23,10 +23,12 @@ function CampaignDatesCard({
   campaignStartDate,
   campaignEndDate,
   electionDate,
+  needsCampaignStartMigration,
 }: {
   campaignStartDate: string | null;
   campaignEndDate: string | null;
   electionDate: string | null;
+  needsCampaignStartMigration?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -45,12 +47,36 @@ function CampaignDatesCard({
     });
   }
 
+  function copyMigrationSql() {
+    start(async () => {
+      try {
+        const sql = await getCampaignDatesMigrationSql();
+        await navigator.clipboard.writeText(sql);
+        toast.success("Campaign dates SQL copied — paste it in the Supabase SQL editor and run it");
+      } catch {
+        toast.error("Could not copy the campaign dates SQL");
+      }
+    });
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Campaign dates</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        {needsCampaignStartMigration ? (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+            <p className="font-medium">Database migration needed</p>
+            <p className="mt-1 text-muted-foreground">
+              Production is missing the <code className="text-xs">campaign_start_date</code> column.
+              Copy the SQL below, run it once in the Supabase SQL editor, then save dates again.
+            </p>
+            <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={copyMigrationSql} disabled={pending}>
+              Copy campaign dates SQL
+            </Button>
+          </div>
+        ) : null}
         <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1">
             <Label htmlFor="campaign_start_date">Campaign start</Label>
@@ -135,6 +161,7 @@ export function AdminView({
   campaignStartDate,
   campaignEndDate,
   electionDate,
+  needsCampaignStartMigration = false,
 }: {
   profiles: ProfileRow[];
   auditCount: number;
@@ -145,6 +172,7 @@ export function AdminView({
   campaignStartDate: string | null;
   campaignEndDate: string | null;
   electionDate: string | null;
+  needsCampaignStartMigration?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -483,6 +511,7 @@ export function AdminView({
         campaignStartDate={campaignStartDate}
         campaignEndDate={campaignEndDate}
         electionDate={electionDate}
+        needsCampaignStartMigration={needsCampaignStartMigration}
       />
 
       <Card>

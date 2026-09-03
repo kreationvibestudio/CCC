@@ -8,7 +8,7 @@ import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
-import { toErrorMessage } from "@/lib/public-error";
+import { toErrorMessage, isMissingColumnError } from "@/lib/public-error";
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[];
 const KEEP_ROLES = new Set<string>([
@@ -112,7 +112,7 @@ export async function updateCampaignDates(formData: FormData) {
     const electionDate = String(formData.get("election_date") ?? "").trim() || null;
 
     const admin = createServiceClient();
-    const { error } = await admin
+    const withStart = await admin
       .from("tenants")
       .update({
         campaign_start_date: campaignStart || null,
@@ -120,7 +120,23 @@ export async function updateCampaignDates(formData: FormData) {
         election_date: electionDate || null,
       })
       .eq("id", adminUser.profile.tenant_id);
-    if (error) return { error: toErrorMessage(error, "Could not save campaign dates") };
+    if (withStart.error && isMissingColumnError(withStart.error.message, "campaign_start_date")) {
+      const withoutStart = await admin
+        .from("tenants")
+        .update({
+          campaign_end_date: campaignEnd || null,
+          election_date: electionDate || null,
+        })
+        .eq("id", adminUser.profile.tenant_id);
+      if (withoutStart.error) {
+        return { error: toErrorMessage(withoutStart.error, "Could not save campaign dates") };
+      }
+      return {
+        error:
+          "Campaign end and election day were saved, but campaign start needs SQL. Run supabase/migrations/20260903160000_campaign_start_date.sql in the Supabase SQL editor (or use Copy campaign dates SQL on this page).",
+      };
+    }
+    if (withStart.error) return { error: toErrorMessage(withStart.error, "Could not save campaign dates") };
 
     await logAudit("admin.campaign_dates", "tenant", adminUser.profile.tenant_id, {
       campaign_start_date: campaignStart,
@@ -133,6 +149,17 @@ export async function updateCampaignDates(formData: FormData) {
   } catch (e) {
     return { error: toErrorMessage(e, "Could not save campaign dates") };
   }
+}
+
+export async function getCampaignDatesMigrationSql() {
+  await requirePermission("admin.users");
+  return `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS campaign_start_date TIMESTAMPTZ;
+
+UPDATE tenants SET
+  campaign_start_date = '2026-08-19T00:00:00+01:00',
+  campaign_end_date   = '2027-01-14T23:59:59+01:00',
+  election_date       = '2027-01-16T00:00:00+01:00'
+WHERE slug = 'campaign';`;
 }
 
 export async function updateUserRole(formData: FormData) {

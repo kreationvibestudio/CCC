@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { ExternalLink, MapPin, Radio, X } from "lucide-react";
@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { usePollingUnitStatusRealtime } from "@/hooks/use-tenant-realtime";
 import { getPollingUnitWards } from "@/lib/polling-units/actions";
+import { PU_STATUS_VALUES } from "@/lib/agent/pu-status";
 import {
   getFieldStatusMapData,
   type FieldMapPin,
@@ -44,6 +45,33 @@ function labelForStatus(status: string) {
   return hit?.label ?? status.replace(/_/g, " ");
 }
 
+function emptyCounts(): FieldStatusCounts {
+  return {
+    not_active: 0,
+    voting_in_progress: 0,
+    voting_finished: 0,
+    delayed: 0,
+    minor_issue: 0,
+    serious_incident: 0,
+    results_uploaded: 0,
+  };
+}
+
+function normKey(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
+}
+
+function countStatuses(pins: FieldMapPin[]): FieldStatusCounts {
+  const counts = emptyCounts();
+  for (const pin of pins) {
+    const key = (PU_STATUS_VALUES as readonly string[]).includes(pin.live_status)
+      ? (pin.live_status as keyof FieldStatusCounts)
+      : "not_active";
+    counts[key] += 1;
+  }
+  return counts;
+}
+
 export function VotersMapView({
   lgas,
   initial,
@@ -57,17 +85,19 @@ export function VotersMapView({
   const [lga, setLga] = useState("");
   const [ward, setWard] = useState("");
   const [wards, setWards] = useState<string[]>([]);
-  const [pins, setPins] = useState<FieldMapPin[]>(initial.pins);
-  const [counts, setCounts] = useState<FieldStatusCounts>(initial.counts);
+  /** Full statewide pin set — LGA/ward filter is applied client-side so slow refetches cannot wipe the filter. */
+  const [allPins, setAllPins] = useState<FieldMapPin[]>(initial.pins);
   const [mappedUnits, setMappedUnits] = useState(initial.mappedUnits);
   const [totalUnits, setTotalUnits] = useState(initial.totalUnits);
   const [activeStatuses, setActiveStatuses] = useState<Set<string>>(() => new Set(DEFAULT_ACTIVE));
   const [showInactive, setShowInactive] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [liveTick, setLiveTick] = useState(0);
-
   const [pinning, setPinning] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshSeq = useRef(0);
+  const skipFirstLiveFetch = useRef(initial.pins.length > 0);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -130,28 +160,36 @@ export function VotersMapView({
       setWards([]);
       return;
     }
+    let cancelled = false;
     startTransition(async () => {
-      setWards(await getPollingUnitWards(lga));
+      const next = await getPollingUnitWards(lga);
+      if (!cancelled) setWards(next);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [lga]);
 
-  const reload = useCallback(() => {
-    startTransition(async () => {
-      const data = await getFieldStatusMapData({
-        lga,
-        ward,
-        search: debouncedSearch,
-      });
-      setPins(data.pins);
-      setCounts(data.counts);
-      setMappedUnits(data.mappedUnits);
-      setTotalUnits(data.totalUnits);
-    });
-  }, [lga, ward, debouncedSearch]);
-
+  // Refresh the full pin catalog on live status changes (never keyed by LGA/ward).
   useEffect(() => {
-    reload();
-  }, [reload, liveTick]);
+    if (skipFirstLiveFetch.current && liveTick === 0) {
+      skipFirstLiveFetch.current = false;
+      return;
+    }
+    const seq = ++refreshSeq.current;
+    setRefreshing(true);
+    startTransition(async () => {
+      try {
+        const data = await getFieldStatusMapData();
+        if (seq !== refreshSeq.current) return;
+        setAllPins(data.pins);
+        setMappedUnits(data.mappedUnits);
+        setTotalUnits(data.totalUnits);
+      } finally {
+        if (seq === refreshSeq.current) setRefreshing(false);
+      }
+    });
+  }, [liveTick]);
 
   usePollingUnitStatusRealtime(initial.tenantId, () => {
     setLiveTick((n) => n + 1);
@@ -160,18 +198,35 @@ export function VotersMapView({
   const geoFocused = Boolean(lga || ward || debouncedSearch.length >= 2);
   const focusToken = `${lga}|${ward}|${debouncedSearch}`;
 
+  const filteredPins = useMemo(() => {
+    const lgaKey = lga ? normKey(lga) : "";
+    const wardKey = ward ? normKey(ward) : "";
+    const q = debouncedSearch.length >= 2 ? debouncedSearch.toLowerCase() : "";
+    return allPins.filter((p) => {
+      if (lgaKey && normKey(p.lga) !== lgaKey) return false;
+      if (wardKey && normKey(p.ward) !== wardKey) return false;
+      if (q) {
+        const hay = `${p.code} ${p.name} ${p.ward} ${p.lga}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allPins, lga, ward, debouncedSearch]);
+
+  const counts = useMemo(() => countStatuses(filteredPins), [filteredPins]);
+
   const visiblePins = useMemo(() => {
-    return pins.filter((p) => {
+    return filteredPins.filter((p) => {
       // LGA / ward / search must show the units in that area (usually not_active).
       if (geoFocused) return true;
       if (p.live_status === "not_active") return showInactive;
       return activeStatuses.has(p.live_status);
     });
-  }, [pins, activeStatuses, showInactive, geoFocused]);
+  }, [filteredPins, activeStatuses, showInactive, geoFocused]);
 
   // When a ward (or LGA with few units) loads, jump to the first matching PU.
   useEffect(() => {
-    if (!geoFocused || pending) return;
+    if (!geoFocused) return;
     if (visiblePins.length === 0) {
       setSelectedId(null);
       return;
@@ -185,9 +240,9 @@ export function VotersMapView({
     }
     // LGA-only: clear stale selection outside the LGA, keep if still valid.
     setSelectedId((prev) => (prev && visiblePins.some((p) => p.id === prev) ? prev : null));
-  }, [geoFocused, ward, visiblePins, pending]);
+  }, [geoFocused, ward, visiblePins]);
 
-  const selected = pins.find((u) => u.id === selectedId) ?? visiblePins.find((u) => u.id === selectedId);
+  const selected = allPins.find((u) => u.id === selectedId) ?? visiblePins.find((u) => u.id === selectedId);
   const handleMarkerClick = useCallback((id: string) => setSelectedId(id), []);
 
   function toggleStatus(status: string) {
@@ -312,7 +367,7 @@ export function VotersMapView({
             focusToken={focusToken}
             onMarkerClick={handleMarkerClick}
             emptyHint={
-              pending
+              allPins.length === 0 && refreshing
                 ? "Loading polling units…"
                 : mappedUnits === 0
                   ? "No coordinates yet — run npm run pu:pins (or geocode) for this tenant."
@@ -414,7 +469,7 @@ export function VotersMapView({
                   No live field statuses yet. Choose an LGA/ward to zoom to polling units, or wait for agent updates.
                 </p>
               )}
-              {geoFocused && visiblePins.length === 0 && !pending && (
+              {geoFocused && visiblePins.length === 0 && (
                 <p className="text-xs text-muted-foreground">No mapped units for that filter.</p>
               )}
             </div>

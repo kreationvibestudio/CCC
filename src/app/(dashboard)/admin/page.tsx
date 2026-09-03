@@ -59,6 +59,7 @@ export default async function AdminPage() {
       campaignEndDate={tenant?.campaign_end_date ?? null}
       electionDate={tenant?.election_date ?? null}
       needsCampaignStartMigration={needsCampaignStartMigration}
+      currentUserId={user.id}
     />
   );
 }

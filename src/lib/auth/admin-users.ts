@@ -228,3 +228,19 @@ export async function adminCreateAuthUser(input: {
   if (existing) return { userId: existing, created: false };
   return { error: lastError };
 }
+
+/** Permanently remove an Auth user (profiles cascade via auth.users ON DELETE CASCADE). */
+export async function adminDeleteAuthUser(userId: string): Promise<{ success?: true; error?: string }> {
+  const id = userId.trim();
+  if (!id) return { error: "User id is required" };
+  let res: AdminHttpResult | null;
+  try {
+    res = await authAdminRequest(`/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+  } catch (e) {
+    return { error: e instanceof Error && e.message.trim() ? e.message.trim() : "Auth admin request failed" };
+  }
+  if (!res) return { error: "SUPABASE_SERVICE_ROLE_KEY is not configured" };
+  if (res.status === 404) return { success: true };
+  if (res.status < 200 || res.status >= 300) return { error: parseGoTrueError(res.status, res.text) };
+  return { success: true };
+}

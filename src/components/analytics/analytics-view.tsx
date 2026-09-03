@@ -164,12 +164,20 @@ export function AnalyticsView({ summary }: { summary: AnalyticsSummary }) {
           <CardContent className="h-72">
             {summary.hotIssues.length ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={summary.hotIssues} layout="vertical">
+                <BarChart
+                  data={summary.hotIssues.map((i) => ({
+                    topic: i.topic,
+                    negative: i.negative,
+                    other: Math.max(0, i.total - i.negative),
+                  }))}
+                  layout="vertical"
+                >
                   <XAxis type="number" />
                   <YAxis type="category" dataKey="topic" width={100} tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Bar dataKey="negative" name="Negative" fill="#ef4444" stackId="a" radius={2} />
-                  <Bar dataKey="total" name="Total mentions" fill="hsl(var(--primary))" stackId="b" radius={2} />
+                  <Legend />
+                  <Bar dataKey="negative" name="Negative" stackId="a" fill="#ef4444" radius={2} />
+                  <Bar dataKey="other" name="Other" stackId="a" fill="hsl(var(--primary))" radius={2} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (

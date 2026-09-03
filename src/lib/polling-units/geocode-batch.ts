@@ -8,12 +8,56 @@ import {
 import { applyCampaignStateFilter } from "./scope.ts";
 import { approxPinForPollingUnit } from "./approx-pins.ts";
 
+async function mapPool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<boolean>) {
+  let cursor = 0;
+  let ok = 0;
+  const workers = Array.from({ length: Math.min(concurrency, Math.max(items.length, 1)) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      if (await fn(items[index])) ok += 1;
+    }
+  });
+  await Promise.all(workers);
+  return ok;
+}
+
+async function patchPin(
+  supabase: SupabaseClient,
+  tenantId: string,
+  id: string,
+  latitude: number,
+  longitude: number
+) {
+  const withStatus = await supabase
+    .from("polling_units")
+    .update({ latitude, longitude, geocode_status: "done" })
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
+  if (!withStatus.error) return true;
+
+  // Older DBs may lack geocode_status — retry coords only.
+  if (/geocode_status/i.test(withStatus.error.message)) {
+    const coordsOnly = await supabase
+      .from("polling_units")
+      .update({ latitude, longitude })
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
+    return !coordsOnly.error;
+  }
+  return false;
+}
+
+/**
+ * Fast approx pins for unmapped campaign PUs (LGA centroids + jitter).
+ * Parallel updates so Vercel serverless does not time out on hundreds of units.
+ */
 export async function fillApproxPinsForTenant(
   supabase: SupabaseClient,
   tenantId: string,
   options?: { limit?: number }
-): Promise<{ updated: number; remaining: number; mapped: number; total: number }> {
-  const limit = Math.min(Math.max(options?.limit ?? 500, 1), 1000);
+): Promise<{ updated: number; remaining: number; mapped: number; total: number; errors: string[] }> {
+  const limit = Math.min(Math.max(options?.limit ?? 250, 1), 400);
   const { data, error } = await applyCampaignStateFilter(
     supabase
       .from("polling_units")
@@ -23,22 +67,16 @@ export async function fillApproxPinsForTenant(
       .order("code")
       .limit(limit)
   );
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`Could not load unmapped PUs: ${error.message}`);
 
-  let updated = 0;
-  for (const row of data ?? []) {
+  const rows = data ?? [];
+  const errors: string[] = [];
+  const updated = await mapPool(rows, 40, async (row) => {
     const pin = approxPinForPollingUnit(row);
-    const { error: patchError } = await supabase
-      .from("polling_units")
-      .update({
-        latitude: pin.latitude,
-        longitude: pin.longitude,
-        geocode_status: "done",
-      })
-      .eq("id", row.id)
-      .eq("tenant_id", tenantId);
-    if (!patchError) updated += 1;
-  }
+    const ok = await patchPin(supabase, tenantId, row.id, pin.latitude, pin.longitude);
+    if (!ok) errors.push(row.code ?? row.id);
+    return ok;
+  });
 
   const counts = await countPollingUnitPins(supabase, tenantId);
   return {
@@ -46,6 +84,7 @@ export async function fillApproxPinsForTenant(
     remaining: counts.remaining,
     mapped: counts.mapped,
     total: counts.total,
+    errors: errors.slice(0, 8),
   };
 }
 

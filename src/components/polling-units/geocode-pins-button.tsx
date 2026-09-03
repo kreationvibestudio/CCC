@@ -79,15 +79,22 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
     setProgress("Dropping approx pins…");
     let pinned = 0;
     try {
-      for (let i = 0; i < 20; i += 1) {
+      for (let i = 0; i < 40; i += 1) {
         const res = await fetch("/api/polling-units/geocode", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ approx: true, limit: 500 }),
+          body: JSON.stringify({ approx: true, limit: 250 }),
         });
-        const data = (await res.json()) as GeocodeResponse;
+        const raw = await res.text();
+        let data: GeocodeResponse = {};
+        try {
+          data = raw ? (JSON.parse(raw) as GeocodeResponse) : {};
+        } catch {
+          toast.error(res.ok ? "Approx pin fill returned invalid JSON" : `Approx pin fill failed (HTTP ${res.status})`);
+          break;
+        }
         if (!res.ok) {
-          toast.error(data.error || "Could not drop approx pins");
+          toast.error(data.error || `Could not drop approx pins (HTTP ${res.status})`);
           break;
         }
         pinned += data.geocoded ?? 0;
@@ -101,8 +108,8 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
       if (pinned > 0) toast.success(`Dropped ${pinned.toLocaleString()} approx map pin${pinned === 1 ? "" : "s"}`);
       else toast("Every polling unit already has a map pin");
       router.refresh();
-    } catch {
-      toast.error("Approx pin fill stopped — try again");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Approx pin fill stopped — try again");
     } finally {
       setRunning(false);
       setProgress("");

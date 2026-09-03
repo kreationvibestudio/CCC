@@ -157,12 +157,35 @@ export function VotersMapView({
     setLiveTick((n) => n + 1);
   });
 
+  const geoFocused = Boolean(lga || ward || debouncedSearch.length >= 2);
+  const focusToken = `${lga}|${ward}|${debouncedSearch}`;
+
   const visiblePins = useMemo(() => {
     return pins.filter((p) => {
+      // LGA / ward / search must show the units in that area (usually not_active).
+      if (geoFocused) return true;
       if (p.live_status === "not_active") return showInactive;
       return activeStatuses.has(p.live_status);
     });
-  }, [pins, activeStatuses, showInactive]);
+  }, [pins, activeStatuses, showInactive, geoFocused]);
+
+  // When a ward (or LGA with few units) loads, jump to the first matching PU.
+  useEffect(() => {
+    if (!geoFocused || pending) return;
+    if (visiblePins.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (ward || visiblePins.length === 1) {
+      setSelectedId((prev) => {
+        if (prev && visiblePins.some((p) => p.id === prev)) return prev;
+        return visiblePins[0].id;
+      });
+      return;
+    }
+    // LGA-only: clear stale selection outside the LGA, keep if still valid.
+    setSelectedId((prev) => (prev && visiblePins.some((p) => p.id === prev) ? prev : null));
+  }, [geoFocused, ward, visiblePins, pending]);
 
   const selected = pins.find((u) => u.id === selectedId) ?? visiblePins.find((u) => u.id === selectedId);
   const handleMarkerClick = useCallback((id: string) => setSelectedId(id), []);
@@ -286,13 +309,16 @@ export function VotersMapView({
             height={560}
             cluster={visiblePins.length > 20}
             selectedId={selectedId ?? undefined}
+            focusToken={focusToken}
             onMarkerClick={handleMarkerClick}
             emptyHint={
               pending
                 ? "Loading polling units…"
                 : mappedUnits === 0
                   ? "No coordinates yet — run npm run pu:pins (or geocode) for this tenant."
-                  : "No pins match the selected statuses / filters."
+                  : geoFocused
+                    ? "No mapped units in that LGA / ward. Try another filter or pin missing units."
+                    : "No pins match the selected statuses / filters."
             }
           />
         </div>
@@ -356,24 +382,26 @@ export function VotersMapView({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {visiblePins.length.toLocaleString()} pin{visiblePins.length === 1 ? "" : "s"} on the map.
-                Click a marker or a unit below. Toggle status chips to focus Voting / Delayed / Incident /
-                Results.
+                {geoFocused
+                  ? `${visiblePins.length.toLocaleString()} unit${visiblePins.length === 1 ? "" : "s"} in this LGA/ward. Pick a ward to jump to a PU, or click a pin.`
+                  : `${visiblePins.length.toLocaleString()} pin${visiblePins.length === 1 ? "" : "s"} on the map. Click a marker or a unit below. Toggle status chips to focus Voting / Delayed / Incident / Results.`}
               </p>
             )}
 
             <div className="mt-4 space-y-2 border-t border-border pt-4">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Active field units
+                {geoFocused ? "Units in this area" : "Active field units"}
               </p>
-              {visiblePins
-                .filter((u) => u.live_status !== "not_active")
+              {(geoFocused ? visiblePins : visiblePins.filter((u) => u.live_status !== "not_active"))
                 .slice(0, 40)
                 .map((u) => (
                   <button
                     key={u.id}
                     type="button"
-                    className="block w-full rounded-lg border border-border p-2 text-left text-sm hover:bg-muted"
+                    className={cn(
+                      "block w-full rounded-lg border p-2 text-left text-sm hover:bg-muted",
+                      selectedId === u.id ? "border-primary bg-muted" : "border-border"
+                    )}
                     onClick={() => setSelectedId(u.id)}
                   >
                     <span className="font-medium">{u.code}</span>
@@ -381,10 +409,13 @@ export function VotersMapView({
                     <span className="mt-0.5 block truncate text-xs text-muted-foreground">{u.name}</span>
                   </button>
                 ))}
-              {!visiblePins.some((u) => u.live_status !== "not_active") && (
+              {!geoFocused && !visiblePins.some((u) => u.live_status !== "not_active") && (
                 <p className="text-xs text-muted-foreground">
-                  No live field statuses yet. Agents update these from the Agent Portal / Situation Room.
+                  No live field statuses yet. Choose an LGA/ward to zoom to polling units, or wait for agent updates.
                 </p>
+              )}
+              {geoFocused && visiblePins.length === 0 && !pending && (
+                <p className="text-xs text-muted-foreground">No mapped units for that filter.</p>
               )}
             </div>
           </CardContent>

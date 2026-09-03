@@ -54,6 +54,8 @@ export function CampaignMap({
   selectedId,
   onMarkerClick,
   fitBounds = true,
+  /** Change this when LGA/ward/search changes so the map re-zooms to the new set. */
+  focusToken,
   emptyHint,
 }: {
   markers: MapMarker[];
@@ -62,6 +64,7 @@ export function CampaignMap({
   selectedId?: string;
   onMarkerClick?: (id: string) => void;
   fitBounds?: boolean;
+  focusToken?: string;
   emptyHint?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -117,18 +120,35 @@ export function CampaignMap({
     group.addTo(mapRef.current);
     layerRef.current = group;
 
-    if (fitBounds && markers.length > 1) {
-      const bounds = L.latLngBounds(markers.map((m) => [m.lat, m.lng] as [number, number]));
-      mapRef.current.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 });
-    } else if (markers.length === 1) {
-      mapRef.current.setView([markers[0].lat, markers[0].lng], 13);
-    }
+    const zoomToMarkers = () => {
+      if (!mapRef.current) return;
 
-    if (selectedId) {
-      const sel = markers.find((m) => m.id === selectedId);
-      if (sel) mapRef.current.setView([sel.lat, sel.lng], 14);
-    }
-  }, [markers, cluster, selectedId, onMarkerClick, fitBounds]);
+      if (fitBounds && markers.length > 1) {
+        const bounds = L.latLngBounds(markers.map((m) => [m.lat, m.lng] as [number, number]));
+        mapRef.current.fitBounds(bounds, {
+          padding: [36, 36],
+          maxZoom: focusToken ? 15 : 13,
+        });
+      } else if (markers.length === 1) {
+        mapRef.current.setView([markers[0].lat, markers[0].lng], 15);
+      }
+
+      // After a geo filter, keep the area in view; only hard-zoom to a selection when it's a single pin
+      // or when the user clicks a marker (no focusToken change with many markers).
+      if (selectedId && markers.length === 1) {
+        const sel = markers.find((m) => m.id === selectedId);
+        if (sel) mapRef.current.setView([sel.lat, sel.lng], 15);
+      } else if (selectedId && !focusToken) {
+        const sel = markers.find((m) => m.id === selectedId);
+        if (sel) mapRef.current.setView([sel.lat, sel.lng], Math.max(mapRef.current.getZoom(), 14));
+      }
+    };
+
+    // Defer so MarkerCluster can compute positions before fitBounds.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(zoomToMarkers);
+    });
+  }, [markers, cluster, selectedId, onMarkerClick, fitBounds, focusToken]);
 
   useEffect(() => {
     return () => {

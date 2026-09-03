@@ -1,4 +1,5 @@
 import type { IssueTopic, SentimentCategory } from "@/types/database";
+import { openAiChatCompletion } from "@/lib/ai/openai";
 
 export interface CommentAnalysis {
   sentiment: SentimentCategory;
@@ -68,34 +69,24 @@ export function analyzeCommentText(content: string): CommentAnalysis {
 }
 
 export async function analyzeCommentWithAI(content: string): Promise<CommentAnalysis> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return analyzeCommentText(content);
+  const ai = await openAiChatCompletion({
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content: `Analyze this Nigerian political campaign comment. Return JSON only: {"sentiment":"positive|neutral|negative","issue_topic":"security|roads|education|healthcare|agriculture|economy|employment|youth|women|electricity|water|corruption|infrastructure|other","priority_score":0-100,"is_misinformation":bool,"is_abusive":bool}`,
+      },
+      { role: "user", content },
+    ],
+  });
+  if (!ai.ok) return analyzeCommentText(content);
 
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content: `Analyze this Nigerian political campaign comment. Return JSON only: {"sentiment":"positive|neutral|negative","issue_topic":"security|roads|education|healthcare|agriculture|economy|employment|youth|women|electricity|water|corruption|infrastructure|other","priority_score":0-100,"is_misinformation":bool,"is_abusive":bool}`,
-          },
-          { role: "user", content },
-        ],
-      }),
-    });
-    const json = await res.json();
-    const parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "{}");
+    const parsed = JSON.parse(ai.text) as Partial<CommentAnalysis> & Record<string, unknown>;
     return {
-      sentiment: parsed.sentiment ?? "neutral",
-      issue_topic: parsed.issue_topic ?? "other",
-      priority_score: parsed.priority_score ?? 50,
+      sentiment: (parsed.sentiment as CommentAnalysis["sentiment"]) ?? "neutral",
+      issue_topic: (parsed.issue_topic as CommentAnalysis["issue_topic"]) ?? "other",
+      priority_score: typeof parsed.priority_score === "number" ? parsed.priority_score : 50,
       is_misinformation: Boolean(parsed.is_misinformation),
       is_abusive: Boolean(parsed.is_abusive),
     };

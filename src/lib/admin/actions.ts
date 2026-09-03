@@ -10,6 +10,7 @@ import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
+import { openAiConfigured } from "@/lib/ai/openai";
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[];
 const KEEP_ROLES = new Set<string>([
@@ -315,7 +316,7 @@ export async function getSecretsStatus() {
     facebookUserToken: isLiveSecret(process.env.FACEBOOK_USER_ACCESS_TOKEN, 40),
     facebookPageToken: isLiveSecret(process.env.FACEBOOK_PAGE_ACCESS_TOKEN, 40),
     facebookAppCredentials: isLiveSecret(process.env.FACEBOOK_APP_ID) && isLiveSecret(process.env.FACEBOOK_APP_SECRET),
-    openaiApiKey: isLiveSecret(process.env.OPENAI_API_KEY),
+    openaiApiKey: openAiConfigured(),
     googleMapsKey: isLiveSecret(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
     mapboxToken: isLiveSecret(process.env.NEXT_PUBLIC_MAPBOX_TOKEN, 20),
     cronSecret: isLiveSecret(process.env.CRON_SECRET, 16),

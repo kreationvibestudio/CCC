@@ -78,24 +78,48 @@ export function VotersMapView({
     setPinning(true);
     try {
       let totalPinned = 0;
-      for (let i = 0; i < 20; i += 1) {
+      let lastRemaining: number | null = null;
+      for (let i = 0; i < 40; i += 1) {
         const res = await fetch("/api/polling-units/geocode", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ approx: true, limit: 500 }),
+          body: JSON.stringify({ approx: true, limit: 250 }),
         });
-        const data = (await res.json()) as { error?: string; geocoded?: number; remaining?: number };
+        const raw = await res.text();
+        let data: {
+          error?: string;
+          geocoded?: number;
+          remaining?: number;
+          mapped?: number;
+          total?: number;
+        } = {};
+        try {
+          data = raw ? (JSON.parse(raw) as typeof data) : {};
+        } catch {
+          toast.error(res.ok ? "Pin fill returned an invalid response" : `Pin fill failed (HTTP ${res.status})`);
+          return;
+        }
         if (!res.ok) {
-          toast.error(data.error || "Could not drop map pins");
-          break;
+          toast.error(data.error || `Pin fill failed (HTTP ${res.status})`);
+          return;
         }
         totalPinned += data.geocoded ?? 0;
+        lastRemaining = data.remaining ?? 0;
+        if (typeof data.mapped === "number") setMappedUnits(data.mapped);
+        if (typeof data.total === "number") setTotalUnits(data.total);
         if (!(data.remaining ?? 0) || !(data.geocoded ?? 0)) break;
       }
-      toast.success(totalPinned ? `Pinned ${totalPinned.toLocaleString()} polling units` : "Pins already complete");
+      if (totalPinned > 0) {
+        toast.success(
+          `Pinned ${totalPinned.toLocaleString()} polling units` +
+            (lastRemaining ? ` · ${lastRemaining.toLocaleString()} still open` : "")
+        );
+      } else {
+        toast.message(lastRemaining ? "No pins written — check permissions / service role key" : "Pins already complete");
+      }
       setLiveTick((n) => n + 1);
-    } catch {
-      toast.error("Pin fill failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Pin fill failed");
     } finally {
       setPinning(false);
     }

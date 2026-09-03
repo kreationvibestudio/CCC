@@ -216,6 +216,38 @@ export async function requirePlatformOperator(): Promise<{ id: string; email: st
   return { id: user.id, email: user.email };
 }
 
+/** Auth shell for /platform when the operator has no campaign profile yet. */
+export function platformOperatorShellUser(operator: {
+  id: string;
+  email: string;
+}): AuthUser {
+  return {
+    id: operator.id,
+    email: operator.email,
+    profile: {
+      id: operator.id,
+      tenant_id: operator.id,
+      email: operator.email,
+      full_name: "Platform operator",
+      mfa_enabled: false,
+      created_at: new Date().toISOString(),
+      role: "super_administrator",
+    },
+    role: "super_administrator",
+    // No HQ permissions until they open a workspace (or have a real profile).
+    permissions: [],
+    workspace: null,
+    isPlatformOperator: true,
+    supportAccess: null,
+  };
+}
+
+/** Prefer the real session user; fall back to a platform-only shell. */
+export async function getPlatformConsoleUser(): Promise<AuthUser> {
+  const operator = await requirePlatformOperator();
+  return (await getCurrentUser()) ?? platformOperatorShellUser(operator);
+}
+
 export async function logAudit(
   action: string,
   resourceType?: string,

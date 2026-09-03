@@ -1,15 +1,21 @@
 import { redirect } from "next/navigation";
-import { requirePlatformOperator } from "@/lib/auth/session";
+import { getPlatformConsoleUser } from "@/lib/auth/session";
+import { AuthProvider } from "@/components/providers/auth-provider";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
 
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
+  let user;
   try {
-    await requirePlatformOperator();
+    user = await getPlatformConsoleUser();
   } catch {
     redirect("/login");
   }
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-5xl p-4 md:p-8">{children}</div>
-    </div>
+    <AuthProvider user={user}>
+      <DashboardLayout>
+        <div className="mx-auto max-w-5xl">{children}</div>
+      </DashboardLayout>
+    </AuthProvider>
   );
 }

@@ -59,6 +59,7 @@ export interface Tenant {
   logo_url?: string;
   election_date?: string;
   campaign_end_date?: string;
+  campaign_start_date?: string;
   created_at: string;
 }
 

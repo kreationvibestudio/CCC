@@ -47,6 +47,7 @@ type AgentReport = {
   content: string;
   created_at: string;
   profiles: { full_name: string } | null;
+  agent_report_media?: Array<{ id: string; media_type: string; url: string }> | null;
 };
 
 type Props = {
@@ -331,6 +332,31 @@ export function SituationRoomView({
                 <div key={r.id} className="mb-2 border-b border-border pb-2 text-sm last:border-0">
                   <span className="font-medium">{r.profiles?.full_name ?? "Agent"}</span> · {r.report_type}
                   <p className="text-muted-foreground">{r.content.slice(0, 80)}</p>
+                  {r.agent_report_media?.length ? (
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {r.agent_report_media.map((m) =>
+                        m.media_type === "video" ? (
+                          <a
+                            key={m.id}
+                            href={m.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary underline"
+                          >
+                            View video
+                          </a>
+                        ) : (
+                          <a key={m.id} href={m.url} target="_blank" rel="noreferrer">
+                            <img
+                              src={m.url}
+                              alt="Report attachment"
+                              className="h-14 w-14 rounded border object-cover"
+                            />
+                          </a>
+                        )
+                      )}
+                    </div>
+                  ) : null}
                   <p className="text-[11px] text-muted-foreground">Logged {formatDateTime(r.created_at)}</p>
                 </div>
               ))

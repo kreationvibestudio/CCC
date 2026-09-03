@@ -2,25 +2,48 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import type { AuthUser } from "@/lib/auth/session";
 
 const BUCKET = "election-media";
-const MAX_BYTES = 8 * 1024 * 1024;
-const ALLOWED = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic"]);
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
-export async function uploadAgentMedia(
-  user: AuthUser,
-  file: File,
-  kind: "result_sheet" | "incident"
-) {
-  if (!ALLOWED.has(file.type) && !file.name.match(/\.(jpe?g|png|webp|heic)$/i)) {
-    return { error: "Upload a JPEG, PNG, or WebP photo" };
+export type AgentMediaKind = "result_sheet" | "incident" | "report";
+
+const PHOTO_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic"]);
+const VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/webm", "video/3gpp"]);
+
+function inferMediaType(file: File): "photo" | "video" {
+  if (VIDEO_TYPES.has(file.type) || /\.(mp4|mov|webm|3gp)$/i.test(file.name)) return "video";
+  return "photo";
+}
+
+function maxBytesFor(file: File) {
+  return inferMediaType(file) === "video" ? MAX_VIDEO_BYTES : MAX_PHOTO_BYTES;
+}
+
+function isAllowed(file: File) {
+  const type = file.type.toLowerCase();
+  if (PHOTO_TYPES.has(type) || VIDEO_TYPES.has(type)) return true;
+  return /\.(jpe?g|png|webp|heic|mp4|mov|webm|3gp)$/i.test(file.name);
+}
+
+export async function uploadAgentMedia(user: AuthUser, file: File, kind: AgentMediaKind) {
+  if (!isAllowed(file)) {
+    return { error: "Upload a JPEG/PNG photo or MP4/MOV video" };
   }
-  if (file.size > MAX_BYTES) return { error: "Photo must be under 8 MB" };
+  const limit = maxBytesFor(file);
+  if (file.size > limit) {
+    const mb = Math.round(limit / (1024 * 1024));
+    return { error: `File must be under ${mb} MB` };
+  }
 
-  const ext = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const mediaType = inferMediaType(file);
+  const ext =
+    file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") ||
+    (mediaType === "video" ? "mp4" : "jpg");
   const path = `${user.profile.tenant_id}/${user.id}/${kind}-${crypto.randomUUID()}.${ext}`;
   const admin = createServiceClient();
   const buffer = Buffer.from(await file.arrayBuffer());
   const { error } = await admin.storage.from(BUCKET).upload(path, buffer, {
-    contentType: file.type || "image/jpeg",
+    contentType: file.type || (mediaType === "video" ? "video/mp4" : "image/jpeg"),
     upsert: false,
   });
   if (error) return { error: error.message };
@@ -30,6 +53,7 @@ export async function uploadAgentMedia(
     path,
     url: signed?.signedUrl ?? path,
     kind,
+    media_type: mediaType,
   };
 }
 

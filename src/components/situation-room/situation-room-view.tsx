@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-shell";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   usePollingUnitStatusRealtime,
@@ -22,9 +25,11 @@ import {
   type ResultRow,
   type StatusRow,
 } from "@/lib/situation-room/race";
+import { resetSituationRoomData } from "@/lib/situation-room/actions";
 import { LiveNumber, RaceBars, RaceCharts } from "@/components/situation-room/situation-room-charts";
 import { SituationRoomDetail } from "@/components/situation-room/situation-room-detail";
 import { formatDateTime } from "@/lib/utils";
+import { toErrorMessage } from "@/lib/public-error";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
   ssr: false,
@@ -52,6 +57,7 @@ type AgentReport = {
 
 type Props = {
   tenantId: string;
+  canReset?: boolean;
   ourParty: string;
   universe: { puCount: number; registeredVoters: number };
   statuses: StatusRow[];
@@ -76,6 +82,7 @@ function hasId(value: unknown): value is { id: string } {
 
 export function SituationRoomView({
   tenantId,
+  canReset = false,
   ourParty,
   universe,
   statuses: initialStatuses,
@@ -85,6 +92,7 @@ export function SituationRoomView({
   wardTurnout,
 }: Props) {
   const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const party = (ourParty || OUR_PARTY).toUpperCase();
   const [statuses, setStatuses] = useState(initialStatuses);
   const [incidents, setIncidents] = useState(initialIncidents);
@@ -148,6 +156,30 @@ export function SituationRoomView({
     [results, incidents, agentReports, statuses, party]
   );
 
+  function handleReset() {
+    if (
+      !window.confirm(
+        "Reset Situation Room?\n\nThis clears election results, incidents, polling-unit statuses, and agent reports.\n\nPolling units, map pins, team accounts, CRM, and volunteers are NOT touched."
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const result = await resetSituationRoomData();
+      if (result.error) {
+        toast.error(toErrorMessage(result.error, "Could not reset Situation Room"));
+        return;
+      }
+      setStatuses([]);
+      setIncidents([]);
+      setResults([]);
+      setAgentReports([]);
+      setDetail(null);
+      toast.success(result.message ?? "Situation Room reset");
+      router.refresh();
+    });
+  }
+
   const openIncident = detail?.kind === "incident" ? incidents.find((i) => i.id === detail.id) ?? null : null;
   const openResult = detail?.kind === "result" ? results.find((r) => r.id === detail.id) ?? null : null;
 
@@ -187,6 +219,19 @@ export function SituationRoomView({
             </span>
             {live ? "Live data" : "Connecting…"}
           </Badge>
+          {canReset ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={handleReset}
+              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              {pending ? "Resetting…" : "Reset Situation Room"}
+            </Button>
+          ) : null}
         </div>
       </PageHeader>
 

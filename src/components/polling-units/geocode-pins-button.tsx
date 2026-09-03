@@ -116,11 +116,58 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
     }
   }
 
+  async function runInec() {
+    setRunning(true);
+    setProgress("Aligning to INEC GPS…");
+    let pinned = 0;
+    let offset = 0;
+    try {
+      for (let i = 0; i < 80; i += 1) {
+        const res = await fetch("/api/polling-units/geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inec: true, force: true, limit: 300, offset }),
+        });
+        const raw = await res.text();
+        let data: GeocodeResponse & { nextOffset?: number; remainingApprox?: number; catalog?: number } = {};
+        try {
+          data = raw ? (JSON.parse(raw) as typeof data) : {};
+        } catch {
+          toast.error(res.ok ? "INEC align returned invalid JSON" : `INEC align failed (HTTP ${res.status})`);
+          break;
+        }
+        if (!res.ok) {
+          toast.error(data.error || `Could not align INEC GPS (HTTP ${res.status})`);
+          break;
+        }
+        pinned += data.geocoded ?? 0;
+        offset = data.nextOffset ?? offset;
+        const left = data.remaining ?? 0;
+        setProgress(
+          `${pinned.toLocaleString()} aligned · catalog ${(data.catalog ?? 0).toLocaleString()} · ${left.toLocaleString()} left`
+        );
+        if (!left) break;
+      }
+      if (pinned > 0) toast.success(`Aligned ${pinned.toLocaleString()} pin${pinned === 1 ? "" : "s"} to INEC GPS`);
+      else toast("Pins already match INEC GPS (or catalog is empty — run npm run pu:fetch-gps)");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "INEC align stopped — try again");
+    } finally {
+      setRunning(false);
+      setProgress("");
+    }
+  }
+
   const missing = remaining > 0;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant={missing ? "default" : "outline"} disabled={running} onClick={() => run(false)}>
+      <Button type="button" variant="default" disabled={running} onClick={() => runInec()}>
+        <MapPin className="mr-2 h-4 w-4" />
+        {running ? progress || "Aligning to INEC…" : "Align to INEC GPS"}
+      </Button>
+      <Button type="button" variant={missing ? "secondary" : "outline"} disabled={running} onClick={() => run(false)}>
         <MapPin className="mr-2 h-4 w-4" />
         {running ? progress || "Filling map pins…" : missing ? `Fill ${remaining.toLocaleString()} missing pins` : "Map pins complete"}
       </Button>

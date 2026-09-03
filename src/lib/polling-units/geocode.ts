@@ -143,7 +143,8 @@ export function cleanLocationFragment(raw: string) {
   s = s.replace(/\bQTRS?\b/gi, "Quarters");
   s = s.replace(/\bJUNCT(?:ION)?\b/gi, "Junction");
   s = s.replace(/\bRD\.?\b/gi, "Road");
-  s = s.replace(/\bST\.?\b/gi, "Street");
+  // Expand trailing "ST" / "St." street abbreviations only — not "St. Mary".
+  s = s.replace(/\b([A-Za-z][A-Za-z']*)\s+ST\.?\b/gi, "$1 Street");
   s = s.replace(/\s*\/\s*/g, ", ");
   return s.replace(/\s+/g, " ").replace(/^,|,$/g, "").trim();
 }

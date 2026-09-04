@@ -34,6 +34,7 @@ Polling Units → **Load Edo INEC PUs** downloads INEC’s Edo directory and **r
 
 - `supabase/migrations/20260824000000_edo_only_polling_units.sql`
 - `supabase/migrations/20260824000001_prune_non_edo_polling_units.sql`
+- `supabase/migrations/20260904120000_purge_non_edo_sample_data.sql` (scopes Situation Room voter totals to Edo; Admin → **Remove non-Edo sample data** clears Lagos/Abuja demo CRM/events)
 
 CLI (uses `.env.local` — local DB unless that file points at production):
 

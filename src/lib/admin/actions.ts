@@ -508,6 +508,55 @@ type PurgeCounts = {
 
 const PRUNE_BATCH = 1500;
 
+/** Strict app-side prune — does not trust bare INEC `12/…` codes the way the older SQL helper did. */
+async function pruneNonEdoPollingUnitsStrict(
+  admin: ReturnType<typeof createServiceClient>,
+  tenantId: string,
+  limit: number
+): Promise<{ pruned: number; remaining: number }> {
+  const { isCampaignPollingUnit } = await import("@/lib/polling-units/scope");
+  const page = Math.min(Math.max(limit, 1), 5000);
+
+  const { data, error } = await admin
+    .from("polling_units")
+    .select("id, state, state_code, code, lga")
+    .eq("tenant_id", tenantId)
+    .not("state", "ilike", "EDO%")
+    .limit(page);
+  if (error) throw new Error(error.message);
+
+  const candidates = (data ?? []) as Array<{
+    id: string;
+    state: string | null;
+    state_code: string | null;
+    code: string;
+    lga: string | null;
+  }>;
+  const ids = candidates.filter((row) => !isCampaignPollingUnit(row)).map((row) => row.id);
+  if (!ids.length) return { pruned: 0, remaining: 0 };
+
+  const chunkSize = 50;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { error: resultsError } = await admin.from("election_results").delete().in("polling_unit_id", chunk);
+    if (resultsError) throw new Error(resultsError.message);
+    const { error: incidentsError } = await admin
+      .from("incident_reports")
+      .update({ polling_unit_id: null })
+      .in("polling_unit_id", chunk);
+    if (incidentsError) throw new Error(incidentsError.message);
+    const { error: reportsError } = await admin
+      .from("agent_reports")
+      .update({ polling_unit_id: null })
+      .in("polling_unit_id", chunk);
+    if (reportsError) throw new Error(reportsError.message);
+    const { error: delError } = await admin.from("polling_units").delete().eq("tenant_id", tenantId).in("id", chunk);
+    if (delError) throw new Error(delError.message);
+  }
+
+  return { pruned: ids.length, remaining: candidates.length >= page ? 1 : 0 };
+}
+
 async function purgeSampleGeographyRows(
   admin: ReturnType<typeof createServiceClient>,
   tenantId: string
@@ -637,8 +686,7 @@ export async function purgeNonEdoSampleData(options?: { continuePrune?: boolean 
       sample = await purgeSampleGeographyRows(admin, tenantId);
     }
 
-    const { pruneNonCampaignPollingUnits } = await import("@/lib/polling-units/inec-sync");
-    const batch = await pruneNonCampaignPollingUnits(admin, tenantId, PRUNE_BATCH);
+    const batch = await pruneNonEdoPollingUnitsStrict(admin, tenantId, PRUNE_BATCH);
     const data: PurgeCounts = {
       ...sample,
       polling_units_pruned: batch.pruned,
@@ -695,8 +743,9 @@ export async function purgeNonEdoSampleData(options?: { continuePrune?: boolean 
 
 export async function getPurgeNonEdoMigrationSql() {
   await requirePermission("admin.users");
-  return readFile(
-    join(process.cwd(), "supabase/migrations/20260904120000_purge_non_edo_sample_data.sql"),
-    "utf8"
-  );
+  const [purgeSql, strictSql] = await Promise.all([
+    readFile(join(process.cwd(), "supabase/migrations/20260904120000_purge_non_edo_sample_data.sql"), "utf8"),
+    readFile(join(process.cwd(), "supabase/migrations/20260904130000_strict_edo_campaign_polling_unit.sql"), "utf8"),
+  ]);
+  return `${purgeSql}\n\n${strictSql}\n`;
 }

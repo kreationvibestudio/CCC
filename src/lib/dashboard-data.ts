@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateBriefingFromComments } from "@/lib/ai/briefing";
 import { isMissingColumnError } from "@/lib/public-error";
+import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
 
 export interface DashboardStats {
   supporters: number;
@@ -85,7 +86,9 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
   ] = await Promise.all([
     supabase.from("volunteers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
     supabase.from("contacts").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
-    supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+    applyCampaignStateFilter(
+      supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
+    ),
     supabase.from("campaign_events").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
     supabase.from("donations").select("amount").eq("tenant_id", tenantId),
     supabase.from("comments").select("id, sentiment, status, issue_topic, is_misinformation, content").eq("tenant_id", tenantId),

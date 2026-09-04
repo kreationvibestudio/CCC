@@ -320,7 +320,7 @@ export function AdminView({
       let totalPruned = 0;
       let sampleMessage = "";
       try {
-        for (let i = 0; i < 500; i += 1) {
+        for (let i = 0; i < 400; i += 1) {
           const result = await purgeNonEdoSampleData(i === 0 ? undefined : { continuePrune: true });
           if (result.error) {
             toast.error(toErrorMessage(result.error, "Could not purge non-Edo sample data"));

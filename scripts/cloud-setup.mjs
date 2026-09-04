@@ -52,6 +52,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260903160000_campaign_start_date.sql",
   "supabase/migrations/20260904000000_zero_situation_room_data.sql",
   "supabase/migrations/20260904120000_purge_non_edo_sample_data.sql",
+  "supabase/migrations/20260904130000_strict_edo_campaign_polling_unit.sql",
 ];
 
 loadEnvLocal();

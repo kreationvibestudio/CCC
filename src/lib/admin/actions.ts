@@ -506,7 +506,7 @@ type PurgeCounts = {
   sample_cleared: boolean;
 };
 
-const PRUNE_BATCH = 1500;
+const PRUNE_BATCH = 1000; // Supabase/PostgREST default max rows is 1000
 
 /** Strict app-side prune — does not trust bare INEC `12/…` codes the way the older SQL helper did. */
 async function pruneNonEdoPollingUnitsStrict(
@@ -515,7 +515,7 @@ async function pruneNonEdoPollingUnitsStrict(
   limit: number
 ): Promise<{ pruned: number; remaining: number }> {
   const { isCampaignPollingUnit } = await import("@/lib/polling-units/scope");
-  const page = Math.min(Math.max(limit, 1), 5000);
+  const page = Math.min(Math.max(limit, 1), 1000);
 
   const { data, error } = await admin
     .from("polling_units")
@@ -554,7 +554,8 @@ async function pruneNonEdoPollingUnitsStrict(
     if (delError) throw new Error(delError.message);
   }
 
-  return { pruned: ids.length, remaining: candidates.length >= page ? 1 : 0 };
+  // If we deleted anything, assume more may remain (PostgREST max-rows can hide a full page).
+  return { pruned: ids.length, remaining: ids.length > 0 ? 1 : 0 };
 }
 
 async function purgeSampleGeographyRows(

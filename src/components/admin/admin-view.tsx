@@ -320,17 +320,20 @@ export function AdminView({
       let totalPruned = 0;
       let sampleMessage = "";
       try {
-        for (let i = 0; i < 500; i += 1) {
+        for (let i = 0; i < 400; i += 1) {
           const result = await purgeNonEdoSampleData(i === 0 ? undefined : { continuePrune: true });
           if (result.error) {
             toast.error(toErrorMessage(result.error, "Could not purge non-Edo sample data"));
             return;
           }
-          totalPruned += Number(("polling_units_pruned" in result && result.polling_units_pruned) || 0);
+          const pruned = Number(("polling_units_pruned" in result && result.polling_units_pruned) || 0);
+          totalPruned += pruned;
           if (i === 0 && "message" in result && result.message) {
             sampleMessage = result.message;
           }
-          if ("done" in result && result.done) {
+          // Keep going while batches still delete rows. Do not trust `done` alone —
+          // PostgREST max-rows=1000 used to mark a full page as finished.
+          if (pruned === 0) {
             toast.success(
               totalPruned > 0
                 ? `Removed ${totalPruned.toLocaleString()} non-Edo polling units (and Lagos/Abuja sample CRM/events). Edo register kept.`

@@ -311,19 +311,43 @@ export function AdminView({
   function handlePurgeNonEdo() {
     if (
       !window.confirm(
-        "This removes non-Edo polling units and Lagos/Abuja sample volunteers, contacts, events, comments, and related rows. Edo polling units and team accounts stay. Continue?"
+        "This removes non-Edo polling units and Lagos/Abuja sample volunteers, contacts, events, comments, and related rows. Large registers are cleared in batches. Edo polling units and team accounts stay. Continue?"
       )
     ) {
       return;
     }
     startTransition(async () => {
-      const result = await purgeNonEdoSampleData();
-      if (result.error) {
-        toast.error(toErrorMessage(result.error, "Could not purge non-Edo sample data"));
-        return;
+      let totalPruned = 0;
+      let sampleMessage = "";
+      try {
+        for (let i = 0; i < 500; i += 1) {
+          const result = await purgeNonEdoSampleData(i === 0 ? undefined : { continuePrune: true });
+          if (result.error) {
+            toast.error(toErrorMessage(result.error, "Could not purge non-Edo sample data"));
+            return;
+          }
+          totalPruned += Number(("polling_units_pruned" in result && result.polling_units_pruned) || 0);
+          if (i === 0 && "message" in result && result.message) {
+            sampleMessage = result.message;
+          }
+          if ("done" in result && result.done) {
+            toast.success(
+              totalPruned > 0
+                ? `Removed ${totalPruned.toLocaleString()} non-Edo polling units (and Lagos/Abuja sample CRM/events). Edo register kept.`
+                : sampleMessage || "Non-Edo sample data removed"
+            );
+            router.refresh();
+            return;
+          }
+          toast.message(
+            `Removing other states… ${totalPruned.toLocaleString()} non-Edo units removed`
+          );
+        }
+        toast.error("Purge stopped after too many batches — click Remove non-Edo again to continue");
+        router.refresh();
+      } catch (e) {
+        toast.error(toErrorMessage(e, "Could not purge non-Edo sample data"));
       }
-      toast.success(("message" in result && result.message) || "Non-Edo sample data removed");
-      router.refresh();
     });
   }
 
@@ -450,9 +474,11 @@ export function AdminView({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Removes polling units outside Edo State and Lagos/Abuja sample volunteers, CRM
-            contacts, events, comments, activities, and linked donations. Keeps the Edo INEC
-            register and team accounts. Situation Room voter totals only count Edo units.
+            Removes polling units outside Edo State (in batches, so large national registers finish
+            under deploy timeouts) and Lagos/Abuja sample volunteers, CRM contacts, events,
+            comments, activities, and linked donations. Keeps the Edo INEC register and team
+            accounts. Situation Room voter totals only count Edo units. You can also use Polling
+            Units → Load Edo INEC PUs to prune other states.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="destructive" disabled={pending} onClick={handlePurgeNonEdo}>

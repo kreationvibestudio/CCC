@@ -501,20 +501,17 @@ type PurgeCounts = {
   activities_removed: number;
   comments_removed: number;
   donations_removed: number;
+  remaining: number;
+  done: boolean;
+  sample_cleared: boolean;
 };
 
-async function purgeNonEdoSampleDataFallback(
+const PRUNE_BATCH = 1500;
+
+async function purgeSampleGeographyRows(
   admin: ReturnType<typeof createServiceClient>,
   tenantId: string
-): Promise<PurgeCounts> {
-  const { pruneNonCampaignPollingUnits } = await import("@/lib/polling-units/inec-sync");
-  let pruned = 0;
-  for (let i = 0; i < 40; i++) {
-    const batch = await pruneNonCampaignPollingUnits(admin, tenantId, 5000);
-    pruned += batch.pruned;
-    if (batch.pruned === 0) break;
-  }
-
+): Promise<Omit<PurgeCounts, "polling_units_pruned" | "remaining" | "done" | "sample_cleared">> {
   const { data: doomedVolunteers } = await admin
     .from("volunteers")
     .delete()
@@ -604,7 +601,6 @@ async function purgeNonEdoSampleDataFallback(
     .select("id");
 
   return {
-    polling_units_pruned: pruned,
     volunteers_removed: doomedVolunteers?.length ?? 0,
     contacts_removed: contactIds.length,
     events_removed: doomedEvents?.length ?? 0,
@@ -614,8 +610,11 @@ async function purgeNonEdoSampleDataFallback(
   };
 }
 
-/** Remove non-Edo polling units and Lagos/Abuja sample CRM/events/feed rows. Keeps Edo PUs and users. */
-export async function purgeNonEdoSampleData() {
+/**
+ * Chunked purge so large non-Edo registers (100k+) finish under Vercel timeouts.
+ * Call repeatedly with `{ continuePrune: true }` until `done` is true.
+ */
+export async function purgeNonEdoSampleData(options?: { continuePrune?: boolean }) {
   try {
     const adminUser = await requirePermission("admin.users");
     if (adminUser.role !== "super_administrator") {
@@ -624,27 +623,33 @@ export async function purgeNonEdoSampleData() {
 
     const admin = createServiceClient();
     const tenantId = adminUser.profile.tenant_id;
+    const continuePrune = Boolean(options?.continuePrune);
 
-    let data: PurgeCounts;
-    const rpc = await admin.rpc("purge_non_edo_sample_data", { p_tenant_id: tenantId });
-    if (!rpc.error && rpc.data && typeof rpc.data === "object") {
-      const raw = rpc.data as Record<string, unknown>;
-      data = {
-        polling_units_pruned: Number(raw.polling_units_pruned ?? 0),
-        volunteers_removed: Number(raw.volunteers_removed ?? 0),
-        contacts_removed: Number(raw.contacts_removed ?? 0),
-        events_removed: Number(raw.events_removed ?? 0),
-        activities_removed: Number(raw.activities_removed ?? 0),
-        comments_removed: Number(raw.comments_removed ?? 0),
-        donations_removed: Number(raw.donations_removed ?? 0),
-      };
-    } else {
-      const missingFn = rpc.error && /could not find the function|schema cache/i.test(rpc.error.message);
-      if (rpc.error && !missingFn) return { error: rpc.error.message };
-      data = await purgeNonEdoSampleDataFallback(admin, tenantId);
+    let sample = {
+      volunteers_removed: 0,
+      contacts_removed: 0,
+      events_removed: 0,
+      activities_removed: 0,
+      comments_removed: 0,
+      donations_removed: 0,
+    };
+    if (!continuePrune) {
+      sample = await purgeSampleGeographyRows(admin, tenantId);
     }
 
-    await logAudit("admin.purge_non_edo", "tenant", tenantId, data);
+    const { pruneNonCampaignPollingUnits } = await import("@/lib/polling-units/inec-sync");
+    const batch = await pruneNonCampaignPollingUnits(admin, tenantId, PRUNE_BATCH);
+    const data: PurgeCounts = {
+      ...sample,
+      polling_units_pruned: batch.pruned,
+      remaining: batch.remaining,
+      done: batch.remaining === 0,
+      sample_cleared: !continuePrune,
+    };
+
+    if (!continuePrune || data.polling_units_pruned > 0 || data.done) {
+      await logAudit("admin.purge_non_edo", "tenant", tenantId, data);
+    }
     revalidatePath("/dashboard");
     revalidatePath("/admin");
     revalidatePath("/volunteers");
@@ -658,8 +663,16 @@ export async function purgeNonEdoSampleData() {
     revalidatePath("/polling-units");
     revalidatePath("/reports");
 
+    if (!data.done) {
+      return {
+        success: true as const,
+        ...data,
+        message: `Removed ${data.polling_units_pruned.toLocaleString()} non-Edo polling units this batch (more remain). Continuing…`,
+      };
+    }
+
     const parts = [
-      `${data.polling_units_pruned} non-Edo polling units`,
+      `${data.polling_units_pruned} non-Edo polling units (final batch)`,
       `${data.volunteers_removed} volunteers`,
       `${data.contacts_removed} contacts`,
       `${data.events_removed} events`,
@@ -671,7 +684,9 @@ export async function purgeNonEdoSampleData() {
     return {
       success: true as const,
       ...data,
-      message: `Removed non-Edo sample data (${parts.join(", ")}). Edo polling units and team accounts were kept.`,
+      message: continuePrune
+        ? "All non-Edo polling units removed. Edo register and team accounts kept."
+        : `Removed non-Edo sample data (${parts.join(", ")}). Edo polling units and team accounts were kept.`,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Purge failed" };

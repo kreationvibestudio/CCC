@@ -466,3 +466,222 @@ export async function zeroCampaignData() {
     return { error: e instanceof Error ? e.message : "Reset failed" };
   }
 }
+
+const NON_EDO_LGAS = [
+  "Ikeja",
+  "Epe",
+  "AMAC",
+  "Lagos Island",
+  "Lagos Mainland",
+  "Alimosho",
+  "Surulere",
+  "Eti-Osa",
+  "Kosofe",
+  "Mushin",
+  "Oshodi-Isolo",
+  "Agege",
+  "Ajeromi-Ifelodun",
+  "Apapa",
+  "Badagry",
+  "Ifako-Ijaiye",
+  "Ojo",
+  "Shomolu",
+  "Lagos",
+  "Abuja",
+  "FCT",
+];
+
+const NON_EDO_WARDS = ["Alausa", "Oregun", "Epe Town", "Garki", "Maitama", "Wuse", "Ikeja", "Secretariat"];
+
+type PurgeCounts = {
+  polling_units_pruned: number;
+  volunteers_removed: number;
+  contacts_removed: number;
+  events_removed: number;
+  activities_removed: number;
+  comments_removed: number;
+  donations_removed: number;
+};
+
+async function purgeNonEdoSampleDataFallback(
+  admin: ReturnType<typeof createServiceClient>,
+  tenantId: string
+): Promise<PurgeCounts> {
+  const { pruneNonCampaignPollingUnits } = await import("@/lib/polling-units/inec-sync");
+  let pruned = 0;
+  for (let i = 0; i < 40; i++) {
+    const batch = await pruneNonCampaignPollingUnits(admin, tenantId, 5000);
+    pruned += batch.pruned;
+    if (batch.pruned === 0) break;
+  }
+
+  const { data: doomedVolunteers } = await admin
+    .from("volunteers")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .or(
+      [
+        `lga.in.(${NON_EDO_LGAS.map((v) => `"${v}"`).join(",")})`,
+        `ward.in.(${NON_EDO_WARDS.map((v) => `"${v}"`).join(",")})`,
+      ].join(",")
+    )
+    .select("id");
+
+  const { data: doomedContacts } = await admin
+    .from("contacts")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .or(
+      [
+        `lga.in.(${NON_EDO_LGAS.map((v) => `"${v}"`).join(",")})`,
+        `ward.in.(${NON_EDO_WARDS.map((v) => `"${v}"`).join(",")})`,
+      ].join(",")
+    );
+
+  const contactIds = (doomedContacts ?? []).map((c) => c.id as string);
+  let donationsRemoved = 0;
+  if (contactIds.length) {
+    const { data: doomedDonations } = await admin
+      .from("donations")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .in("contact_id", contactIds)
+      .select("id");
+    donationsRemoved = doomedDonations?.length ?? 0;
+    await admin.from("contacts").delete().eq("tenant_id", tenantId).in("id", contactIds);
+  }
+
+  const { data: doomedEvents } = await admin
+    .from("campaign_events")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .or(
+      [
+        `lga.in.(${NON_EDO_LGAS.map((v) => `"${v}"`).join(",")})`,
+        `ward.in.(${NON_EDO_WARDS.map((v) => `"${v}"`).join(",")})`,
+        "title.ilike.%Lagos%",
+        "title.ilike.%Ikeja%",
+        "title.ilike.%Epe%",
+        "title.ilike.%Abuja%",
+        "location.ilike.%Lagos%",
+        "location.ilike.%Ikeja%",
+        "location.ilike.%Epe%",
+        "location.ilike.%Abuja%",
+        "location.ilike.%Tafawa%",
+      ].join(",")
+    )
+    .select("id");
+
+  const { data: allActivities } = await admin
+    .from("activities")
+    .select("id, action, description")
+    .eq("tenant_id", tenantId)
+    .limit(2000);
+  const activityIds = (allActivities ?? [])
+    .filter((a) => {
+      const text = `${a.action ?? ""} ${a.description ?? ""}`.toLowerCase();
+      return /(ikeja|epe|lagos|abuja|alausa|oregun|tafawa|balewa|amac|garki|david okon)/.test(text);
+    })
+    .map((a) => a.id as string);
+  if (activityIds.length) {
+    await admin.from("activities").delete().in("id", activityIds);
+  }
+
+  const { data: doomedComments } = await admin
+    .from("comments")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .or(
+      [
+        `lga.in.(${NON_EDO_LGAS.map((v) => `"${v}"`).join(",")})`,
+        `ward.in.(${NON_EDO_WARDS.map((v) => `"${v}"`).join(",")})`,
+        "content.ilike.%Ikeja%",
+        "content.ilike.%Lagos%",
+        "content.ilike.%Epe%",
+        "content.ilike.%Abuja%",
+      ].join(",")
+    )
+    .select("id");
+
+  return {
+    polling_units_pruned: pruned,
+    volunteers_removed: doomedVolunteers?.length ?? 0,
+    contacts_removed: contactIds.length,
+    events_removed: doomedEvents?.length ?? 0,
+    activities_removed: activityIds.length,
+    comments_removed: doomedComments?.length ?? 0,
+    donations_removed: donationsRemoved,
+  };
+}
+
+/** Remove non-Edo polling units and Lagos/Abuja sample CRM/events/feed rows. Keeps Edo PUs and users. */
+export async function purgeNonEdoSampleData() {
+  try {
+    const adminUser = await requirePermission("admin.users");
+    if (adminUser.role !== "super_administrator") {
+      return { error: "Only a super administrator can purge non-Edo sample data" };
+    }
+
+    const admin = createServiceClient();
+    const tenantId = adminUser.profile.tenant_id;
+
+    let data: PurgeCounts;
+    const rpc = await admin.rpc("purge_non_edo_sample_data", { p_tenant_id: tenantId });
+    if (!rpc.error && rpc.data && typeof rpc.data === "object") {
+      const raw = rpc.data as Record<string, unknown>;
+      data = {
+        polling_units_pruned: Number(raw.polling_units_pruned ?? 0),
+        volunteers_removed: Number(raw.volunteers_removed ?? 0),
+        contacts_removed: Number(raw.contacts_removed ?? 0),
+        events_removed: Number(raw.events_removed ?? 0),
+        activities_removed: Number(raw.activities_removed ?? 0),
+        comments_removed: Number(raw.comments_removed ?? 0),
+        donations_removed: Number(raw.donations_removed ?? 0),
+      };
+    } else {
+      const missingFn = rpc.error && /could not find the function|schema cache/i.test(rpc.error.message);
+      if (rpc.error && !missingFn) return { error: rpc.error.message };
+      data = await purgeNonEdoSampleDataFallback(admin, tenantId);
+    }
+
+    await logAudit("admin.purge_non_edo", "tenant", tenantId, data);
+    revalidatePath("/dashboard");
+    revalidatePath("/admin");
+    revalidatePath("/volunteers");
+    revalidatePath("/crm");
+    revalidatePath("/events");
+    revalidatePath("/comments");
+    revalidatePath("/social");
+    revalidatePath("/analytics");
+    revalidatePath("/situation-room");
+    revalidatePath("/maps");
+    revalidatePath("/polling-units");
+    revalidatePath("/reports");
+
+    const parts = [
+      `${data.polling_units_pruned} non-Edo polling units`,
+      `${data.volunteers_removed} volunteers`,
+      `${data.contacts_removed} contacts`,
+      `${data.events_removed} events`,
+      `${data.comments_removed} comments`,
+      `${data.activities_removed} activities`,
+      `${data.donations_removed} donations`,
+    ];
+
+    return {
+      success: true as const,
+      ...data,
+      message: `Removed non-Edo sample data (${parts.join(", ")}). Edo polling units and team accounts were kept.`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Purge failed" };
+  }
+}
+
+export async function getPurgeNonEdoMigrationSql() {
+  await requirePermission("admin.users");
+  return readFile(
+    join(process.cwd(), "supabase/migrations/20260904120000_purge_non_edo_sample_data.sql"),
+    "utf8"
+  );
+}

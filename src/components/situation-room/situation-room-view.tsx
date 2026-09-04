@@ -266,7 +266,7 @@ export function SituationRoomView({
             : ""}
         </p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Kpi label="Voter register" value={race.universeRegistered} hint="All polling units" />
+          <Kpi label="Voter register" value={race.universeRegistered} hint="Edo polling units" />
           <Kpi label="Accredited (turnout)" value={race.accredited} hint="From PU status reports" />
           <Kpi label="Votes counted" value={race.countedBallots} hint={`${race.countedPuCount} result sheets`} />
           <Kpi

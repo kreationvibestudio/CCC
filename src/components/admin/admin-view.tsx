@@ -10,7 +10,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { inviteUser, updateUserRole, zeroCampaignData, getInviteRepairSql, updateCampaignDates, getCampaignDatesMigrationSql, deleteTeamMembers } from "@/lib/admin/actions";
+import {
+  inviteUser,
+  updateUserRole,
+  zeroCampaignData,
+  purgeNonEdoSampleData,
+  getPurgeNonEdoMigrationSql,
+  getInviteRepairSql,
+  updateCampaignDates,
+  getCampaignDatesMigrationSql,
+  deleteTeamMembers,
+} from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
 
@@ -298,6 +308,37 @@ export function AdminView({
     });
   }
 
+  function handlePurgeNonEdo() {
+    if (
+      !window.confirm(
+        "This removes non-Edo polling units and Lagos/Abuja sample volunteers, contacts, events, comments, and related rows. Edo polling units and team accounts stay. Continue?"
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const result = await purgeNonEdoSampleData();
+      if (result.error) {
+        toast.error(toErrorMessage(result.error, "Could not purge non-Edo sample data"));
+        return;
+      }
+      toast.success(("message" in result && result.message) || "Non-Edo sample data removed");
+      router.refresh();
+    });
+  }
+
+  function copyPurgeNonEdoSql() {
+    startTransition(async () => {
+      try {
+        const sql = await getPurgeNonEdoMigrationSql();
+        await navigator.clipboard.writeText(sql);
+        toast.success("Purge SQL copied — paste it in the Supabase SQL editor and run it");
+      } catch {
+        toast.error("Could not copy the purge SQL");
+      }
+    });
+  }
+
   function handleRoleChange(formData: FormData) {
     startTransition(async () => {
       const result = await updateUserRole(formData);
@@ -400,6 +441,27 @@ export function AdminView({
               you want gifts to appear automatically in Campaign CRM.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle>Edo-only data</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Removes polling units outside Edo State and Lagos/Abuja sample volunteers, CRM
+            contacts, events, comments, activities, and linked donations. Keeps the Edo INEC
+            register and team accounts. Situation Room voter totals only count Edo units.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="destructive" disabled={pending} onClick={handlePurgeNonEdo}>
+              {pending ? "Purging…" : "Remove non-Edo sample data"}
+            </Button>
+            <Button type="button" variant="outline" disabled={pending} onClick={copyPurgeNonEdoSql}>
+              Copy purge SQL
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

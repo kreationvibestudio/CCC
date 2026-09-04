@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
 import { OUR_PARTY, type IncidentRow, type ResultRow, type StatusRow } from "@/lib/situation-room/race";
 
 function one<T>(value: T | T[] | null | undefined): T | null {
@@ -18,16 +19,42 @@ async function universeStats(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string
 ) {
-  const [{ count }, rpc] = await Promise.all([
-    supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
-    supabase.rpc("election_universe_stats"),
-  ]);
+  // Prefer Edo-scoped summary (already filters campaign_polling_unit).
+  const summary = await supabase.rpc("polling_units_summary", { p_lga: null, p_ward: null });
+  if (!summary.error && summary.data && typeof summary.data === "object") {
+    const payload = summary.data as { pu_count?: number; registered_voters?: number };
+    return {
+      puCount: Number(payload.pu_count ?? 0),
+      registeredVoters: Number(payload.registered_voters ?? 0),
+    };
+  }
 
-  const payload = rpc.data as { pu_count?: number; registered_voters?: number } | null;
-  return {
-    puCount: Number(payload?.pu_count ?? count ?? 0),
-    registeredVoters: Number(payload?.registered_voters ?? 0),
-  };
+  const rpc = await supabase.rpc("election_universe_stats");
+  if (!rpc.error && rpc.data && typeof rpc.data === "object") {
+    const payload = rpc.data as { pu_count?: number; registered_voters?: number };
+    return {
+      puCount: Number(payload.pu_count ?? 0),
+      registeredVoters: Number(payload.registered_voters ?? 0),
+    };
+  }
+
+  // Last resort: count Edo rows only (paginated voter sum).
+  const { count } = await applyCampaignStateFilter(
+    supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
+  );
+  let registeredVoters = 0;
+  const pageSize = 1000;
+  for (let from = 0; from < 20000; from += pageSize) {
+    const { data } = await applyCampaignStateFilter(
+      supabase.from("polling_units").select("registered_voters").eq("tenant_id", tenantId)
+    )
+      .order("code")
+      .range(from, from + pageSize - 1);
+    const rows = data ?? [];
+    registeredVoters += rows.reduce((sum, row) => sum + Number(row.registered_voters ?? 0), 0);
+    if (rows.length < pageSize) break;
+  }
+  return { puCount: count ?? 0, registeredVoters };
 }
 
 export async function getSituationRoomData(tenantId: string) {

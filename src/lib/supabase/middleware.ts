@@ -1,16 +1,29 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { safeInternalPath } from "@/lib/auth/bearer";
+import { buildCsp } from "@/lib/security/headers";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 export async function updateSession(request: NextRequest) {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = buildCsp({
+    nonce,
+    dev: process.env.NODE_ENV !== "production",
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  });
+
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  requestHeaders.set("x-nonce", nonce);
+  // Next reads the nonce back out of the request-side CSP to stamp its own
+  // <script> tags; without this the bootstrap chunk is blocked.
+  requestHeaders.set("content-security-policy", csp);
 
   let supabaseResponse = NextResponse.next({
     request: { headers: requestHeaders },
   });
+  supabaseResponse.headers.set("content-security-policy", csp);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,6 +38,7 @@ export async function updateSession(request: NextRequest) {
           supabaseResponse = NextResponse.next({
             request: { headers: requestHeaders },
           });
+          supabaseResponse.headers.set("content-security-policy", csp);
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
@@ -60,11 +74,18 @@ export async function updateSession(request: NextRequest) {
     isAgentApi ||
     isAgentCodeLogin;
 
+  const redirectTo = (url: URL) => {
+    const response = NextResponse.redirect(url);
+    response.headers.set("content-security-policy", csp);
+    supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+    return response;
+  };
+
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", path);
-    return NextResponse.redirect(url);
+    return redirectTo(url);
   }
 
   if (user && isAuthRoute && !isResetPassword) {
@@ -73,7 +94,7 @@ export async function updateSession(request: NextRequest) {
     const q = next.indexOf("?");
     url.pathname = q === -1 ? next : next.slice(0, q);
     url.search = q === -1 ? "" : next.slice(q);
-    return NextResponse.redirect(url);
+    return redirectTo(url);
   }
 
   return supabaseResponse;

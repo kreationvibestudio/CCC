@@ -330,15 +330,23 @@ export async function deletePollingUnit(id: string) {
 
 /** Tenant comes from the session, never from a caller-supplied argument. */
 export async function getTeamForAssignment() {
+  // Feeds an assignment <select>, so it has to be a bounded list.
+  const limit = 500;
   const gate = await authorize("polling_units.manage");
-  if (!gate.ok) return [];
+  if (!gate.ok) return { rows: [], truncated: false, limit };
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
     .select("id, full_name, role")
     .eq("tenant_id", gate.user.profile.tenant_id)
-    .in("role", ["polling_agent", "polling_unit_supervisor", "ward_coordinator"]);
-  return data ?? [];
+    .in("role", ["polling_agent", "polling_unit_supervisor", "ward_coordinator"])
+    .order("full_name")
+    .limit(limit + 1);
+
+  const rows = data ?? [];
+  // A workspace with one agent per polling unit has thousands of them, and an
+  // unbounded read would silently stop at PostgREST's cap with no way to tell.
+  return { rows: rows.slice(0, limit), truncated: rows.length > limit, limit };
 }
 
 export async function importPollingUnitsCsv(csvText: string) {

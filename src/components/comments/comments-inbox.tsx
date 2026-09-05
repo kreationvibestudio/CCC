@@ -63,7 +63,14 @@ export function CommentsInbox({
 
   async function handleAction(action: string, commentId: string, extra?: string) {
     setLoading(commentId);
-    let result: { error?: string; success?: boolean; suggestion?: string; count?: number; message?: string };
+    let result: {
+      error?: string;
+      success?: boolean;
+      suggestion?: string;
+      count?: number;
+      remaining?: number;
+      message?: string;
+    };
     switch (action) {
       case "resolve": result = await resolveComment(commentId); break;
       case "flag": result = await flagMisinformation(commentId); break;
@@ -81,8 +88,17 @@ export function CommentsInbox({
       return;
     }
     if (action === "classify-all") {
-      if (result.count === 0) toast.info(result.message ?? "No comments to classify. Sync Facebook first.");
-      else toast.success(`Classified ${result.count} comment${result.count === 1 ? "" : "s"}`);
+      if (result.count === 0) {
+        toast.info(result.message ?? "No comments to classify. Sync Facebook first.");
+      } else if (result.remaining) {
+        // One AI call per comment, so a large inbox takes several runs.
+        toast.success(
+          `Classified ${result.count} comment${result.count === 1 ? "" : "s"}. ` +
+            `${result.remaining.toLocaleString()} still unclassified — click again to continue.`
+        );
+      } else {
+        toast.success(`Classified ${result.count} comment${result.count === 1 ? "" : "s"}`);
+      }
     }
     else toast.success("Updated");
     router.refresh();

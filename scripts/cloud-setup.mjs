@@ -59,6 +59,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260905010000_rate_limits.sql",
   "supabase/migrations/20260905020000_agent_code_expiry.sql",
   "supabase/migrations/20260905030000_tenant_scoped_admin_functions.sql",
+  "supabase/migrations/20260905040000_dashboard_metrics.sql",
 ];
 
 loadEnvLocal();

@@ -9,6 +9,17 @@ import { fetchAllRows } from "@/lib/supabase/paginate";
 import type { CampaignEvent } from "@/types/database";
 import { assertEventInTenant } from "@/lib/tenancy";
 
+export type EventAttendee = {
+  id: string;
+  event_id: string;
+  contact_id: string | null;
+  volunteer_id: string | null;
+  name: string;
+  phone: string | null;
+  rsvp_status: string | null;
+  created_at: string | null;
+};
+
 export async function createEvent(formData: FormData) {
   const gate = await authorize("events.manage");
   if (!gate.ok) return { error: gate.error };
@@ -144,6 +155,15 @@ export async function getEventAttendees(eventId: string) {
   const eventError = await assertEventInTenant(user.profile.tenant_id, eventId);
   if (eventError) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("event_attendees").select("*").eq("event_id", eventId).order("created_at", { ascending: false });
-  return data ?? [];
+  // A rally can register more attendees than a single PostgREST response holds.
+  return fetchAllRows<EventAttendee>(
+    (from, to) =>
+      supabase
+        .from("event_attendees")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false })
+        .range(from, to),
+    { max: 20_000 }
+  );
 }

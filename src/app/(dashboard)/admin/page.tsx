@@ -6,19 +6,31 @@ import { appBaseUrl, paystackPaymentLinkFromSetting } from "@/lib/campaign";
 import { createClient } from "@/lib/supabase/server";
 import { isMissingColumnError } from "@/lib/public-error";
 
+function settingText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (value && typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    if (typeof row.url === "string") return row.url.trim();
+    if (typeof row.value === "string") return row.value.trim();
+  }
+  return "";
+}
+
 export default async function AdminPage() {
   const user = await requirePermission("admin.users");
   const supabase = await createClient();
-  const [{ profiles, auditCount }, secrets, { data: linkSetting }] = await Promise.all([
+  const [{ profiles, auditCount }, secrets, { data: settings }] = await Promise.all([
     getAdminData(user.profile.tenant_id),
     getSecretsStatus(),
     supabase
       .from("tenant_settings")
-      .select("value")
+      .select("key, value")
       .eq("tenant_id", user.profile.tenant_id)
-      .eq("key", "paystack_payment_link")
-      .maybeSingle(),
+      .in("key", ["paystack_payment_link", "campaign_website"]),
   ]);
+  const byKey = new Map((settings ?? []).map((row) => [row.key as string, row.value]));
+  const storedLink = settingText(byKey.get("paystack_payment_link"));
+  const campaignWebsite = settingText(byKey.get("campaign_website"));
 
   const withStart = await supabase
     .from("tenants")
@@ -40,8 +52,6 @@ export default async function AdminPage() {
   const needsCampaignStartMigration = isMissingColumnError(withStart.error?.message, "campaign_start_date");
 
   const base = appBaseUrl();
-  const storedLink =
-    typeof linkSetting?.value === "string" ? linkSetting.value : "";
   const publicBase =
     base ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}` : "");
@@ -55,6 +65,7 @@ export default async function AdminPage() {
         publicBase && user.workspace?.slug ? `${publicBase}/volunteer/${user.workspace.slug}` : ""
       }
       paystackCheckoutUrl={paystackPaymentLinkFromSetting(storedLink)}
+      campaignWebsite={campaignWebsite}
       campaignStartDate={tenant?.campaign_start_date ?? null}
       campaignEndDate={tenant?.campaign_end_date ?? null}
       electionDate={tenant?.election_date ?? null}

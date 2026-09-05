@@ -13,6 +13,8 @@ export type WorkspaceInfo = {
   name: string;
   slug: string;
   party: string;
+  /** The campaign's own public site, if HQ has recorded one. */
+  website: string;
 };
 
 export type SupportAccess = {
@@ -78,21 +80,25 @@ export async function isPlatformOperatorUser(
 
 async function loadWorkspace(tenantId: string): Promise<WorkspaceInfo | null> {
   const supabase = await createClient();
-  const [{ data: tenant }, { data: partySetting }] = await Promise.all([
+  const [{ data: tenant }, { data: settings }] = await Promise.all([
     supabase.from("tenants").select("id, name, slug").eq("id", tenantId).maybeSingle(),
     supabase
       .from("tenant_settings")
-      .select("value")
+      .select("key, value")
       .eq("tenant_id", tenantId)
-      .eq("key", "campaign_party")
-      .maybeSingle(),
+      .in("key", ["campaign_party", "campaign_website"]),
   ]);
+
+  const byKey = new Map((settings ?? []).map((row) => [row.key as string, row.value]));
+  const party = partyCode(byKey.get("campaign_party"));
+  const website = campaignWebsite(byKey.get("campaign_website"));
+
   if (!tenant) {
     try {
       const admin = createServiceClient();
       const { data } = await admin.from("tenants").select("id, name, slug").eq("id", tenantId).maybeSingle();
       if (!data) return null;
-      return { id: data.id, name: data.name, slug: data.slug, party: partyCode(partySetting?.value) };
+      return { id: data.id, name: data.name, slug: data.slug, party, website };
     } catch {
       return null;
     }
@@ -101,8 +107,32 @@ async function loadWorkspace(tenantId: string): Promise<WorkspaceInfo | null> {
     id: tenant.id,
     name: tenant.name,
     slug: tenant.slug,
-    party: partyCode(partySetting?.value),
+    party,
+    website,
   };
+}
+
+/**
+ * The HQ screens used to link a single campaign's site by name. Each workspace
+ * now supplies its own, and an unset or non-https value renders as plain text
+ * rather than a link to somebody else's campaign.
+ */
+function campaignWebsite(value: unknown): string {
+  let raw = "";
+  if (typeof value === "string") raw = value.trim();
+  else if (value && typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    if (typeof row.url === "string") raw = row.url.trim();
+    else if (typeof row.value === "string") raw = row.value.trim();
+  }
+  if (!raw) return "";
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString().replace(/\/$/, "") : "";
+  } catch {
+    return "";
+  }
 }
 
 function partyCode(value: unknown) {

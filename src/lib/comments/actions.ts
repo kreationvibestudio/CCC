@@ -119,27 +119,60 @@ export async function classifyComment(commentId: string) {
   return { success: true, analysis };
 }
 
+/**
+ * One AI call per comment, so this has to stay a batch.
+ *
+ * The previous version selected every comment in the workspace and classified
+ * them one at a time in a single request: PostgREST capped the selection at
+ * 1000 rows, and 1000 sequential model calls cannot finish inside a serverless
+ * invocation anyway. Now it takes the oldest unclassified batch and reports
+ * what is left so the caller can run it again.
+ */
 export async function classifyAllComments() {
-  const user = await requirePermission("comments.view");
+  const batchSize = 40;
+  const user = await requirePermission("comments.moderate");
   const supabase = await createClient();
+
+  const { count: remainingBefore } = await supabase
+    .from("comments")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", user.profile.tenant_id)
+    .is("sentiment", null);
+
   const { data: comments, error } = await supabase
     .from("comments")
     .select("id, content")
-    .eq("tenant_id", user.profile.tenant_id);
+    .eq("tenant_id", user.profile.tenant_id)
+    .is("sentiment", null)
+    .order("created_at", { ascending: true })
+    .limit(batchSize);
 
   if (error) return { error: error.message };
-  if (!comments?.length) return { success: true, count: 0, message: "No comments found. Sync Facebook first." };
+
+  if (!comments?.length) {
+    const { count: total } = await supabase
+      .from("comments")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", user.profile.tenant_id);
+    return total
+      ? { success: true, count: 0, remaining: 0, message: "Every comment is already classified." }
+      : { success: true, count: 0, remaining: 0, message: "No comments found. Sync Facebook first." };
+  }
 
   let count = 0;
   for (const c of comments) {
     const analysis = await analyzeCommentWithAI(c.content);
-    await supabase.from("comments").update(analysis).eq("id", c.id);
+    const { error: updateError } = await supabase.from("comments").update(analysis).eq("id", c.id);
+    if (updateError) break;
     count++;
   }
 
+  const remaining = Math.max(0, (remainingBefore ?? count) - count);
+
   revalidatePath("/comments");
   revalidatePath("/dashboard");
-  return { success: true, count };
+  revalidatePath("/sentiment");
+  return { success: true, count, remaining };
 }
 
 export async function getSuggestedReply(commentId: string) {

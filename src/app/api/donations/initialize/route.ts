@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { appBaseUrl } from "@/lib/campaign";
 import { initializePaystackTransaction, paystackSecretKey } from "@/lib/integrations/paystack/client";
+import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 const MIN_NAIRA = 100;
 const MAX_NAIRA = 10_000_000;
@@ -19,6 +20,11 @@ export async function POST(req: NextRequest) {
       { error: "NEXT_PUBLIC_APP_URL is not set. Use the production Vercel URL." },
       { status: 503 }
     );
+  }
+
+  const verdict = await checkRateLimit("donationInit", clientIp(req.headers));
+  if (!verdict.allowed) {
+    return tooManyRequests(verdict, "Too many donation attempts. Try again shortly.");
   }
 
   let body: { amount?: unknown; email?: unknown; fullName?: unknown; phone?: unknown; tenantSlug?: unknown };

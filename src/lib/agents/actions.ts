@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { issueAgentAccessCode } from "@/lib/agent/code-login";
+import { decryptAgentCode } from "@/lib/agent/code-vault";
 import { isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
 import { findPollingUnitByCode, pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
@@ -167,7 +168,10 @@ export async function listAgentAssignments(input?: {
       for (const row of fallback.data ?? []) codes.set(row.profile_id, { display: null, hint: row.code_hint });
     } else {
       for (const row of codesRes.data ?? []) {
-        codes.set(row.profile_id, { display: row.code_display ?? null, hint: row.code_hint });
+        codes.set(row.profile_id, {
+          display: decryptAgentCode(row.code_display),
+          hint: row.code_hint,
+        });
       }
     }
   } else {
@@ -208,7 +212,12 @@ export async function listAgentCodesByName(): Promise<{
 }> {
   const listed = await listAgentAssignments({ page: 0, pageSize: 100 });
   if (!listed.rows.length) return { rows: [], codesTableMissing: listed.codesTableMissing };
-  const missing = listed.rows.filter((row) => row.assigned_agent_id && !row.agent_code);
+  // Key off the hint, not the readable code: a code that exists but cannot be
+  // decrypted (rotated key) must not be silently reissued, or one print run
+  // would invalidate every agent's working login.
+  const missing = listed.rows.filter(
+    (row) => row.assigned_agent_id && !row.agent_code && !row.agent_code_hint
+  );
   for (const row of missing) {
     await resetAgentAccessCode(row.id);
   }

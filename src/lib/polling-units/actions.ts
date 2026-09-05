@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth/session";
+import { authorize } from "@/lib/auth/session";
 import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-actions";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
@@ -78,26 +78,28 @@ async function listCampaignNames(
 }
 
 export async function getPollingUnitLgas(): Promise<string[]> {
+  const gate = await authorize("polling_units.view");
+  if (!gate.ok) return [];
   const supabase = await createClient();
-  const user = await getCurrentUser();
-  if (!user) return [];
-  return listCampaignNames(supabase, user.profile.tenant_id, "lga");
+  return listCampaignNames(supabase, gate.user.profile.tenant_id, "lga");
 }
 
 export async function getPollingUnitWards(lga: string): Promise<string[]> {
-  const supabase = await createClient();
-  const user = await getCurrentUser();
   const trimmed = lga.trim();
-  if (!user || !trimmed) return [];
-  return listCampaignNames(supabase, user.profile.tenant_id, "ward", trimmed);
+  if (!trimmed) return [];
+  const gate = await authorize("polling_units.view");
+  if (!gate.ok) return [];
+  const supabase = await createClient();
+  return listCampaignNames(supabase, gate.user.profile.tenant_id, "ward", trimmed);
 }
 
 export async function getPollingUnitSummary(filters?: {
   lga?: string;
   ward?: string;
 }): Promise<PollingUnitSummary> {
-  const user = await getCurrentUser();
-  if (!user) return { puCount: 0, registeredVoters: 0, mapped: 0 };
+  const gate = await authorize("polling_units.view");
+  if (!gate.ok) return { puCount: 0, registeredVoters: 0, mapped: 0 };
+  const user = gate.user;
   const supabase = await createClient();
 
   let countQuery = applyCampaignStateFilter(
@@ -137,8 +139,9 @@ export async function getPollingUnitSummary(filters?: {
 }
 
 export async function countVotingActive(): Promise<number> {
-  const user = await getCurrentUser();
-  if (!user) return 0;
+  const gate = await authorize("polling_units.view", "situation_room.view");
+  if (!gate.ok) return 0;
+  const user = gate.user;
   const supabase = await createClient();
   const { count } = await supabase
     .from("polling_unit_status")
@@ -157,8 +160,9 @@ export async function queryPollingUnits(input: {
   mappedOnly?: boolean;
   unassignedOnly?: boolean;
 }): Promise<{ rows: PollingUnitListItem[]; total: number }> {
-  const user = await getCurrentUser();
-  if (!user) return { rows: [], total: 0 };
+  const gate = await authorize("polling_units.view");
+  if (!gate.ok) return { rows: [], total: 0 };
+  const user = gate.user;
 
   const lga = sanitizeFilter(input.lga ?? "");
   const ward = sanitizeFilter(input.ward ?? "");
@@ -208,15 +212,6 @@ export async function queryPollingUnits(input: {
   return { rows: units, total: count ?? units.length };
 }
 
-export async function getPollingUnitStatuses(tenantId: string) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("polling_unit_status")
-    .select("*, polling_units(name, ward, lga, latitude, longitude, registered_voters, code)")
-    .eq("tenant_id", tenantId);
-  return data ?? [];
-}
-
 export async function getPollingUnit(id: string) {
   const row = await getRecord<Record<string, unknown>>("polling_units", id);
   if (!row) return row;
@@ -240,8 +235,9 @@ function edoOnlyFormError(formData: FormData): string | null {
 }
 
 export async function createPollingUnit(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("polling_units.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const blocked = edoOnlyFormError(formData);
   if (blocked) return { error: blocked };
   const supabase = await createClient();
@@ -285,8 +281,8 @@ export async function createPollingUnit(formData: FormData) {
 }
 
 export async function updatePollingUnit(id: string, formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("polling_units.manage");
+  if (!gate.ok) return { error: gate.error };
   const blocked = edoOnlyFormError(formData);
   if (blocked) return { error: blocked };
   const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
@@ -332,25 +328,31 @@ export async function deletePollingUnit(id: string) {
   return deleteRecord("polling_units", id, "/polling-units");
 }
 
-export async function getTeamForAssignment(tenantId: string) {
+/** Tenant comes from the session, never from a caller-supplied argument. */
+export async function getTeamForAssignment() {
+  // Feeds an assignment <select>, so it has to be a bounded list.
+  const limit = 500;
+  const gate = await authorize("polling_units.manage");
+  if (!gate.ok) return { rows: [], truncated: false, limit };
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
     .select("id, full_name, role")
-    .eq("tenant_id", tenantId)
-    .in("role", ["polling_agent", "polling_unit_supervisor", "ward_coordinator"]);
-  return data ?? [];
-}
+    .eq("tenant_id", gate.user.profile.tenant_id)
+    .in("role", ["polling_agent", "polling_unit_supervisor", "ward_coordinator"])
+    .order("full_name")
+    .limit(limit + 1);
 
-export async function getCampaignLocations(tenantId: string) {
-  const supabase = await createClient();
-  const { data } = await supabase.from("campaign_locations").select("*").eq("tenant_id", tenantId);
-  return data ?? [];
+  const rows = data ?? [];
+  // A workspace with one agent per polling unit has thousands of them, and an
+  // unbounded read would silently stop at PostgREST's cap with no way to tell.
+  return { rows: rows.slice(0, limit), truncated: rows.length > limit, limit };
 }
 
 export async function importPollingUnitsCsv(csvText: string) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("polling_units.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const rows = parsePollingUnitsCsv(csvText).filter((row) => isCampaignPollingUnit(row));
   const supabase = await createClient();
   const { imported } = await upsertPollingUnitRows(supabase, user.profile.tenant_id, rows);

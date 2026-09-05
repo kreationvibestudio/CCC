@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Users, Plus, Copy, ExternalLink } from "lucide-react";
 import { PageHeader, EmptyState, StatCard } from "@/components/shared/page-shell";
+import { CampaignWebsite } from "@/components/shared/campaign-website";
 import { DataTable } from "@/components/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,16 +49,8 @@ export function VolunteersView({
             <div className="min-w-0 flex-1 space-y-1">
               <p className="text-sm font-medium">Public signup link</p>
               <p className="text-xs text-muted-foreground">
-                Put this on{" "}
-                <a
-                  className="underline underline-offset-2"
-                  href="https://akhakonanenih.info"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  akhakonanenih.info
-                </a>{" "}
-                as a Volunteer button so people can register themselves.
+                Put this on <CampaignWebsite /> as a Volunteer button so people can register
+                themselves.
               </p>
               <Input readOnly value={signupUrl} className="mt-1 font-mono text-xs" />
             </div>

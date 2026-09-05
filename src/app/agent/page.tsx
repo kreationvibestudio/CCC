@@ -8,6 +8,6 @@ export default async function AgentPortalPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?redirect=/agent");
   if (!hasPermission(user.role, "agent.portal")) redirect(homePathForRole(user.role));
-  const assigned = await getAssignedPollingUnits(user.id, user.profile.tenant_id);
+  const assigned = await getAssignedPollingUnits();
   return <AgentPortalClient assigned={assigned} />;
 }

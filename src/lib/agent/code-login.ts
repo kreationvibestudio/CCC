@@ -7,13 +7,23 @@ import {
   hashAgentCode,
   normalizeAgentCode,
   agentCodeHint,
+  agentCodeExpiry,
+  isAgentCodeExpired,
   validateAgentCodeLogin,
 } from "@/lib/agent/access-code";
+import { encryptAgentCode } from "@/lib/agent/code-vault";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { AGENT_LOGIN_RADIUS_M, haversineMeters, isAgentSoftGpsEnabled, isWithinAgentLoginRadius } from "@/lib/agent/geo";
 import { isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
 
 export { AGENT_LOGIN_RADIUS_M };
+
+function retryLabel(seconds: number) {
+  if (seconds >= 120) return `${Math.ceil(seconds / 60)} minutes`;
+  if (seconds > 60) return "a minute";
+  return `${Math.max(1, seconds)} seconds`;
+}
 
 type IssueInput = {
   tenantId: string;
@@ -37,7 +47,9 @@ export async function issueAgentAccessCode(input: IssueInput): Promise<{ code?: 
       polling_unit_id: input.pollingUnitId,
       code_hash: hashAgentCode(code),
       code_hint: agentCodeHint(code),
-      code_display: code,
+      // Encrypted at rest: a database dump alone must not yield working logins.
+      code_display: encryptAgentCode(code),
+      expires_at: agentCodeExpiry().toISOString(),
     });
     if (!error) return { code, hint: agentCodeHint(code) };
     if (isMissingRelationError(error.message, "agent_access_codes")) {
@@ -45,6 +57,9 @@ export async function issueAgentAccessCode(input: IssueInput): Promise<{ code?: 
     }
     if (/code_display/i.test(error.message) && /column|schema cache|pgrst/i.test(error.message)) {
       return { error: "Agent codes need the latest database SQL. Run 20260823000004_agent_access_code_display.sql in Supabase." };
+    }
+    if (/expires_at/i.test(error.message) && /column|schema cache|pgrst/i.test(error.message)) {
+      return { error: "Agent codes need the latest database SQL. Run 20260905020000_agent_code_expiry.sql in Supabase." };
     }
     if (!/duplicate|unique/i.test(error.message)) return { error: error.message };
   }
@@ -70,6 +85,8 @@ export async function loginWithAgentCode(input: {
   code: string;
   latitude?: number | string | null;
   longitude?: number | string | null;
+  /** Caller IP, so guessing is bounded per source and not just per code. */
+  clientIp?: string;
 }) {
   const softGps = isAgentSoftGpsEnabled();
   const lat =
@@ -90,18 +107,44 @@ export async function loginWithAgentCode(input: {
   });
   if (invalid) return { error: invalid };
 
+  // Two windows: one per source so a single host cannot sweep the keyspace, one
+  // per code so a distributed sweep of one code still runs out of attempts.
+  const byIp = await checkRateLimit("agentCodeLogin", input.clientIp ?? "unknown");
+  if (!byIp.allowed) {
+    return { error: `Too many sign-in attempts. Try again in ${retryLabel(byIp.retryAfterSeconds)}.` };
+  }
+  const byCode = await checkRateLimit("agentCodeLoginPerCode", hashAgentCode(input.code));
+  if (!byCode.allowed) {
+    return { error: `Too many sign-in attempts for that code. Try again in ${retryLabel(byCode.retryAfterSeconds)}.` };
+  }
+
   const admin = createServiceClient();
-  const { data: row, error } = await admin
+  const codeQuery = await admin
     .from("agent_access_codes")
-    .select("id, tenant_id, profile_id, polling_unit_id")
+    .select("id, tenant_id, profile_id, polling_unit_id, expires_at")
     .eq("code_hash", hashAgentCode(input.code))
     .is("revoked_at", null)
     .maybeSingle();
+  let { data: row } = codeQuery;
+  const { error } = codeQuery;
+  if (error && /expires_at/i.test(error.message)) {
+    // Database predates the expiry column: fall back to the older shape.
+    const legacy = await admin
+      .from("agent_access_codes")
+      .select("id, tenant_id, profile_id, polling_unit_id")
+      .eq("code_hash", hashAgentCode(input.code))
+      .is("revoked_at", null)
+      .maybeSingle();
+    row = legacy.data ? { ...legacy.data, expires_at: null } : null;
+  }
   if (error && isMissingRelationError(error.message, "agent_access_codes")) {
     return { error: "Agent codes are not enabled on this campaign yet. Ask HQ to apply the latest SQL." };
   }
-  if (error) return { error: error.message };
+  if (error && !/expires_at/i.test(error.message)) return { error: error.message };
   if (!row) return { error: "That agent code is not valid" };
+  if (isAgentCodeExpired(row.expires_at)) {
+    return { error: "That agent code has expired. Ask HQ to issue a new one." };
+  }
 
   const [{ data: profile }, { data: pu }] = await Promise.all([
     admin.from("profiles").select("id, email, full_name, role, tenant_id").eq("id", row.profile_id).maybeSingle(),
@@ -141,8 +184,11 @@ export async function loginWithAgentCode(input: {
     }
   } else if (!softGps) {
     return { error: "Turn on location so we can confirm you are at your polling unit" };
-  } else if (pu.latitude == null || pu.longitude == null) {
-    // Soft check-in still allowed — HQ should fill pins when possible
+  } else if (pu.latitude != null && pu.longitude != null) {
+    // Soft check-in exists for units HQ has not geocoded yet. When the unit does
+    // have a pin, withholding GPS would otherwise be a way to sign in from
+    // anywhere, so location is required.
+    return { error: "Turn on location so we can confirm you are at your polling unit" };
   }
 
   const minted = await mintAgentSession(profile.email);

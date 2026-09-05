@@ -71,26 +71,15 @@ export function hqCreateUserBodies(input: {
   const tenantId = String(input.tenantId);
   const full_name = input.fullName;
   const role = input.role;
+  const base = { email: input.email, password: input.password, email_confirm: true };
+  // Tenant and role never travel in user_metadata: that blob is the `options.data`
+  // payload of a public signUp, so handle_new_user ignores it. Callers write the
+  // profile explicitly with the service role after the login exists, and
+  // app_metadata is carried only because it is service-role-only and audit-friendly.
   return [
-    {
-      email: input.email,
-      password: input.password,
-      email_confirm: true,
-      app_metadata: { tenant_id: tenantId, role, hq_invite: true },
-      user_metadata: { full_name, tenant_id: tenantId, role },
-    },
-    {
-      email: input.email,
-      password: input.password,
-      email_confirm: true,
-      user_metadata: { full_name, tenant_id: tenantId },
-    },
-    {
-      email: input.email,
-      password: input.password,
-      email_confirm: true,
-      user_metadata: { full_name },
-    },
+    { ...base, app_metadata: { tenant_id: tenantId, role, hq_invite: true }, user_metadata: { full_name } },
+    { ...base, app_metadata: { tenant_id: tenantId, hq_invite: true }, user_metadata: { full_name } },
+    { ...base, user_metadata: { full_name } },
   ];
 }
 

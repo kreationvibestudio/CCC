@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { generateBriefingFromComments } from "@/lib/ai/briefing";
+import { briefingFromTotals, totalsFromComments, type CommentTotals } from "@/lib/ai/briefing";
 import { isMissingColumnError } from "@/lib/public-error";
 import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
+import { POSTGREST_MAX_ROWS } from "@/lib/supabase/paginate";
 
 export interface DashboardStats {
   supporters: number;
@@ -48,6 +49,52 @@ export interface DashboardData {
   issueBreakdown: { topic: string; count: number }[];
 }
 
+/** A stored AI briefing older than this is stale; recompute from live data. */
+const BRIEFING_MAX_AGE_MS = 2 * 24 * 60 * 60 * 1000;
+
+type Metrics = {
+  donations: number;
+  followers: number;
+  posts: number;
+  likes: number;
+  shares: number;
+  post_comments: number;
+  comments: number;
+  sentiment: { positive: number; neutral: number; negative: number };
+  pending_comments: number;
+  misinformation: number;
+  issues: { topic: string; count: number }[];
+};
+
+function readMetrics(raw: unknown): Metrics | null {
+  if (!raw || typeof raw !== "object") return null;
+  const m = raw as Record<string, unknown>;
+  const num = (value: unknown) => Number(value ?? 0) || 0;
+  const sentiment = (m.sentiment ?? {}) as Record<string, unknown>;
+  return {
+    donations: num(m.donations),
+    followers: num(m.followers),
+    posts: num(m.posts),
+    likes: num(m.likes),
+    shares: num(m.shares),
+    post_comments: num(m.post_comments),
+    comments: num(m.comments),
+    sentiment: {
+      positive: num(sentiment.positive),
+      neutral: num(sentiment.neutral),
+      negative: num(sentiment.negative),
+    },
+    pending_comments: num(m.pending_comments),
+    misinformation: num(m.misinformation),
+    issues: Array.isArray(m.issues)
+      ? m.issues.map((row) => {
+          const entry = (row ?? {}) as Record<string, unknown>;
+          return { topic: String(entry.topic ?? "other"), count: num(entry.count) };
+        })
+      : [],
+  };
+}
+
 export async function getDashboardData(tenantId: string): Promise<DashboardData> {
   const supabase = await createClient();
 
@@ -72,60 +119,96 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
   } | null;
 
   const [
+    metricsRes,
     volunteersRes,
     contactsRes,
     puRes,
     eventsRes,
-    donationsRes,
-    commentsRes,
-    socialAccountsRes,
-    socialPostsRes,
+    recentPostsRes,
     activitiesRes,
     briefingRes,
     coordinatorsRes,
   ] = await Promise.all([
+    // One database round trip for every sum and count. These used to be
+    // computed by fetching the rows, which PostgREST truncates at
+    // db-max-rows, so any workspace past 1000 donations or comments reported
+    // a prefix of its data as the total.
+    supabase.rpc("dashboard_metrics", { p_tenant_id: tenantId }),
     supabase.from("volunteers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
     supabase.from("contacts").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
     applyCampaignStateFilter(
       supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
     ),
     supabase.from("campaign_events").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
-    supabase.from("donations").select("amount").eq("tenant_id", tenantId),
-    supabase.from("comments").select("id, sentiment, status, issue_topic, is_misinformation, content").eq("tenant_id", tenantId),
-    supabase.from("social_accounts").select("followers").eq("tenant_id", tenantId),
-    supabase.from("social_posts").select("likes, shares, comments_count, posted_at, engagement_rate").eq("tenant_id", tenantId).order("posted_at", { ascending: false }).limit(10),
+    // Only the engagement sparkline needs individual posts.
+    supabase.from("social_posts").select("likes, shares, comments_count, posted_at").eq("tenant_id", tenantId).order("posted_at", { ascending: false }).limit(10),
     supabase.from("activities").select("id, action, description, created_at").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8),
-    supabase.from("ai_briefings").select("content").eq("tenant_id", tenantId).order("briefing_date", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("ai_briefings").select("content, briefing_date").eq("tenant_id", tenantId).order("briefing_date", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).in("role", ["ward_coordinator", "volunteer_coordinator", "polling_unit_supervisor"]),
   ]);
 
-  const donations = donationsRes.data?.reduce((sum, d) => sum + Number(d.amount), 0) ?? 0;
-  const followers = socialAccountsRes.data?.reduce((sum, a) => sum + (a.followers ?? 0), 0) ?? 0;
-  const posts = socialPostsRes.data ?? [];
-  const comments = commentsRes.data ?? [];
+  const recentPosts = recentPostsRes.data ?? [];
+  let metrics = metricsRes.error ? null : readMetrics(metricsRes.data);
+  let commentTotals: CommentTotals;
 
-  const totalLikes = posts.reduce((s, p) => s + (p.likes ?? 0), 0);
-  const totalShares = posts.reduce((s, p) => s + (p.shares ?? 0), 0);
-  const totalCommentCount = posts.reduce((s, p) => s + (p.comments_count ?? 0), 0);
-  const dailyReach = posts.length
-    ? Math.round(posts.reduce((s, p) => s + (p.likes ?? 0) + (p.comments_count ?? 0) + (p.shares ?? 0), 0) / posts.length)
+  if (metrics) {
+    commentTotals = {
+      total: metrics.comments,
+      positive: metrics.sentiment.positive,
+      neutral: metrics.sentiment.neutral,
+      negative: metrics.sentiment.negative,
+      misinformation: metrics.misinformation,
+      topIssues: metrics.issues.map((i) => i.topic),
+    };
+  } else {
+    // The RPC ships in a migration; a deploy that lands before it must still
+    // render. Capped reads, so a large workspace degrades to approximate
+    // figures rather than a blank dashboard.
+    const [donationsRes, commentsRes, accountsRes, postsRes] = await Promise.all([
+      supabase.from("donations").select("amount").eq("tenant_id", tenantId).limit(POSTGREST_MAX_ROWS),
+      supabase.from("comments").select("sentiment, status, issue_topic, is_misinformation").eq("tenant_id", tenantId).limit(POSTGREST_MAX_ROWS),
+      supabase.from("social_accounts").select("followers").eq("tenant_id", tenantId).limit(POSTGREST_MAX_ROWS),
+      supabase.from("social_posts").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+    ]);
+    const fallbackComments = commentsRes.data ?? [];
+    commentTotals = totalsFromComments(fallbackComments);
+    metrics = {
+      donations: (donationsRes.data ?? []).reduce((sum, d) => sum + Number(d.amount ?? 0), 0),
+      followers: (accountsRes.data ?? []).reduce((sum, a) => sum + (a.followers ?? 0), 0),
+      posts: postsRes.count ?? recentPosts.length,
+      likes: recentPosts.reduce((s, p) => s + (p.likes ?? 0), 0),
+      shares: recentPosts.reduce((s, p) => s + (p.shares ?? 0), 0),
+      post_comments: recentPosts.reduce((s, p) => s + (p.comments_count ?? 0), 0),
+      comments: commentTotals.total,
+      sentiment: {
+        positive: commentTotals.positive,
+        neutral: commentTotals.neutral,
+        negative: commentTotals.negative,
+      },
+      pending_comments: fallbackComments.filter((c) => c.status === "pending").length,
+      misinformation: commentTotals.misinformation,
+      issues: commentTotals.topIssues.map((topic) => ({ topic, count: 0 })),
+    };
+  }
+
+  const sentimentScore = metrics.comments
+    ? Math.round((metrics.sentiment.positive / metrics.comments) * 100)
     : 0;
 
-  const positive = comments.filter((c) => c.sentiment === "positive").length;
-  const sentimentScore = comments.length ? Math.round((positive / comments.length) * 100) : 0;
-  const pendingComments = comments.filter((c) => c.status === "pending").length;
-
-  const issueCounts: Record<string, number> = {};
-  for (const c of comments) {
-    const t = c.issue_topic ?? "other";
-    issueCounts[t] = (issueCounts[t] ?? 0) + 1;
-  }
-  const issueBreakdown = Object.entries(issueCounts)
-    .sort((a, b) => b[1] - a[1])
+  const issueBreakdown = metrics.issues
     .slice(0, 6)
-    .map(([topic, count]) => ({ topic: topic.charAt(0).toUpperCase() + topic.slice(1), count }));
+    .map(({ topic, count }) => ({ topic: topic.charAt(0).toUpperCase() + topic.slice(1), count }));
 
-  const engagementTrend = posts.slice(0, 7).reverse().map((p, i) => ({
+  // Average engagement across the posts on the sparkline, not the whole history:
+  // "daily reach" is meant to describe current momentum.
+  const dailyReach = recentPosts.length
+    ? Math.round(
+        recentPosts.reduce((s, p) => s + (p.likes ?? 0) + (p.comments_count ?? 0) + (p.shares ?? 0), 0) /
+          recentPosts.length
+      )
+    : 0;
+
+  const engagementTrend = recentPosts.slice(0, 7).reverse().map((p, i) => ({
     label: p.posted_at
       ? new Date(p.posted_at).toLocaleDateString("en-NG", { month: "short", day: "numeric" })
       : `Post ${i + 1}`,
@@ -134,9 +217,20 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
     shares: p.shares ?? 0,
   }));
 
-  const briefingContent = briefingRes.data?.content as Record<string, unknown> | undefined;
-  const liveBriefing = generateBriefingFromComments(comments, posts.length, totalLikes);
-  const hasLiveActivity = comments.length > 0 || posts.length > 0;
+  // A stored briefing is a snapshot of one day's AI run. Presenting a month-old
+  // one under "AI Daily Briefing" put a stale sentiment figure next to the live
+  // Sentiment Score tile and the two disagreed, so only recent runs are used.
+  const storedDate = briefingRes.data?.briefing_date
+    ? Date.parse(String(briefingRes.data.briefing_date))
+    : NaN;
+  const storedIsFresh =
+    Number.isFinite(storedDate) && Date.now() - storedDate <= BRIEFING_MAX_AGE_MS;
+  const briefingContent = storedIsFresh
+    ? (briefingRes.data?.content as Record<string, unknown> | undefined)
+    : undefined;
+
+  const liveBriefing = briefingFromTotals(commentTotals, metrics.posts, metrics.likes);
+  const hasLiveActivity = metrics.comments > 0 || metrics.posts > 0;
 
   const briefing: DashboardBriefing =
     hasLiveActivity && briefingContent
@@ -148,7 +242,7 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
           recommendations: (briefingContent.recommendations as string[])?.length
             ? (briefingContent.recommendations as string[])
             : liveBriefing.recommendations,
-          sentimentBreakdown: comments.length
+          sentimentBreakdown: metrics.comments
             ? liveBriefing.sentimentBreakdown
             : (briefingContent.sentiment_breakdown as DashboardBriefing["sentimentBreakdown"]) ??
               liveBriefing.sentimentBreakdown,
@@ -166,17 +260,19 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
       coordinators: coordinatorsRes.count ?? 0,
       pollingUnits: puRes.count ?? 0,
       events: eventsRes.count ?? 0,
-      socialEngagement: followers,
+      socialEngagement: metrics.followers,
       dailyReach,
-      donations,
+      donations: metrics.donations,
       fundraisingGoal: Number(tenant?.fundraising_goal ?? 0),
       sentimentScore,
-      voterContacts: comments.length,
-      pendingComments,
-      totalPosts: posts.length,
-      totalLikes,
-      totalComments: comments.length || totalCommentCount,
-      totalShares,
+      voterContacts: metrics.comments,
+      pendingComments: metrics.pending_comments,
+      totalPosts: metrics.posts,
+      totalLikes: metrics.likes,
+      // Inbox comments when there are any, otherwise the count Facebook
+      // reports on the posts themselves.
+      totalComments: metrics.comments || metrics.post_comments,
+      totalShares: metrics.shares,
     },
     activities: activitiesRes.data ?? [],
     briefing,

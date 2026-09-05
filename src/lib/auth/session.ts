@@ -3,7 +3,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { UserRole, Permission } from "@/types/auth";
-import { hasPermission, ROLE_PERMISSIONS } from "@/types/auth";
+import { hasPermission, hasAnyPermission, ROLE_PERMISSIONS } from "@/types/auth";
 import type { Profile } from "@/types/database";
 import { platformOperatorEmails } from "@/lib/tenancy";
 import { parseBearer } from "@/lib/auth/bearer";
@@ -13,6 +13,8 @@ export type WorkspaceInfo = {
   name: string;
   slug: string;
   party: string;
+  /** The campaign's own public site, if HQ has recorded one. */
+  website: string;
 };
 
 export type SupportAccess = {
@@ -33,16 +35,27 @@ export interface AuthUser {
   supportAccess: SupportAccess | null;
 }
 
-async function ensurePlatformOperatorRow(userId: string, email: string) {
-  const allowed = platformOperatorEmails();
-  if (!allowed.includes(email.toLowerCase())) return false;
+/**
+ * Claim the first platform operator seat from PLATFORM_OPERATOR_EMAILS.
+ *
+ * Support sessions FK onto platform_operators, so an allowlisted operator needs
+ * a real row. This only writes one while the table is still empty: after that,
+ * seats are granted explicitly with addPlatformOperator(), so a leaked or
+ * mistyped allowlist entry cannot silently mint console access on an instance
+ * that already has operators.
+ */
+async function claimBootstrapOperatorSeat(userId: string, email: string) {
   try {
     const admin = createServiceClient();
-    await admin.from("platform_operators").upsert(
+    const { count } = await admin
+      .from("platform_operators")
+      .select("user_id", { count: "exact", head: true });
+    if ((count ?? 0) > 0) return false;
+    const { error } = await admin.from("platform_operators").upsert(
       { user_id: userId, email: email.toLowerCase() },
       { onConflict: "user_id" }
     );
-    return true;
+    return !error;
   } catch {
     return false;
   }
@@ -60,29 +73,32 @@ export async function isPlatformOperatorUser(
     .eq("user_id", userId)
     .maybeSingle();
   if (data) return true;
-  const allowlisted = platformOperatorEmails().includes(email.toLowerCase());
-  if (!allowlisted) return false;
-  await ensurePlatformOperatorRow(userId, email);
+  if (!platformOperatorEmails().includes(email.toLowerCase())) return false;
+  await claimBootstrapOperatorSeat(userId, email);
   return true;
 }
 
 async function loadWorkspace(tenantId: string): Promise<WorkspaceInfo | null> {
   const supabase = await createClient();
-  const [{ data: tenant }, { data: partySetting }] = await Promise.all([
+  const [{ data: tenant }, { data: settings }] = await Promise.all([
     supabase.from("tenants").select("id, name, slug").eq("id", tenantId).maybeSingle(),
     supabase
       .from("tenant_settings")
-      .select("value")
+      .select("key, value")
       .eq("tenant_id", tenantId)
-      .eq("key", "campaign_party")
-      .maybeSingle(),
+      .in("key", ["campaign_party", "campaign_website"]),
   ]);
+
+  const byKey = new Map((settings ?? []).map((row) => [row.key as string, row.value]));
+  const party = partyCode(byKey.get("campaign_party"));
+  const website = campaignWebsite(byKey.get("campaign_website"));
+
   if (!tenant) {
     try {
       const admin = createServiceClient();
       const { data } = await admin.from("tenants").select("id, name, slug").eq("id", tenantId).maybeSingle();
       if (!data) return null;
-      return { id: data.id, name: data.name, slug: data.slug, party: partyCode(partySetting?.value) };
+      return { id: data.id, name: data.name, slug: data.slug, party, website };
     } catch {
       return null;
     }
@@ -91,8 +107,32 @@ async function loadWorkspace(tenantId: string): Promise<WorkspaceInfo | null> {
     id: tenant.id,
     name: tenant.name,
     slug: tenant.slug,
-    party: partyCode(partySetting?.value),
+    party,
+    website,
   };
+}
+
+/**
+ * The HQ screens used to link a single campaign's site by name. Each workspace
+ * now supplies its own, and an unset or non-https value renders as plain text
+ * rather than a link to somebody else's campaign.
+ */
+function campaignWebsite(value: unknown): string {
+  let raw = "";
+  if (typeof value === "string") raw = value.trim();
+  else if (value && typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    if (typeof row.url === "string") raw = row.url.trim();
+    else if (typeof row.value === "string") raw = row.value.trim();
+  }
+  if (!raw) return "";
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString().replace(/\/$/, "") : "";
+  } catch {
+    return "";
+  }
 }
 
 function partyCode(value: unknown) {
@@ -203,6 +243,30 @@ export async function requirePermission(permission: Permission): Promise<AuthUse
   const user = await requireAuth();
   if (!hasPermission(user.role, permission)) throw new Error("Forbidden");
   return user;
+}
+
+export const FORBIDDEN_MESSAGE = "Your role does not allow that action";
+
+export type ActionGate = { ok: true; user: AuthUser } | { ok: false; error: string };
+
+/**
+ * Permission gate for Server Actions.
+ *
+ * Hiding a nav item in the dashboard layout is not an authorization boundary:
+ * every `"use server"` export is directly invocable by any signed-in user, so
+ * mutating actions must check permissions themselves. Returns `{ error }`
+ * rather than throwing so callers keep surfacing friendly messages.
+ *
+ * Passing several permissions means "any of", matching how a capability can be
+ * reached by more than one role.
+ */
+export async function authorize(...permissions: Permission[]): Promise<ActionGate> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Unauthorized" };
+  if (permissions.length > 0 && !hasAnyPermission(user.role, permissions)) {
+    return { ok: false, error: FORBIDDEN_MESSAGE };
+  }
+  return { ok: true, user };
 }
 
 export async function requirePlatformOperator(): Promise<{ id: string; email: string }> {

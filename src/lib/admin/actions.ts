@@ -153,6 +153,61 @@ export async function updateCampaignDates(formData: FormData) {
   }
 }
 
+/**
+ * The campaign's own public site.
+ *
+ * HQ screens that tell you where to publish a signup or donate link used to
+ * name one campaign's domain directly, which is wrong for every other
+ * workspace. Stored per tenant so each one sees its own.
+ */
+export async function updateCampaignWebsite(formData: FormData) {
+  try {
+    const adminUser = await requirePermission("admin.users");
+    const raw = String(formData.get("campaign_website") ?? "").trim();
+
+    let website = "";
+    if (raw) {
+      const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+      let parsed: URL;
+      try {
+        parsed = new URL(candidate);
+      } catch {
+        return { error: "That does not look like a website address" };
+      }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        return { error: "Use an http or https address" };
+      }
+      if (!parsed.hostname.includes(".")) {
+        return { error: "Include the full domain, for example example.org" };
+      }
+      website = parsed.toString().replace(/\/$/, "");
+    }
+
+    const admin = createServiceClient();
+    const { error } = website
+      ? await admin
+          .from("tenant_settings")
+          .upsert(
+            { tenant_id: adminUser.profile.tenant_id, key: "campaign_website", value: website },
+            { onConflict: "tenant_id,key" }
+          )
+      : await admin
+          .from("tenant_settings")
+          .delete()
+          .eq("tenant_id", adminUser.profile.tenant_id)
+          .eq("key", "campaign_website");
+
+    if (error) return { error: toErrorMessage(error, "Could not save the campaign website") };
+
+    await logAudit("admin.campaign_website", "tenant", adminUser.profile.tenant_id, { website });
+    revalidatePath("/admin");
+    revalidatePath("/volunteers");
+    return { success: true as const, website };
+  } catch (e) {
+    return { error: toErrorMessage(e, "Could not save the campaign website") };
+  }
+}
+
 export async function getCampaignDatesMigrationSql() {
   await requirePermission("admin.users");
   return `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS campaign_start_date TIMESTAMPTZ;

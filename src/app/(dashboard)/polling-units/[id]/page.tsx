@@ -15,7 +15,7 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
   const pu = await getPollingUnit(id);
   if (!pu) redirect("/polling-units");
 
-  const team = await getTeamForAssignment(pu.tenant_id as string);
+  const team = await getTeamForAssignment();
 
   async function saveAction(formData: FormData) {
     "use server";
@@ -67,10 +67,16 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
               <Label htmlFor="assigned_agent_id">Assigned agent</Label>
               <NativeSelect id="assigned_agent_id" name="assigned_agent_id" defaultValue={(pu.assigned_agent_id as string) ?? ""}>
                 <option value="">Unassigned</option>
-                {team.map((t) => (
+                {team.rows.map((t) => (
                   <option key={t.id} value={t.id}>{t.full_name} ({t.role.replace(/_/g, " ")})</option>
                 ))}
               </NativeSelect>
+              {team.truncated ? (
+                <p className="text-xs text-muted-foreground">
+                  Showing the first {team.limit} team members alphabetically. Use the agent roster
+                  to assign someone further down the list.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1"><Label htmlFor="security_notes">Security notes</Label><textarea id="security_notes" name="security_notes" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={(pu.security_notes as string) ?? ""} /></div>
             <div className="space-y-1"><Label htmlFor="logistics">Logistics</Label><textarea id="logistics" name="logistics" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={(pu.logistics as string) ?? ""} /></div>

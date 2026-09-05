@@ -36,7 +36,7 @@ describe("parseGoTrueError", () => {
 });
 
 describe("hqCreateUserBodies", () => {
-  it("retries without role so a bad user_role cast cannot block HQ invites", () => {
+  it("never puts tenant or role in client-writable user_metadata", () => {
     const bodies = hqCreateUserBodies({
       email: "fa@example.com",
       password: "Passw0rd!aaa",
@@ -45,8 +45,21 @@ describe("hqCreateUserBodies", () => {
       role: "polling_agent",
     });
     assert.equal(bodies.length, 3);
-    assert.equal(bodies[0].user_metadata.role, "polling_agent");
-    assert.equal("role" in bodies[1].user_metadata, false);
-    assert.equal("tenant_id" in bodies[2].user_metadata, false);
+    for (const body of bodies) {
+      assert.deepEqual(Object.keys(body.user_metadata), ["full_name"]);
+    }
+  });
+
+  it("retries without role so a bad user_role cast cannot block HQ invites", () => {
+    const bodies = hqCreateUserBodies({
+      email: "fa@example.com",
+      password: "Passw0rd!aaa",
+      fullName: "Field Agent",
+      tenantId: "a0000000-0000-0000-0000-000000000001",
+      role: "polling_agent",
+    });
+    assert.equal(bodies[0].app_metadata?.role, "polling_agent");
+    assert.equal("role" in (bodies[1].app_metadata ?? {}), false);
+    assert.equal(bodies[2].app_metadata, undefined);
   });
 });

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 
 export type SituationRoomResetResult = {
   success?: true;
@@ -61,13 +62,17 @@ export async function resetSituationRoomData(): Promise<SituationRoomResetResult
       return { error: rpc.error.message };
     }
 
-    const { data: incidentIds } = await admin
-      .from("incident_reports")
-      .select("id")
-      .eq("tenant_id", tenantId);
-    const ids = (incidentIds ?? []).map((r) => r.id);
-    if (ids.length) {
-      await admin.from("incident_media").delete().in("incident_id", ids);
+    // Paged: a single select stops at PostgREST's row cap, which would leave
+    // media rows pointing at incidents that are about to be deleted.
+    const incidentIds = await fetchAllRows<{ id: string }>(
+      (from, to) =>
+        admin.from("incident_reports").select("id").eq("tenant_id", tenantId).order("id").range(from, to),
+      { max: 200_000 }
+    );
+    for (let i = 0; i < incidentIds.length; i += 500) {
+      const slice = incidentIds.slice(i, i + 500).map((r) => r.id);
+      const { error } = await admin.from("incident_media").delete().in("incident_id", slice);
+      if (error) return { error: `incident_media: ${error.message}` };
     }
 
     const counts = { incidents: 0, results: 0, reports: 0, statuses: 0 };

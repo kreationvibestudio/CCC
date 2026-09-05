@@ -77,9 +77,11 @@ export function buildCsp({ nonce, dev = false, supabaseUrl, extraConnectSrc = []
   ];
 
   const policy = directives.map(([name, values]) => `${name} ${values.join(" ")}`);
-  // Vercel terminates TLS; without this, a single http:// asset reference would
-  // downgrade the whole page.
-  if (!dev) policy.push("upgrade-insecure-requests");
+  // Without this, a single http:// asset reference downgrades the whole page.
+  // Skipped when the backend itself is plain http (a self-hosted Supabase, or
+  // `next start` against a local instance) because upgrading would break it.
+  const plainHttpBackend = supabase?.startsWith("http://") ?? false;
+  if (!dev && !plainHttpBackend) policy.push("upgrade-insecure-requests");
 
   return policy.join("; ");
 }

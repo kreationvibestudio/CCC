@@ -32,6 +32,15 @@ test("dev adds eval and websockets, production does not", () => {
   assert.match(prod, /upgrade-insecure-requests/);
 });
 
+test("a plain-http backend is not force-upgraded", () => {
+  // A self-hosted Supabase on http, or `next start` against a local instance.
+  const csp = buildCsp({ nonce: "n", supabaseUrl: "http://127.0.0.1:54321" });
+  assert.doesNotMatch(csp, /upgrade-insecure-requests/);
+  assert.match(directive(csp, "connect-src"), /ws:\/\/127\.0\.0\.1:54321/);
+
+  assert.match(buildCsp({ nonce: "n", supabaseUrl: "https://abc.supabase.co" }), /upgrade-insecure-requests/);
+});
+
 test("the Supabase origin is reachable over https and websockets", () => {
   const csp = buildCsp({ nonce: "n", supabaseUrl: "https://abc.supabase.co/" });
   const connect = directive(csp, "connect-src");

@@ -6,6 +6,8 @@ import { logAudit, isPlatformOperatorUser } from "@/lib/auth/session";
 import { homePathForRole, type UserRole } from "@/types/auth";
 import { CAMPAIGN_TENANT_ID } from "@/lib/campaign";
 import { getInviteByToken } from "@/lib/invites";
+import { platformOperatorEmails } from "@/lib/tenancy";
+import { isEnvFlagEnabled } from "@/lib/env-flags";
 import { redirect } from "next/navigation";
 
 export async function signIn(email: string, password: string) {
@@ -26,8 +28,15 @@ export async function signIn(email: string, password: string) {
   return { success: true as const, next: homePathForRole(role) };
 }
 
+/**
+ * Public self-service registration hands a real workspace profile to anyone who
+ * can reach /register, so it stays closed unless an operator opts in with
+ * ALLOW_PUBLIC_REGISTRATION. A brand new instance is the one exception: the
+ * first account has to be creatable before any administrator exists to invite it.
+ */
 export async function isRegistrationOpen(): Promise<boolean> {
-  return true;
+  if (isEnvFlagEnabled(process.env.ALLOW_PUBLIC_REGISTRATION)) return true;
+  return isFirstCampaignUser();
 }
 
 async function isFirstCampaignUser(): Promise<boolean> {
@@ -37,6 +46,53 @@ async function isFirstCampaignUser(): Promise<boolean> {
     return (count ?? 0) === 0;
   } catch {
     return false;
+  }
+}
+
+/** Workspace that self-service signups land in. Falls back to the oldest tenant. */
+async function selfServeTenantId(): Promise<string | null> {
+  try {
+    const admin = createServiceClient();
+    const { data: seeded } = await admin
+      .from("tenants")
+      .select("id")
+      .eq("id", CAMPAIGN_TENANT_ID)
+      .maybeSingle();
+    if (seeded?.id) return seeded.id;
+    const { data: oldest } = await admin
+      .from("tenants")
+      .select("id")
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    return oldest?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Give a self-service signup the lowest-privilege profile. handle_new_user
+ * already provisions invited and bootstrap accounts, so this only fills the gap
+ * it deliberately leaves empty — and never overwrites what it decided.
+ */
+async function ensureSelfServeProfile(userId: string, email: string, fullName: string) {
+  const tenantId = await selfServeTenantId();
+  if (!tenantId) return;
+  try {
+    const admin = createServiceClient();
+    await admin.from("profiles").upsert(
+      {
+        id: userId,
+        tenant_id: tenantId,
+        email,
+        full_name: fullName,
+        role: "supporter" satisfies UserRole,
+      },
+      { onConflict: "id", ignoreDuplicates: true }
+    );
+  } catch {
+    // Non-fatal: the account exists, an administrator can finish provisioning.
   }
 }
 
@@ -53,22 +109,30 @@ export async function signUp(
     return { error: "Password must be at least 8 characters" };
   }
 
-  const supabase = await createClient();
-  const firstUser = await isFirstCampaignUser();
-  const role: UserRole = firstUser ? "super_administrator" : "supporter";
+  const bootstrap = await isFirstCampaignUser();
+  if (!bootstrap && !isEnvFlagEnabled(process.env.ALLOW_PUBLIC_REGISTRATION)) {
+    return { error: "Registration is by invitation only. Ask an administrator for an invite link." };
+  }
+  // A platform operator address must be provisioned deliberately. Self-service
+  // signup auto-confirms the email, so allowing it here would let anyone who
+  // knows an allowlisted address claim the platform console.
+  if (platformOperatorEmails().includes(trimmedEmail)) {
+    return { error: "This email is reserved. Ask a platform operator to provision it." };
+  }
 
+  const supabase = await createClient();
+  // Role and tenant are never taken from the client: handle_new_user resolves
+  // invites and the bootstrap account, and ensureSelfServeProfile() below
+  // assigns the lowest-privilege role for everyone else.
   const { data, error } = await supabase.auth.signUp({
     email: trimmedEmail,
     password,
     options: {
-      data: {
-        full_name: name,
-        tenant_id: CAMPAIGN_TENANT_ID,
-        role,
-      },
+      data: { full_name: name },
     },
   });
   if (error) return { error: error.message };
+  if (data.user) await ensureSelfServeProfile(data.user.id, trimmedEmail, name);
 
   let requiresEmailConfirmation = Boolean(data.user && !data.session);
   if (requiresEmailConfirmation && data.user) {
@@ -133,6 +197,27 @@ export async function signUpWithInvite(input: {
     },
   });
   if (error) return { error: error.message };
+
+  // handle_new_user consumes the invite, but a stale database (or a swallowed
+  // trigger error) would leave the account profile-less and locked out. Re-apply
+  // the tenant + role we already verified server-side from the invite ledger.
+  if (data.user) {
+    try {
+      const admin = createServiceClient();
+      await admin.from("profiles").upsert(
+        {
+          id: data.user.id,
+          tenant_id: invite.tenantId,
+          email: trimmedEmail,
+          full_name: name,
+          role: invite.role,
+        },
+        { onConflict: "id", ignoreDuplicates: true }
+      );
+    } catch {
+      // Non-fatal: an administrator can finish provisioning from /admin.
+    }
+  }
 
   let requiresEmailConfirmation = Boolean(data.user && !data.session);
   if (requiresEmailConfirmation && data.user) {

@@ -40,6 +40,8 @@ const MIGRATIONS = [
   "supabase/migrations/20260820000005_agent_reports_rls_and_race.sql",
   "supabase/migrations/20260820000006_list_pages_scale.sql",
   "supabase/migrations/20260820000007_polling_agent_assignment.sql",
+  "supabase/migrations/20260821000000_party_workspace_isolation.sql",
+  "supabase/migrations/20260822000000_agent_device_tokens.sql",
   "supabase/migrations/20260822000001_pu_status_voting_finished.sql",
   "supabase/migrations/20260822000002_tenant_invites.sql",
   "supabase/migrations/20260823000001_hq_invite_handle_new_user.sql",
@@ -53,6 +55,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260904000000_zero_situation_room_data.sql",
   "supabase/migrations/20260904120000_purge_non_edo_sample_data.sql",
   "supabase/migrations/20260904130000_strict_edo_campaign_polling_unit.sql",
+  "supabase/migrations/20260905000000_secure_signup_role_assignment.sql",
 ];
 
 loadEnvLocal();

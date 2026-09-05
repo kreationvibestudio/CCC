@@ -33,16 +33,27 @@ export interface AuthUser {
   supportAccess: SupportAccess | null;
 }
 
-async function ensurePlatformOperatorRow(userId: string, email: string) {
-  const allowed = platformOperatorEmails();
-  if (!allowed.includes(email.toLowerCase())) return false;
+/**
+ * Claim the first platform operator seat from PLATFORM_OPERATOR_EMAILS.
+ *
+ * Support sessions FK onto platform_operators, so an allowlisted operator needs
+ * a real row. This only writes one while the table is still empty: after that,
+ * seats are granted explicitly with addPlatformOperator(), so a leaked or
+ * mistyped allowlist entry cannot silently mint console access on an instance
+ * that already has operators.
+ */
+async function claimBootstrapOperatorSeat(userId: string, email: string) {
   try {
     const admin = createServiceClient();
-    await admin.from("platform_operators").upsert(
+    const { count } = await admin
+      .from("platform_operators")
+      .select("user_id", { count: "exact", head: true });
+    if ((count ?? 0) > 0) return false;
+    const { error } = await admin.from("platform_operators").upsert(
       { user_id: userId, email: email.toLowerCase() },
       { onConflict: "user_id" }
     );
-    return true;
+    return !error;
   } catch {
     return false;
   }
@@ -60,9 +71,8 @@ export async function isPlatformOperatorUser(
     .eq("user_id", userId)
     .maybeSingle();
   if (data) return true;
-  const allowlisted = platformOperatorEmails().includes(email.toLowerCase());
-  if (!allowlisted) return false;
-  await ensurePlatformOperatorRow(userId, email);
+  if (!platformOperatorEmails().includes(email.toLowerCase())) return false;
+  await claimBootstrapOperatorSeat(userId, email);
   return true;
 }
 

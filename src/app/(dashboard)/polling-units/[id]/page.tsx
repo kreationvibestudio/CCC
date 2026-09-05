@@ -15,7 +15,7 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
   const pu = await getPollingUnit(id);
   if (!pu) redirect("/polling-units");
 
-  const team = await getTeamForAssignment(pu.tenant_id as string);
+  const team = await getTeamForAssignment();
 
   async function saveAction(formData: FormData) {
     "use server";

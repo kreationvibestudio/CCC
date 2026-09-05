@@ -2,11 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth/session";
+import { authorize } from "@/lib/auth/session";
+import { fetchAllRows } from "@/lib/supabase/paginate";
+import type { Volunteer } from "@/types/database";
 
 export async function createVolunteer(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("volunteers.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const supabase = await createClient();
   const skills = (formData.get("skills") as string)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
   const { error } = await supabase.from("volunteers").insert({
@@ -25,23 +28,36 @@ export async function createVolunteer(formData: FormData) {
   return { success: true };
 }
 
-export async function getVolunteers(tenantId: string) {
+/** Tenant comes from the session, never from a caller-supplied argument. */
+export async function getVolunteers() {
+  const gate = await authorize("volunteers.view");
+  if (!gate.ok) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("volunteers").select("*").eq("tenant_id", tenantId).order("full_name");
-  return data ?? [];
+  return fetchAllRows<Volunteer>(
+    (from, to) =>
+      supabase
+        .from("volunteers")
+        .select("*")
+        .eq("tenant_id", gate.user.profile.tenant_id)
+        .order("full_name")
+        .range(from, to),
+    { max: 10000 }
+  );
 }
 
 export async function getVolunteer(id: string) {
-  const user = await getCurrentUser();
-  if (!user) return null;
+  const gate = await authorize("volunteers.view");
+  if (!gate.ok) return null;
+  const user = gate.user;
   const supabase = await createClient();
   const { data } = await supabase.from("volunteers").select("*").eq("id", id).eq("tenant_id", user.profile.tenant_id).single();
   return data;
 }
 
 export async function updateVolunteer(id: string, formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("volunteers.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const supabase = await createClient();
   const skills = (formData.get("skills") as string)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
   const { error } = await supabase.from("volunteers").update({
@@ -61,8 +77,9 @@ export async function updateVolunteer(id: string, formData: FormData) {
 }
 
 export async function deleteVolunteer(id: string) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("volunteers.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const supabase = await createClient();
   const { error } = await supabase.from("volunteers").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
@@ -71,8 +88,9 @@ export async function deleteVolunteer(id: string) {
 }
 
 export async function assignVolunteerTask(volunteerId: string, formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("volunteers.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const supabase = await createClient();
   const { data: volunteer } = await supabase
     .from("volunteers")
@@ -95,7 +113,14 @@ export async function assignVolunteerTask(volunteerId: string, formData: FormDat
 }
 
 export async function getVolunteerTasks(volunteerId: string) {
+  const gate = await authorize("volunteers.view");
+  if (!gate.ok) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("volunteer_tasks").select("*").eq("volunteer_id", volunteerId).order("created_at", { ascending: false });
+  const { data } = await supabase
+    .from("volunteer_tasks")
+    .select("*")
+    .eq("volunteer_id", volunteerId)
+    .eq("tenant_id", gate.user.profile.tenant_id)
+    .order("created_at", { ascending: false });
   return data ?? [];
 }

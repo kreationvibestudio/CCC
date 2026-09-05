@@ -2,12 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth/session";
+import { authorize } from "@/lib/auth/session";
+import { fetchAllRows } from "@/lib/supabase/paginate";
+import type { CampaignEvent } from "@/types/database";
 import { assertEventInTenant } from "@/lib/tenancy";
 
 export async function createEvent(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("events.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const supabase = await createClient();
   const qrCode = `evt-${crypto.randomUUID().slice(0, 8)}`;
   const { error } = await supabase.from("campaign_events").insert({
@@ -29,15 +32,27 @@ export async function createEvent(formData: FormData) {
   return { success: true };
 }
 
-export async function getEvents(tenantId: string) {
+/** Tenant comes from the session, never from a caller-supplied argument. */
+export async function getEvents() {
+  const gate = await authorize("events.view");
+  if (!gate.ok) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("campaign_events").select("*").eq("tenant_id", tenantId).order("starts_at", { ascending: false });
-  return data ?? [];
+  return fetchAllRows<CampaignEvent>(
+    (from, to) =>
+      supabase
+        .from("campaign_events")
+        .select("*")
+        .eq("tenant_id", gate.user.profile.tenant_id)
+        .order("starts_at", { ascending: false })
+        .range(from, to),
+    { max: 5000 }
+  );
 }
 
 export async function getEvent(id: string) {
-  const user = await getCurrentUser();
-  if (!user) return null;
+  const gate = await authorize("events.view");
+  if (!gate.ok) return null;
+  const user = gate.user;
   const supabase = await createClient();
   const { data } = await supabase.from("campaign_events").select("*").eq("id", id).eq("tenant_id", user.profile.tenant_id).single();
   return data;
@@ -56,8 +71,9 @@ export async function getEventPublic(id: string) {
 }
 
 export async function updateEvent(id: string, formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("events.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const supabase = await createClient();
   const { error } = await supabase.from("campaign_events").update({
     title: formData.get("title"),
@@ -77,8 +93,9 @@ export async function updateEvent(id: string, formData: FormData) {
 }
 
 export async function deleteEvent(id: string) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("events.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const supabase = await createClient();
   const { error } = await supabase.from("campaign_events").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
@@ -113,8 +130,9 @@ export async function checkInAttendee(eventId: string, formData: FormData) {
 }
 
 export async function getEventAttendees(eventId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const gate = await authorize("events.view");
+  if (!gate.ok) return [];
+  const user = gate.user;
   const eventError = await assertEventInTenant(user.profile.tenant_id, eventId);
   if (eventError) return [];
   const supabase = await createClient();

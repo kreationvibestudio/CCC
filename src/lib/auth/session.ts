@@ -3,7 +3,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { UserRole, Permission } from "@/types/auth";
-import { hasPermission, ROLE_PERMISSIONS } from "@/types/auth";
+import { hasPermission, hasAnyPermission, ROLE_PERMISSIONS } from "@/types/auth";
 import type { Profile } from "@/types/database";
 import { platformOperatorEmails } from "@/lib/tenancy";
 import { parseBearer } from "@/lib/auth/bearer";
@@ -213,6 +213,30 @@ export async function requirePermission(permission: Permission): Promise<AuthUse
   const user = await requireAuth();
   if (!hasPermission(user.role, permission)) throw new Error("Forbidden");
   return user;
+}
+
+export const FORBIDDEN_MESSAGE = "Your role does not allow that action";
+
+export type ActionGate = { ok: true; user: AuthUser } | { ok: false; error: string };
+
+/**
+ * Permission gate for Server Actions.
+ *
+ * Hiding a nav item in the dashboard layout is not an authorization boundary:
+ * every `"use server"` export is directly invocable by any signed-in user, so
+ * mutating actions must check permissions themselves. Returns `{ error }`
+ * rather than throwing so callers keep surfacing friendly messages.
+ *
+ * Passing several permissions means "any of", matching how a capability can be
+ * reached by more than one role.
+ */
+export async function authorize(...permissions: Permission[]): Promise<ActionGate> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Unauthorized" };
+  if (permissions.length > 0 && !hasAnyPermission(user.role, permissions)) {
+    return { ok: false, error: FORBIDDEN_MESSAGE };
+  }
+  return { ok: true, user };
 }
 
 export async function requirePlatformOperator(): Promise<{ id: string; email: string }> {

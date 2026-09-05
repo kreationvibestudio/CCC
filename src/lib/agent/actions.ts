@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { getCurrentUser } from "@/lib/auth/session";
+import { authorize } from "@/lib/auth/session";
 import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
 import { parsePollingUnitStatus } from "@/lib/agent/pu-status";
 import { haversineMeters } from "@/lib/agent/geo";
@@ -11,6 +11,18 @@ import { assertPollingUnitInTenant } from "@/lib/tenancy";
 import { formatPollingUnitCode, parsePollingUnitCode } from "@/lib/polling-units/code";
 import { pollingUnitSearchOrFilter, rankPollingUnitMatches, sanitizePuLookupQuery } from "@/lib/polling-units/lookup";
 import { applyCampaignStateFilter, isCampaignPollingUnit, isCampaignState } from "@/lib/polling-units/scope";
+
+/**
+ * Field-agent capability gate.
+ *
+ * The mobile API enforces this in requireAgentApi(), but these Server Actions
+ * back the web /agent portal and were previously reachable by any signed-in
+ * user -- including submitting election results. Supervisors are allowed
+ * because they file results for unstaffed units.
+ */
+async function authorizeFieldWork() {
+  return authorize("agent.portal", "election_results.submit");
+}
 
 /** User session for auth; service role for writes so missing INSERT policies cannot block agents. */
 async function agentDb() {
@@ -65,8 +77,9 @@ function parseReportMedia(formData: FormData): ReportMediaItem[] {
 }
 
 export async function submitAgentReport(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorizeFieldWork();
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const content = String(formData.get("content") ?? "").trim();
   const reportType = String(formData.get("report_type") ?? "").trim();
   if (!content || !reportType) return { error: "Report type and details are required" };
@@ -100,8 +113,9 @@ export async function submitAgentReport(formData: FormData) {
 }
 
 export async function reportIncident(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorizeFieldWork();
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const puId = (formData.get("polling_unit_id") as string) || null;
   const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
   if (puError) return { error: puError };
@@ -135,8 +149,9 @@ export async function reportIncident(formData: FormData) {
 }
 
 export async function updatePuStatus(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorizeFieldWork();
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const supabase = await agentDb();
   const puId = String(formData.get("polling_unit_id") ?? "").trim();
   if (!puId) return { error: "Select a polling unit" };
@@ -159,8 +174,9 @@ export async function updatePuStatus(formData: FormData) {
 }
 
 export async function submitElectionResult(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorizeFieldWork();
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const puId = String(formData.get("polling_unit_id") ?? "").trim();
   if (!puId) return { error: "Select a polling unit" };
   const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
@@ -230,8 +246,9 @@ function sanitizePuQuery(raw: string) {
 }
 
 export async function findNearestPollingUnits(lat: number, lng: number): Promise<AgentPollingUnit[]> {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const gate = await authorizeFieldWork();
+  if (!gate.ok) return [];
+  const user = gate.user;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
 
   const supabase = await createClient();
@@ -284,8 +301,9 @@ export async function findNearestPollingUnits(lat: number, lng: number): Promise
 }
 
 export async function searchPollingUnitsByCode(query: string): Promise<AgentPollingUnit[]> {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const gate = await authorizeFieldWork();
+  if (!gate.ok) return [];
+  const user = gate.user;
   const q = sanitizePuQuery(query);
   if (q.length < 2) return [];
   const parsed = parsePollingUnitCode(q);
@@ -303,13 +321,16 @@ export async function searchPollingUnitsByCode(query: string): Promise<AgentPoll
     .slice(0, 25);
 }
 
-export async function getAssignedPollingUnits(userId: string, tenantId: string): Promise<AgentPollingUnit[]> {
+/** Assignments for the signed-in agent. Both ids come from the session. */
+export async function getAssignedPollingUnits(): Promise<AgentPollingUnit[]> {
+  const gate = await authorizeFieldWork();
+  if (!gate.ok) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("polling_units")
     .select(AGENT_PU_COLS)
-    .eq("tenant_id", tenantId)
-    .eq("assigned_agent_id", userId)
+    .eq("tenant_id", gate.user.profile.tenant_id)
+    .eq("assigned_agent_id", gate.user.id)
     .order("code")
     .limit(40);
   return ((data ?? []) as AgentPollingUnit[])

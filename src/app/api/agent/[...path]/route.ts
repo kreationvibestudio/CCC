@@ -69,7 +69,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
   }
 
   if (key === "assigned-pus") {
-    const units = await getAssignedPollingUnits(agent.id, agent.profile.tenant_id);
+    const units = await getAssignedPollingUnits();
     return cors(jsonOk({ units }));
   }
 

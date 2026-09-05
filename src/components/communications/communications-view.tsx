@@ -151,6 +151,12 @@ function SendCampaignDialog({
       toast.success(
         `Sent ${data.sent} SMS${data.failed ? ` (${data.failed} failed)` : ""}`
       );
+      if (data.capped) {
+        toast.warning(
+          `Audience was larger than the ${data.cap} recipient limit. Narrow the filters and send again to reach the rest.`,
+          { duration: 12000 }
+        );
+      }
       setOpen(false);
       router.refresh();
     } catch {

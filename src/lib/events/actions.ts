@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { authorize } from "@/lib/auth/session";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import type { CampaignEvent } from "@/types/database";
@@ -107,6 +109,12 @@ export async function checkInAttendee(eventId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   if (!name || !phone) return { error: "Name and phone are required" };
+
+  // Public QR endpoint writing with the service role: bound it per source.
+  const verdict = await checkRateLimit("eventCheckIn", `${eventId}:${clientIp(await headers())}`);
+  if (!verdict.allowed) {
+    return { error: "Too many check-ins from this connection. Try again shortly." };
+  }
 
   const { createServiceClient } = await import("@/lib/supabase/admin");
   const supabase = createServiceClient();

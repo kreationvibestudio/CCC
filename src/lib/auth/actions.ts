@@ -9,6 +9,8 @@ import { getInviteByToken } from "@/lib/invites";
 import { platformOperatorEmails } from "@/lib/tenancy";
 import { isEnvFlagEnabled } from "@/lib/env-flags";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export async function signIn(email: string, password: string) {
   const supabase = await createClient();
@@ -107,6 +109,11 @@ export async function signUp(
   if (!name || name.length < 2) return { error: "Full name is required" };
   if (!password || password.length < 8) {
     return { error: "Password must be at least 8 characters" };
+  }
+
+  const signupVerdict = await checkRateLimit("publicSignup", clientIp(await headers()));
+  if (!signupVerdict.allowed) {
+    return { error: "Too many sign-up attempts from this connection. Try again later." };
   }
 
   const bootstrap = await isFirstCampaignUser();

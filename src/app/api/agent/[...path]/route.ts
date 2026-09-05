@@ -10,6 +10,7 @@ import {
   updatePuStatus,
 } from "@/lib/agent/actions";
 import { loginWithAgentCode } from "@/lib/agent/code-login";
+import { clientIp } from "@/lib/rate-limit";
 import { jsonToFormData } from "@/lib/agent/form-data";
 import { isResponse, jsonError, jsonOk, requireAgentApi } from "@/lib/agent/http";
 import { nudgeAgent, uploadAgentMedia, upsertPushToken } from "@/lib/agent/media";
@@ -19,15 +20,36 @@ import type { AuthUser } from "@/lib/auth/session";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function cors(response: NextResponse) {
-  response.headers.set("Access-Control-Allow-Origin", "*");
+/**
+ * Reflect an allowed browser origin instead of `*`.
+ *
+ * The Expo agent app is not a browser and sends no Origin, so it is unaffected.
+ * Requests with an unknown Origin get no CORS header and the browser blocks the
+ * response. Extra web origins can be added with AGENT_API_ALLOWED_ORIGINS.
+ */
+function allowedOrigins() {
+  const configured = (process.env.AGENT_API_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  const self = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
+  if (self) configured.push(self);
+  return configured;
+}
+
+function cors(response: NextResponse, origin?: string | null) {
+  const requested = origin?.trim().replace(/\/$/, "");
+  if (requested && allowedOrigins().includes(requested)) {
+    response.headers.set("Access-Control-Allow-Origin", requested);
+    response.headers.set("Vary", "Origin");
+  }
   response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   return response;
 }
 
-export async function OPTIONS() {
-  return cors(new NextResponse(null, { status: 204 }));
+export async function OPTIONS(request: NextRequest) {
+  return cors(new NextResponse(null, { status: 204 }), request.headers.get("origin"));
 }
 
 function pathKey(params: { path?: string[] }) {
@@ -61,37 +83,39 @@ async function readJson(request: NextRequest): Promise<Record<string, unknown>> 
 export async function GET(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const key = pathKey({ path });
+  const reply = (response: NextResponse) => cors(response, request.headers.get("origin"));
   const agent = await requireAgentApi();
-  if (isResponse(agent)) return cors(agent);
+  if (isResponse(agent)) return reply(agent);
 
   if (key === "session") {
-    return cors(jsonOk(sessionBody(agent)));
+    return reply(jsonOk(sessionBody(agent)));
   }
 
   if (key === "assigned-pus") {
     const units = await getAssignedPollingUnits();
-    return cors(jsonOk({ units }));
+    return reply(jsonOk({ units }));
   }
 
   if (key === "nearest-pus") {
     const lat = Number(request.nextUrl.searchParams.get("lat"));
     const lng = Number(request.nextUrl.searchParams.get("lng"));
     const units = await findNearestPollingUnits(lat, lng);
-    return cors(jsonOk({ units }));
+    return reply(jsonOk({ units }));
   }
 
   if (key === "search-pus") {
     const q = request.nextUrl.searchParams.get("q") ?? "";
     const units = await searchPollingUnitsByCode(q);
-    return cors(jsonOk({ units }));
+    return reply(jsonOk({ units }));
   }
 
-  return cors(jsonError(404, "Unknown agent endpoint"));
+  return reply(jsonError(404, "Unknown agent endpoint"));
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const key = pathKey({ path });
+  const reply = (response: NextResponse) => cors(response, request.headers.get("origin"));
 
   if (key === "code-login") {
     const body = await readJson(request);
@@ -109,19 +133,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       code: String(body.code ?? ""),
       latitude,
       longitude,
+      clientIp: clientIp(request.headers),
     });
-    if (result.error) return cors(jsonError(400, result.error));
-    return cors(jsonOk(result));
+    if (result.error) return reply(jsonError(400, result.error));
+    return reply(jsonOk(result));
   }
 
   if (key === "session") {
     const agent = await requireAgentApi();
-    if (isResponse(agent)) return cors(agent);
-    return cors(jsonOk(sessionBody(agent)));
+    if (isResponse(agent)) return reply(agent);
+    return reply(jsonOk(sessionBody(agent)));
   }
 
   const agent = await requireAgentApi();
-  if (isResponse(agent)) return cors(agent);
+  if (isResponse(agent)) return reply(agent);
 
   if (key === "media") {
     const form = await request.formData();
@@ -129,10 +154,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const kindRaw = String(form.get("kind") ?? "incident");
     const kind: "result_sheet" | "incident" | "report" =
       kindRaw === "result_sheet" ? "result_sheet" : kindRaw === "report" ? "report" : "incident";
-    if (!(file instanceof File)) return cors(jsonError(400, "file is required"));
+    if (!(file instanceof File)) return reply(jsonError(400, "file is required"));
     const result = await uploadAgentMedia(agent, file, kind);
-    if ("error" in result && result.error) return cors(jsonError(400, result.error));
-    return cors(jsonOk(result));
+    if ("error" in result && result.error) return reply(jsonError(400, result.error));
+    return reply(jsonOk(result));
   }
 
   if (key === "push-token") {
@@ -142,8 +167,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       String(body.token ?? ""),
       String(body.platform ?? "android")
     );
-    if ("error" in result && result.error) return cors(jsonError(400, result.error));
-    return cors(jsonOk(result));
+    if ("error" in result && result.error) return reply(jsonError(400, result.error));
+    return reply(jsonOk(result));
   }
 
   if (key === "nudge") {
@@ -152,12 +177,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       !hasPermission(agent.role, "polling_units.manage") &&
       !hasPermission(agent.role, "admin.users")
     ) {
-      return cors(jsonError(403, "Forbidden"));
+      return reply(jsonError(403, "Forbidden"));
     }
     const body = await readJson(request);
     const result = await nudgeAgent(agent, String(body.user_id ?? ""), String(body.message ?? ""));
-    if ("error" in result && result.error) return cors(jsonError(400, result.error));
-    return cors(jsonOk(result));
+    if ("error" in result && result.error) return reply(jsonError(400, result.error));
+    return reply(jsonOk(result));
   }
 
   const body = await readJson(request);
@@ -165,24 +190,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
   if (key === "status") {
     const result = await updatePuStatus(fd);
-    if (result.error) return cors(jsonError(400, result.error));
-    return cors(jsonOk(result));
+    if (result.error) return reply(jsonError(400, result.error));
+    return reply(jsonOk(result));
   }
   if (key === "reports") {
     const result = await submitAgentReport(fd);
-    if (result.error) return cors(jsonError(400, result.error));
-    return cors(jsonOk(result));
+    if (result.error) return reply(jsonError(400, result.error));
+    return reply(jsonOk(result));
   }
   if (key === "results") {
     const result = await submitElectionResult(fd);
-    if (result.error) return cors(jsonError(400, result.error));
-    return cors(jsonOk(result));
+    if (result.error) return reply(jsonError(400, result.error));
+    return reply(jsonOk(result));
   }
   if (key === "incidents") {
     const result = await reportIncident(fd);
-    if (result.error) return cors(jsonError(400, result.error));
-    return cors(jsonOk(result));
+    if (result.error) return reply(jsonError(400, result.error));
+    return reply(jsonOk(result));
   }
 
-  return cors(jsonError(404, "Unknown agent endpoint"));
+  return reply(jsonError(404, "Unknown agent endpoint"));
 }

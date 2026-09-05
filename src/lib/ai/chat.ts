@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/session";
 import { openAiChatCompletion } from "@/lib/ai/openai";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const MAX_MESSAGE_CHARS = 4000;
 
@@ -16,6 +17,11 @@ export async function sendAiMessage(message: string): Promise<{ reply: string; e
   if (!prompt) return { reply: "", error: "Ask a question first" };
   if (prompt.length > MAX_MESSAGE_CHARS) {
     return { reply: "", error: `Keep questions under ${MAX_MESSAGE_CHARS} characters` };
+  }
+
+  const verdict = await checkRateLimit("aiChat", user.id);
+  if (!verdict.allowed) {
+    return { reply: "", error: "You have reached the assistant limit for now. Try again later." };
   }
 
   const supabase = await createClient();

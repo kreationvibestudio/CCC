@@ -56,6 +56,8 @@ const MIGRATIONS = [
   "supabase/migrations/20260904120000_purge_non_edo_sample_data.sql",
   "supabase/migrations/20260904130000_strict_edo_campaign_polling_unit.sql",
   "supabase/migrations/20260905000000_secure_signup_role_assignment.sql",
+  "supabase/migrations/20260905010000_rate_limits.sql",
+  "supabase/migrations/20260905020000_agent_code_expiry.sql",
 ];
 
 loadEnvLocal();

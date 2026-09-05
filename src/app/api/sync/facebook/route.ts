@@ -14,7 +14,9 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (!user.permissions.includes("social.manage") && !user.permissions.includes("social.view")) {
+    // POST writes synced posts and comments, so it needs manage. GET below
+    // stays on social.view for the read-only status panel.
+    if (!user.permissions.includes("social.manage")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

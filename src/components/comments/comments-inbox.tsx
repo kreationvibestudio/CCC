@@ -106,7 +106,10 @@ export function CommentsInbox({
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Unified Comment Management" description="Reply, assign, and monitor all platform comments">
+      <PageHeader
+        title="Unified Comment Management"
+        description={canWrite ? "Reply, assign, and monitor all platform comments" : "View and monitor all platform comments"}
+      >
         {canWrite ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => handleAction("classify-all", "")} disabled={!!loading}>

@@ -12,14 +12,9 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { AgentAuthError, agentApi } from "./api";
+import { formatCodeInput, isAgentCodeShape } from "./access-code";
 import { saveSession, signIn, signOut } from "./session";
 import { colors } from "./theme";
-
-function formatCodeInput(raw: string) {
-  const compact = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
-  if (compact.length <= 4) return compact;
-  return `${compact.slice(0, 4)}-${compact.slice(4)}`;
-}
 
 export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [code, setCode] = useState("");
@@ -29,7 +24,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function readGpsOptional(): Promise<{ latitude: number; longitude: number } | null> {
+  async function readGps(): Promise<{ latitude: number; longitude: number } | null> {
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== "granted") return null;
@@ -43,13 +38,13 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
 
   async function submitCode() {
     setError("");
-    if (code.replace(/[^A-Z0-9]/gi, "").length !== 8) {
-      setError("Enter the 8-character code HQ gave you");
+    if (!isAgentCodeShape(code)) {
+      setError("Enter the agent code HQ gave you");
       return;
     }
     setLoading(true);
     try {
-      const gps = await readGpsOptional();
+      const gps = await readGps();
       const result = await agentApi.codeLogin(
         code,
         gps?.latitude ?? null,
@@ -96,7 +91,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
         <Image source={require("../assets/icon.png")} style={styles.logo} accessibilityLabel="Campaign Command Center" />
         <Text style={styles.title}>CCC Agent</Text>
         <Text style={styles.sub}>
-          Enter the 8-character code HQ gave you for your polling unit. Location is checked when available — you can still sign in if GPS is off.
+          Enter the code HQ gave you for your polling unit. Turn on location so we can confirm you are at that unit.
         </Text>
         {!emailMode ? (
           <>
@@ -105,7 +100,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
               autoCapitalize="characters"
               autoCorrect={false}
               autoComplete="off"
-              placeholder="XXXX-XXXX"
+              placeholder="XXXXX-XXXXX"
               placeholderTextColor={colors.muted}
               value={code}
               onChangeText={(value) => setCode(formatCodeInput(value))}

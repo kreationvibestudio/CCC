@@ -25,6 +25,19 @@ export function formatAgentCode(normalized: string) {
 }
 
 /**
+ * Format as the user types. A finished 8-character code stays XXXX-XXXX;
+ * anything else uses the new XXXXX-XXXXX grouping.
+ */
+export function formatAgentCodeInput(raw: string) {
+  const compact = normalizeAgentCode(raw).slice(0, AGENT_CODE_LENGTH);
+  if (compact.length <= 5) return compact;
+  if (compact.length === LEGACY_AGENT_CODE_LENGTH) {
+    return `${compact.slice(0, 4)}-${compact.slice(4)}`;
+  }
+  return `${compact.slice(0, 5)}-${compact.slice(5)}`;
+}
+
+/**
  * Draw `length` characters uniformly from ALPHABET.
  *
  * `bytes[i] % 30` is biased: 256 is not a multiple of 30, so the first 16

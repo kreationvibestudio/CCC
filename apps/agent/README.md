@@ -4,7 +4,7 @@ Expo (React Native) field app for polling agents. HQ stays on the web. This app 
 
 ## What it does
 
-- Sign in with the HQ-issued 8-character agent code while GPS-confirmed at the assigned polling unit (email/password remains as a fallback)
+- Sign in with the HQ-issued agent code (10 characters; older 8-character codes still work) while GPS-confirmed at the assigned polling unit (email/password remains as a fallback)
 - Bottom tabs: Unit, Status, Report, Results, Incident
 - Assigned PU shortcuts, GPS nearest (bounded), PU-code search
 - Status, field report, result votes (featured + other INEC parties), incident

@@ -6,6 +6,7 @@ import {
   AGENT_CODE_LENGTH,
   AGENT_CODE_TTL_DAYS,
   formatAgentCode,
+  formatAgentCodeInput,
   generateAgentCode,
   hashAgentCode,
   isAgentCodeExpired,
@@ -56,6 +57,13 @@ describe("agent access codes", () => {
   it("keeps accepting the 8-character codes issued before the change", () => {
     assert.equal(isAgentCodeShape("K7M2-P9QX"), true);
     assert.equal(formatAgentCode("K7M2P9QX"), "K7M2-P9QX");
+  });
+
+  it("formats typed input for both 8- and 10-character codes", () => {
+    assert.equal(formatAgentCodeInput("k7m2"), "K7M2");
+    assert.equal(formatAgentCodeInput("k7m2p9qx"), "K7M2-P9QX");
+    assert.equal(formatAgentCodeInput("abcde"), "ABCDE");
+    assert.equal(formatAgentCodeInput("abcdefghij"), "ABCDE-FGHIJ");
   });
 
   it("excludes characters that are misread aloud", () => {

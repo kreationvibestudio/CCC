@@ -83,7 +83,7 @@ You ran `eas login` in the **cloud** terminal, and the browser ran on **your lap
 
 ## Install the APK
 
-Download the `.apk` from the build URL (or expo.dev → CCC Agent → Builds). Sideload on Android. Agents sign in with the **HQ-issued 8-character code** at their polling unit (GPS is checked). Email/password is only a fallback. Do not put HQ Super Admin emails in the app.
+Download the `.apk` from the build URL (or expo.dev → CCC Agent → Builds). Sideload on Android. Agents sign in with the **HQ-issued agent code** (10 characters; older 8-character codes still work) at their polling unit (GPS is checked). Email/password is only a fallback. Do not put HQ Super Admin emails in the app.
 
 The APK talks to **production** `https://ccc-three-kappa.vercel.app`. That deploy must include `POST /api/agent/code-login` (this branch) and the `agent_access_codes` SQL. If code sign-in shows **405**, production is still the old HQ. Deploy this branch to Vercel, then try again — no extra APK for that API fix, but you **do** need this APK for the new login screen.
 

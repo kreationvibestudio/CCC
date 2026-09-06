@@ -11,6 +11,7 @@ import { createInvitedAuthUser } from "@/lib/invites";
 import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
 import { openAiConfigured } from "@/lib/ai/openai";
+import { getTermiiAccount, termiiSenderIdConfigured } from "@/lib/integrations/termii/client";
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[];
 const KEEP_ROLES = new Set<string>([
@@ -311,7 +312,7 @@ export async function getSecretsStatus() {
     appUrl: isLiveSecret(appUrl),
     appUrlProduction: isLiveSecret(appUrl) && !/localhost|127\.0\.0\.1/.test(appUrl),
     termiiApiKey: isLiveSecret(process.env.TERMII_API_KEY),
-    termiiSenderId: isLiveSecret(process.env.TERMII_SENDER_ID),
+    termiiSenderId: termiiSenderIdConfigured(),
     facebookPageId: isLiveSecret(process.env.FACEBOOK_PAGE_ID, 5),
     facebookUserToken: isLiveSecret(process.env.FACEBOOK_USER_ACCESS_TOKEN, 40),
     facebookPageToken: isLiveSecret(process.env.FACEBOOK_PAGE_ACCESS_TOKEN, 40),
@@ -321,6 +322,21 @@ export async function getSecretsStatus() {
     mapboxToken: isLiveSecret(process.env.NEXT_PUBLIC_MAPBOX_TOKEN, 20),
     cronSecret: isLiveSecret(process.env.CRON_SECRET, 16),
     paystackSecret: isLiveSecret(process.env.PAYSTACK_SECRET_KEY, 20),
+  };
+}
+
+/** Live Termii wallet check — no SMS is sent. */
+export async function testTermiiConnection(): Promise<{
+  ok: boolean;
+  error?: string;
+  hasCredit?: boolean;
+}> {
+  await requirePermission("admin.users");
+  const account = await getTermiiAccount();
+  if (!account.ok) return { ok: false, error: account.error };
+  return {
+    ok: true,
+    hasCredit: account.balance == null ? undefined : account.balance > 0,
   };
 }
 

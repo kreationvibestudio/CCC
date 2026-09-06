@@ -20,9 +20,38 @@ import {
   updateCampaignDates,
   getCampaignDatesMigrationSql,
   deleteTeamMembers,
+  testTermiiConnection,
 } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
+
+function TestTermiiButton() {
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          const result = await testTermiiConnection();
+          if (!result.ok) {
+            toast.error(result.error ?? "Termii check failed", { duration: 10000 });
+            return;
+          }
+          toast.success(
+            result.hasCredit === false
+              ? "Termii accepted the API key, but the wallet has no credit."
+              : "Termii accepted the API key and sender ID."
+          );
+        })
+      }
+    >
+      {pending ? "Checking Termii…" : "Test Termii"}
+    </Button>
+  );
+}
 
 function toDateInputValue(iso: string | null): string {
   if (!iso) return "";
@@ -719,10 +748,14 @@ export function AdminView({
               </div>
             );
           })}
-          <p className="sm:col-span-2 text-xs text-muted-foreground">
-            Values are never shown here. Set missing keys in `.env.local`, then
-            `npm run secrets:backup` + Vercel/GitHub. See docs/SECRETS.md and docs/TERMII-SETUP.md.
-          </p>
+          <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+            <TestTermiiButton />
+            <p className="text-xs text-muted-foreground">
+              Values are never shown here. Set missing keys in `.env.local`, then
+              `npm run secrets:backup` + Vercel/GitHub. See docs/SECRETS.md and docs/TERMII-SETUP.md.
+              Sender IDs must be 3–11 letters or numbers with no spaces (`HoR2027`, not `HoR 2027`).
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

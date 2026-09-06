@@ -22,3 +22,24 @@ describe("Field Agent role", () => {
     assert.equal(homePathForRole("super_administrator"), "/dashboard");
   });
 });
+
+describe("PU agent code issuance", () => {
+  it("lets HQ campaign leads open PU Agents and issue codes", () => {
+    for (const role of [
+      "super_administrator",
+      "candidate",
+      "campaign_director",
+      "director_general",
+      "polling_unit_supervisor",
+    ] as const) {
+      assert.equal(hasPermission(role, "polling_units.manage"), true, role);
+    }
+  });
+
+  it("keeps view-only HQ roles off the issue-codes action", () => {
+    for (const role of ["ward_coordinator", "data_analyst"] as const) {
+      assert.equal(hasPermission(role, "polling_units.manage"), false, role);
+      assert.equal(hasPermission(role, "polling_units.view"), true, role);
+    }
+  });
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-shell";
@@ -580,8 +581,12 @@ export function AdminView({
                 ))}
               </NativeSelect>
               <p className="text-xs text-muted-foreground">
-                Field Agents only use the CCC Agent app. Create them under Polling units → PU Agents to
-                issue an agent code tied to a unit. GPS is checked at sign-in. Email is optional.
+                Field Agents only use the CCC Agent app. Open{" "}
+                <Link href="/polling-units/agents" className="font-medium text-primary hover:underline">
+                  PU Agents
+                </Link>{" "}
+                and click <span className="font-medium">Issue codes for pinned units</span> to create a
+                login code per mapped unit. GPS is checked at sign-in. Email is optional.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

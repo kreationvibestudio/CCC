@@ -75,7 +75,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   candidate: [
     "dashboard.view", "social.view", "comments.view", "ai.use", "sentiment.view",
-    "volunteers.view", "crm.view", "events.view", "polling_units.view", "maps.view",
+    "volunteers.view", "crm.view", "events.view", "polling_units.view", "polling_units.manage",
+    "maps.view",
     "situation_room.view", "analytics.view", "reports.view", "reports.generate",
   ],
   campaign_director: [
@@ -89,7 +90,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   director_general: [
     "dashboard.view", "social.view", "comments.view", "ai.use", "sentiment.view",
-    "volunteers.view", "crm.view", "events.view", "polling_units.view",
+    "volunteers.view", "crm.view", "events.view", "polling_units.view", "polling_units.manage",
     "maps.view", "situation_room.view", "analytics.view", "reports.view",
     "reports.generate",
   ],

@@ -384,7 +384,11 @@ export function AdminView({
     <div className="space-y-6">
       <PageHeader
         title="Administration"
-        description="Invite team members, assign roles, and check production secrets"
+        description={
+          canCreate
+            ? "Invite team members, assign roles, and check production secrets"
+            : "View the team, assign roles, and check production secrets"
+        }
       />
 
       <Card>

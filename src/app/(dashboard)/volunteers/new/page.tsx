@@ -6,8 +6,10 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createVolunteer } from "@/lib/volunteers/actions";
+import { requireCanCreateOrRedirect } from "@/lib/auth/session";
 
-export default function NewVolunteerPage() {
+export default async function NewVolunteerPage() {
+  await requireCanCreateOrRedirect("/volunteers");
   async function action(formData: FormData) {
     "use server";
     const result = await createVolunteer(formData);

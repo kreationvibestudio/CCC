@@ -6,7 +6,7 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { ROLE_LABELS, type UserRole } from "@/types/auth";
+import { denyCreateIfRestricted, denyDeleteIfRestricted, ROLE_LABELS, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
@@ -31,6 +31,8 @@ function tempPassword() {
 export async function inviteUser(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
+    const blocked = denyCreateIfRestricted(adminUser.role);
+    if (blocked) return { error: blocked };
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const fullName = String(formData.get("full_name") ?? "").trim() || email.split("@")[0];
     const roleRaw = String(formData.get("role") ?? "supporter");
@@ -226,6 +228,8 @@ async function clearProfileReferences(admin: ReturnType<typeof createServiceClie
 export async function deleteTeamMembers(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
+    const blocked = denyDeleteIfRestricted(adminUser.role);
+    if (blocked) return { error: blocked };
     const rawIds = formData.getAll("user_ids").map((v) => String(v).trim()).filter(Boolean);
     const uniqueIds = [...new Set(rawIds)];
     if (!uniqueIds.length) return { error: "Select at least one team member to delete" };

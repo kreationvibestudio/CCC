@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { denyDeleteIfRestricted } from "@/types/auth";
 
 const ALLOWED_TABLES = new Set([
   "polling_units",
@@ -21,6 +22,8 @@ function assertTable(table: string) {
 export async function deleteRecord(table: string, id: string, revalidate: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyDeleteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const invalid = assertTable(table);
   if (invalid) return { error: invalid };
   const supabase = await createClient();

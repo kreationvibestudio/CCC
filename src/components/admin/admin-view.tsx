@@ -23,6 +23,7 @@ import {
 } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 function toDateInputValue(iso: string | null): string {
   if (!iso) return "";
@@ -188,6 +189,7 @@ export function AdminView({
   currentUserId: string;
 }) {
   const router = useRouter();
+  const { canCreate, canDelete } = usePermissions();
   const [pending, startTransition] = useTransition();
   const [invitePassword, setInvitePassword] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -471,6 +473,8 @@ export function AdminView({
         </CardContent>
       </Card>
 
+      {canDelete ? (
+      <>
       <Card className="border-destructive/40">
         <CardHeader>
           <CardTitle>Edo-only data</CardTitle>
@@ -509,6 +513,8 @@ export function AdminView({
           </Button>
         </CardContent>
       </Card>
+      </>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
@@ -525,6 +531,7 @@ export function AdminView({
         </Card>
       </div>
 
+      {canCreate ? (
       <Card>
         <CardHeader>
           <CardTitle>Invite team member</CardTitle>
@@ -598,10 +605,12 @@ export function AdminView({
           </p>
         </CardContent>
       </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
           <CardTitle>Team members</CardTitle>
+          {canDelete ? (
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
@@ -623,6 +632,9 @@ export function AdminView({
               {pending ? "Deleting…" : `Delete${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
             </Button>
           </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Director General can change roles, not add or delete people.</p>
+          )}
         </CardHeader>
         <CardContent className="space-y-2">
           {profiles.length === 0 ? (
@@ -636,6 +648,7 @@ export function AdminView({
                   className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
                 >
                   <div className="flex min-w-0 items-start gap-3">
+                    {canDelete ? (
                     <input
                       type="checkbox"
                       className="mt-1 h-4 w-4 shrink-0 accent-primary"
@@ -645,6 +658,7 @@ export function AdminView({
                       onChange={(e) => toggleOne(p.id, e.target.checked)}
                       aria-label={`Select ${p.full_name}`}
                     />
+                    ) : null}
                     <div className="min-w-0">
                       <p className="font-medium">
                         {p.full_name}

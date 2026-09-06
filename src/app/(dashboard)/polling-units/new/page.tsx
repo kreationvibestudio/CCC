@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createPollingUnit } from "@/lib/polling-units/actions";
+import { requireCanCreateOrRedirect } from "@/lib/auth/session";
 
-export default function NewPollingUnitPage() {
+export default async function NewPollingUnitPage() {
+  await requireCanCreateOrRedirect("/polling-units");
   async function action(formData: FormData) {
     "use server";
     const result = await createPollingUnit(formData);

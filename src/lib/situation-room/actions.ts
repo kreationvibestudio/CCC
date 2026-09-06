@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission, logAudit } from "@/lib/auth/session";
+import { denyDeleteIfRestricted } from "@/types/auth";
 import { createServiceClient } from "@/lib/supabase/admin";
 
 export type SituationRoomResetResult = {
@@ -23,6 +24,8 @@ export type SituationRoomResetResult = {
 export async function resetSituationRoomData(): Promise<SituationRoomResetResult> {
   try {
     const user = await requirePermission("situation_room.manage");
+    const blocked = denyDeleteIfRestricted(user.role);
+    if (blocked) return { error: blocked };
     const admin = createServiceClient();
     const tenantId = user.profile.tenant_id;
 

@@ -3,7 +3,7 @@
 import { createContext, useContext, useMemo } from "react";
 import type { AuthUser } from "@/lib/auth/session";
 import type { Permission } from "@/types/auth";
-import { hasPermission } from "@/types/auth";
+import { canCreateRecords, canDeleteRecords, hasPermission } from "@/types/auth";
 
 const AuthContext = createContext<AuthUser | null>(null);
 
@@ -28,6 +28,8 @@ export function usePermissions() {
     () => ({
       can: (permission: Permission) =>
         user ? hasPermission(user.role, permission) : false,
+      canCreate: user ? canCreateRecords(user.role) : false,
+      canDelete: user ? canDeleteRecords(user.role) : false,
       role: user?.role,
       permissions: user?.permissions ?? [],
     }),

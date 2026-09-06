@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
+import { denyCreateIfRestricted } from "@/types/auth";
 import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
 import { parsePollingUnitStatus } from "@/lib/agent/pu-status";
 import { haversineMeters } from "@/lib/agent/geo";
@@ -67,6 +68,8 @@ function parseReportMedia(formData: FormData): ReportMediaItem[] {
 export async function submitAgentReport(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const content = String(formData.get("content") ?? "").trim();
   const reportType = String(formData.get("report_type") ?? "").trim();
   if (!content || !reportType) return { error: "Report type and details are required" };
@@ -102,6 +105,8 @@ export async function submitAgentReport(formData: FormData) {
 export async function reportIncident(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const puId = (formData.get("polling_unit_id") as string) || null;
   const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);
   if (puError) return { error: puError };
@@ -161,6 +166,8 @@ export async function updatePuStatus(formData: FormData) {
 export async function submitElectionResult(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const puId = String(formData.get("polling_unit_id") ?? "").trim();
   if (!puId) return { error: "Select a polling unit" };
   const puError = await assertPollingUnitInTenant(user.profile.tenant_id, puId);

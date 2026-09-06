@@ -9,9 +9,14 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getVolunteer, getVolunteerTasks, updateVolunteer, deleteVolunteer, assignVolunteerTask } from "@/lib/volunteers/actions";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canCreateRecords, canDeleteRecords } from "@/types/auth";
 
 export default async function VolunteerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
+  const canCreate = user ? canCreateRecords(user.role) : false;
+  const canDelete = user ? canDeleteRecords(user.role) : false;
   const volunteer = await getVolunteer(id);
   if (!volunteer) redirect("/volunteers");
   const tasks = await getVolunteerTasks(id);
@@ -66,13 +71,17 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
             <Badge variant="secondary">{t.status}</Badge>
           </div>
         ))}
+        {canCreate ? (
         <form action={taskAction} className="mt-4 space-y-2">
           <Input name="title" placeholder="New task title" required />
           <Input name="description" placeholder="Description" />
           <Button type="submit" size="sm">Assign task</Button>
         </form>
+        ) : null}
       </CardContent></Card>
+      {canDelete ? (
       <form action={deleteAction}><Button type="submit" variant="destructive" size="sm">Delete volunteer</Button></form>
+      ) : null}
     </div>
   );
 }

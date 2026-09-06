@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { denyCreateIfRestricted, denyDeleteIfRestricted } from "@/types/auth";
 
 export async function createVolunteer(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const skills = (formData.get("skills") as string)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
   const { error } = await supabase.from("volunteers").insert({
@@ -63,6 +66,8 @@ export async function updateVolunteer(id: string, formData: FormData) {
 export async function deleteVolunteer(id: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyDeleteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase.from("volunteers").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
@@ -73,6 +78,8 @@ export async function deleteVolunteer(id: string) {
 export async function assignVolunteerTask(volunteerId: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { data: volunteer } = await supabase
     .from("volunteers")

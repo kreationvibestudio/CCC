@@ -6,7 +6,7 @@ import { join } from "path";
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasPermission, type UserRole } from "@/types/auth";
+import { denyCreateIfRestricted, denyDeleteIfRestricted, hasPermission, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { issueAgentAccessCode } from "@/lib/agent/code-login";
 import { isMissingRelationError } from "@/lib/public-error";
@@ -242,6 +242,8 @@ export async function assignPollingAgent(input: {
   try {
     const auth = await requireStaff();
     if (!auth.user) return { error: "Unauthorized" };
+    const blocked = denyCreateIfRestricted(auth.user.role);
+    if (blocked) return { error: blocked };
 
     const emailInput = (input.email ?? "").trim().toLowerCase();
     const puCode = input.puCode.trim();
@@ -399,6 +401,8 @@ export async function resetAgentAccessCode(pollingUnitId: string): Promise<{ err
 export async function unassignPollingAgent(pollingUnitId: string) {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized" };
+  const blocked = denyDeleteIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked };
   const supabase = db();
   const tenantId = auth.user.profile.tenant_id;
   const { data: pu } = await supabase

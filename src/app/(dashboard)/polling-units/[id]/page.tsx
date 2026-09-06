@@ -9,9 +9,13 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getPollingUnit, updatePollingUnit, deletePollingUnit, getTeamForAssignment } from "@/lib/polling-units/actions";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canDeleteRecords } from "@/types/auth";
 
 export default async function PollingUnitDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
+  const canDelete = user ? canDeleteRecords(user.role) : false;
   const pu = await getPollingUnit(id);
   if (!pu) redirect("/polling-units");
 
@@ -80,11 +84,13 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
         </CardContent>
       </Card>
 
+      {canDelete ? (
       <form action={deleteAction} className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
         <p className="font-medium">Delete this polling unit?</p>
         <p className="mt-1 text-sm text-muted-foreground">This cannot be undone.</p>
         <Button type="submit" variant="destructive" size="sm" className="mt-3">Delete</Button>
       </form>
+      ) : null}
     </div>
   );
 }

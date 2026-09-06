@@ -20,6 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { MessageTemplate, MessageCampaign } from "@/types/database";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 const SUPPORT_LEVELS = ["strong", "leaning", "undecided", "opposed"] as const;
 
@@ -30,6 +31,7 @@ export function CommunicationsView({
   templates: MessageTemplate[];
   campaigns: MessageCampaign[];
 }) {
+  const { canCreate } = usePermissions();
   const smsTemplates = useMemo(
     () => templates.filter((t) => t.channel === "sms"),
     [templates]
@@ -41,6 +43,7 @@ export function CommunicationsView({
         title="Communications"
         description="Create SMS templates and send Termii broadcasts to CRM contacts"
       >
+        {canCreate ? (
         <div className="flex gap-2">
           <Button asChild>
             <Link href="/communications/new">New template</Link>
@@ -49,6 +52,7 @@ export function CommunicationsView({
             <Link href="/communications/campaigns/new">New campaign</Link>
           </Button>
         </div>
+        ) : null}
       </PageHeader>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

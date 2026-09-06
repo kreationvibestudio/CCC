@@ -31,7 +31,7 @@ export function Header() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const user = useAuth();
-  const { can } = usePermissions();
+  const { can, canCreate } = usePermissions();
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifications, unreadCount } = useNotifications(user?.id);
@@ -78,7 +78,7 @@ export function Header() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {QUICK_ACTIONS.filter((a) => can(a.permission)).map((action) => (
+            {QUICK_ACTIONS.filter((a) => can(a.permission) && (!a.creates || canCreate)).map((action) => (
               <DropdownMenuItem key={action.href} onClick={() => router.push(action.href)}>
                 {action.title}
               </DropdownMenuItem>
@@ -184,7 +184,7 @@ export function Header() {
             ))}
           </CommandGroup>
           <CommandGroup heading="Quick Actions">
-            {QUICK_ACTIONS.filter((a) => can(a.permission)).map((action) => (
+            {QUICK_ACTIONS.filter((a) => can(a.permission) && (!a.creates || canCreate)).map((action) => (
               <CommandItem
                 key={action.href}
                 onSelect={() => { setSearchOpen(false); router.push(action.href); }}

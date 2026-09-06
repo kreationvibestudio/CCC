@@ -21,6 +21,7 @@ import {
 } from "@/lib/agents/actions";
 import { AGENT_CSV_TEMPLATE, parseAgentAssignmentCsv } from "@/lib/agents/csv";
 import { queryPollingUnits, type PollingUnitListItem } from "@/lib/polling-units/actions";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 type IssuedCode = { code: string; puCode: string; name: string };
 
@@ -36,6 +37,7 @@ export function AgentRosterView({
   agents: number;
 }) {
   const router = useRouter();
+  const { canCreate, canDelete } = usePermissions();
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -342,6 +344,8 @@ export function AgentRosterView({
         </CardContent>
       </Card>
 
+      {canCreate ? (
+      <>
       <Card>
         <CardHeader>
           <CardTitle>Assign one agent</CardTitle>
@@ -398,6 +402,8 @@ export function AgentRosterView({
           </div>
         </CardContent>
       </Card>
+      </>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -475,9 +481,11 @@ export function AgentRosterView({
                 <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => handleReset(row.id)}>
                   Reset code
                 </Button>
+                {canDelete ? (
                 <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => handleUnassign(row.id)}>
                   Unassign
                 </Button>
+                ) : null}
               </div>
             </CardContent>
           </Card>

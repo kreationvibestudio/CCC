@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createTemplate } from "@/lib/communications/actions";
+import { requireCanCreateOrRedirect } from "@/lib/auth/session";
 
-export default function NewSmsTemplatePage() {
+export default async function NewSmsTemplatePage() {
+  await requireCanCreateOrRedirect("/communications");
   async function action(formData: FormData) {
     "use server";
     const result = await createTemplate(formData);

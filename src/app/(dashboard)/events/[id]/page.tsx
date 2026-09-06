@@ -10,9 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getEvent, getEventAttendees, updateEvent, deleteEvent } from "@/lib/events/actions";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canDeleteRecords } from "@/types/auth";
 
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
+  const canDelete = user ? canDeleteRecords(user.role) : false;
   const event = await getEvent(id);
   if (!event) redirect("/events");
   const attendees = await getEventAttendees(id);
@@ -64,7 +68,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           </div>
         ))}
       </CardContent></Card>
+      {canDelete ? (
       <form action={deleteAction}><Button type="submit" variant="destructive" size="sm">Cancel event</Button></form>
+      ) : null}
     </div>
   );
 }

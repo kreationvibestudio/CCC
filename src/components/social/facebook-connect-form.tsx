@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveFacebookConnection } from "@/lib/social/facebook-connection";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 export function FacebookConnectForm({
   defaultPageId = "671649942702174",
@@ -16,12 +17,15 @@ export function FacebookConnectForm({
   defaultPageId?: string;
   configured: boolean;
 }) {
+  const { canWrite } = usePermissions();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [pageId, setPageId] = useState(defaultPageId);
   const [pageToken, setPageToken] = useState("");
   const [userToken, setUserToken] = useState("");
   const [open, setOpen] = useState(!configured);
+
+  if (!canWrite) return null;
 
   if (!open && configured) {
     return (

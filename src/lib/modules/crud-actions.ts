@@ -50,6 +50,8 @@ export async function updateRecord(
 ) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyDeleteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const invalid = assertTable(table);
   if (invalid) return { error: invalid };
   const supabase = await createClient();

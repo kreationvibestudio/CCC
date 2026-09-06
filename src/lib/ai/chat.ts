@@ -3,10 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { openAiChatCompletion } from "@/lib/ai/openai";
+import { denyWriteIfRestricted } from "@/types/auth";
 
 export async function sendAiMessage(message: string): Promise<{ reply: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { reply: "", error: "Unauthorized" };
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { reply: "", error: blocked };
 
   const supabase = await createClient();
   const [{ count: volunteers }, { count: comments }] = await Promise.all([

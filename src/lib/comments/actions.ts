@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/auth/session";
+import { denyWriteIfRestricted } from "@/types/auth";
 import { analyzeCommentWithAI } from "@/lib/ai/analyze-comment";
 import { suggestReply } from "@/lib/ai/suggest-reply";
 import { postFacebookCommentReply } from "@/lib/integrations/facebook/reply";
@@ -11,7 +12,9 @@ export async function updateCommentStatus(
   commentId: string,
   status: "pending" | "assigned" | "replied" | "resolved" | "flagged"
 ) {
-  await requirePermission("comments.moderate");
+  const user = await requirePermission("comments.moderate");
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase.from("comments").update({ status }).eq("id", commentId);
   if (error) return { error: error.message };
@@ -20,7 +23,9 @@ export async function updateCommentStatus(
 }
 
 export async function assignComment(commentId: string, userId: string | null) {
-  await requirePermission("comments.assign");
+  const user = await requirePermission("comments.assign");
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase
     .from("comments")
@@ -32,7 +37,9 @@ export async function assignComment(commentId: string, userId: string | null) {
 }
 
 export async function flagMisinformation(commentId: string) {
-  await requirePermission("comments.moderate");
+  const user = await requirePermission("comments.moderate");
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase
     .from("comments")
@@ -49,6 +56,8 @@ export async function resolveComment(commentId: string) {
 
 export async function replyToComment(commentId: string, replyText: string) {
   const user = await requirePermission("comments.reply");
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
 
   const { data: comment } = await supabase
@@ -106,7 +115,9 @@ export async function replyToComment(commentId: string, replyText: string) {
 }
 
 export async function classifyComment(commentId: string) {
-  await requirePermission("comments.view");
+  const user = await requirePermission("comments.view");
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { data: comment } = await supabase.from("comments").select("content").eq("id", commentId).single();
   if (!comment) return { error: "Not found" };
@@ -121,6 +132,8 @@ export async function classifyComment(commentId: string) {
 
 export async function classifyAllComments() {
   const user = await requirePermission("comments.view");
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { data: comments, error } = await supabase
     .from("comments")

@@ -379,6 +379,8 @@ export async function getAgentAccessCodesSql() {
 export async function resetAgentAccessCode(pollingUnitId: string): Promise<{ error?: string; agentCode?: string }> {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked };
   const supabase = db();
   const tenantId = auth.user.profile.tenant_id;
   const { data: pu } = await supabase
@@ -434,6 +436,8 @@ export async function unassignPollingAgent(pollingUnitId: string) {
 export async function nudgeAssignedAgent(userId: string) {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked };
   const { nudgeAgent } = await import("@/lib/agent/media");
   return nudgeAgent(auth.user, userId, "Please open the Agent app and submit your unit update.");
 }

@@ -206,7 +206,7 @@ export async function requirePermission(permission: Permission): Promise<AuthUse
   return user;
 }
 
-/** Director General may open HQ screens but not /new create forms. */
+/** Director General may open HQ screens but cannot use write forms. */
 export async function requireCanCreateOrRedirect(fallback: string): Promise<AuthUser> {
   const user = await requireAuth();
   if (!canCreateRecords(user.role)) redirect(fallback);

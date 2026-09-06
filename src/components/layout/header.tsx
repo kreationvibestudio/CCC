@@ -69,6 +69,7 @@ export function Header() {
           <Search className="h-4 w-4" />
         </Button>
 
+        {canCreate ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon">
@@ -85,6 +86,7 @@ export function Header() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        ) : null}
 
         <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
           <DropdownMenuTrigger asChild>

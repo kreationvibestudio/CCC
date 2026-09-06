@@ -111,6 +111,8 @@ export async function inviteUser(formData: FormData) {
 export async function updateCampaignDates(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
+    const blocked = denyCreateIfRestricted(adminUser.role);
+    if (blocked) return { error: blocked };
     const campaignStart = String(formData.get("campaign_start_date") ?? "").trim() || null;
     const campaignEnd = String(formData.get("campaign_end_date") ?? "").trim() || null;
     const electionDate = String(formData.get("election_date") ?? "").trim() || null;
@@ -169,6 +171,8 @@ WHERE slug = 'campaign';`;
 export async function updateUserRole(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
+    const blocked = denyCreateIfRestricted(adminUser.role);
+    if (blocked) return { error: blocked };
     const userId = String(formData.get("user_id") ?? "").trim();
     const roleRaw = String(formData.get("role") ?? "");
 

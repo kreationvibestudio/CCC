@@ -45,6 +45,8 @@ export async function getVolunteer(id: string) {
 export async function updateVolunteer(id: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const skills = (formData.get("skills") as string)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
   const { error } = await supabase.from("volunteers").update({

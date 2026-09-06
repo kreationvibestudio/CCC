@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 export function FacebookSyncButton() {
+  const { canWrite } = usePermissions();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  if (!canWrite) return null;
 
   async function handleSync() {
     setLoading(true);

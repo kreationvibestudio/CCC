@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, logAudit } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { denyWriteIfRestricted } from "@/types/auth";
 
 export async function updateOwnProfile(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
 
   const fullName = String(formData.get("full_name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;

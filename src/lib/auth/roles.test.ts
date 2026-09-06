@@ -3,8 +3,10 @@ import { describe, it } from "node:test";
 import {
   canCreateRecords,
   canDeleteRecords,
+  canWriteRecords,
   denyCreateIfRestricted,
   denyDeleteIfRestricted,
+  denyWriteIfRestricted,
   hasPermission,
   homePathForRole,
   isFieldAgentRole,
@@ -54,16 +56,20 @@ describe("Director General oversight", () => {
     }
   });
 
-  it("cannot add or delete records", () => {
+  it("is read-only and cannot add, change, or delete", () => {
+    assert.equal(canWriteRecords("director_general"), false);
     assert.equal(canCreateRecords("director_general"), false);
     assert.equal(canDeleteRecords("director_general"), false);
-    assert.match(denyCreateIfRestricted("director_general") ?? "", /cannot add or delete/);
-    assert.match(denyDeleteIfRestricted("director_general") ?? "", /cannot add or delete/);
+    assert.match(denyWriteIfRestricted("director_general") ?? "", /read-only/);
+    assert.match(denyCreateIfRestricted("director_general") ?? "", /cannot add, change, or delete/);
+    assert.match(denyDeleteIfRestricted("director_general") ?? "", /cannot add, change, or delete/);
   });
 
-  it("leaves Super Administrator free to add and delete", () => {
+  it("leaves Super Administrator free to write", () => {
+    assert.equal(canWriteRecords("super_administrator"), true);
     assert.equal(canCreateRecords("super_administrator"), true);
     assert.equal(canDeleteRecords("super_administrator"), true);
+    assert.equal(denyWriteIfRestricted("super_administrator"), null);
     assert.equal(denyCreateIfRestricted("super_administrator"), null);
     assert.equal(denyDeleteIfRestricted("super_administrator"), null);
   });

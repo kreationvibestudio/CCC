@@ -61,6 +61,8 @@ export async function getEventPublic(id: string) {
 export async function updateEvent(id: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase.from("campaign_events").update({
     title: formData.get("title"),

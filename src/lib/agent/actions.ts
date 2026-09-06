@@ -142,6 +142,8 @@ export async function reportIncident(formData: FormData) {
 export async function updatePuStatus(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await agentDb();
   const puId = String(formData.get("polling_unit_id") ?? "").trim();
   if (!puId) return { error: "Select a polling unit" };

@@ -469,6 +469,7 @@ export function AgentRosterView({
                     Copy code
                   </Button>
                 ) : null}
+                {canCreate ? (
                 <Button
                   type="button"
                   variant="secondary"
@@ -478,9 +479,12 @@ export function AgentRosterView({
                 >
                   Nudge app
                 </Button>
+                ) : null}
+                {canCreate ? (
                 <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => handleReset(row.id)}>
                   Reset code
                 </Button>
+                ) : null}
                 {canDelete ? (
                 <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => handleUnassign(row.id)}>
                   Unassign

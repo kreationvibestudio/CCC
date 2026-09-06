@@ -23,6 +23,7 @@ import {
   Bot, CheckCircle, Flag, Loader2, MessageSquare, Reply, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "success" | "warning" | "destructive"> = {
   pending: "warning", assigned: "secondary", replied: "default", resolved: "success", flagged: "destructive",
@@ -42,6 +43,7 @@ export function CommentsInbox({
   initialStatus?: string;
 }) {
   const router = useRouter();
+  const { canWrite } = usePermissions();
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
   const [status, setStatus] = useState(initialStatus);
@@ -105,12 +107,14 @@ export function CommentsInbox({
   return (
     <div className="space-y-6">
       <PageHeader title="Unified Comment Management" description="Reply, assign, and monitor all platform comments">
+        {canWrite ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => handleAction("classify-all", "")} disabled={!!loading}>
             <Sparkles className="mr-1 h-4 w-4" /> AI Classify All
           </Button>
           <FacebookSyncButton />
         </div>
+        ) : null}
       </PageHeader>
 
       <div className="flex flex-wrap gap-2">
@@ -163,6 +167,7 @@ export function CommentsInbox({
                       <Badge variant={STATUS_VARIANT[comment.status] ?? "secondary"}>{comment.status}</Badge>
                     </div>
                   </div>
+                  {canWrite ? (
                   <div className="flex flex-wrap gap-1 shrink-0">
                     <Button size="sm" variant="outline" onClick={() => { setReplyOpen(comment.id); setReplyText(""); }}>
                       <Reply className="h-3 w-3 mr-1" /> Reply
@@ -189,6 +194,7 @@ export function CommentsInbox({
                       </NativeSelect>
                     )}
                   </div>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>

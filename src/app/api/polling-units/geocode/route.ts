@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasPermission } from "@/types/auth";
+import { denyWriteIfRestricted, hasPermission } from "@/types/auth";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
   countPollingUnitPins,
@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const blocked = denyWriteIfRestricted(user.role);
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
     let retryFailed = false;
     let approx = false;

@@ -10,11 +10,12 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getContact, getContactInteractions, getContactDonations, updateContact, deleteContact, logInteraction, recordDonation } from "@/lib/crm/actions";
 import { getCurrentUser } from "@/lib/auth/session";
-import { canCreateRecords, canDeleteRecords } from "@/types/auth";
+import { canCreateRecords, canDeleteRecords, canWriteRecords } from "@/types/auth";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();
+  const canWrite = user ? canWriteRecords(user.role) : false;
   const canCreate = user ? canCreateRecords(user.role) : false;
   const canDelete = user ? canDeleteRecords(user.role) : false;
   const contact = await getContact(id);
@@ -55,15 +56,15 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       <Card><CardContent className="pt-6">
         <form action={saveAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1"><Label>Name</Label><Input name="full_name" defaultValue={contact.full_name} required /></div>
-            <div className="space-y-1"><Label>Phone</Label><Input name="phone" defaultValue={contact.phone ?? ""} /></div>
-            <div className="space-y-1"><Label>Ward</Label><Input name="ward" defaultValue={contact.ward ?? ""} /></div>
-            <div className="space-y-1"><Label>LGA</Label><Input name="lga" defaultValue={contact.lga ?? ""} /></div>
+            <div className="space-y-1"><Label>Name</Label><Input name="full_name" defaultValue={contact.full_name} required disabled={!canWrite} /></div>
+            <div className="space-y-1"><Label>Phone</Label><Input name="phone" defaultValue={contact.phone ?? ""} disabled={!canWrite} /></div>
+            <div className="space-y-1"><Label>Ward</Label><Input name="ward" defaultValue={contact.ward ?? ""} disabled={!canWrite} /></div>
+            <div className="space-y-1"><Label>LGA</Label><Input name="lga" defaultValue={contact.lga ?? ""} disabled={!canWrite} /></div>
           </div>
           <input type="hidden" name="contact_type" value={contact.contact_type} />
           <input type="hidden" name="support_level" value={contact.support_level} />
-          <textarea name="notes" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={contact.notes ?? ""} placeholder="Notes" />
-          <SubmitButton label="Save" />
+          <textarea name="notes" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={contact.notes ?? ""} placeholder="Notes" disabled={!canWrite} />
+          {canWrite ? <SubmitButton label="Save" /> : null}
         </form>
       </CardContent></Card>
       <Card><CardContent className="pt-6">

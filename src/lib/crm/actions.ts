@@ -62,6 +62,8 @@ export async function getContact(id: string) {
 export async function updateContact(id: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await crmDb();
   const { error } = await supabase.from("contacts").update({
     full_name: formData.get("full_name"),

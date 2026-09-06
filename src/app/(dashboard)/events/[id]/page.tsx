@@ -11,11 +11,12 @@ import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getEvent, getEventAttendees, updateEvent, deleteEvent } from "@/lib/events/actions";
 import { getCurrentUser } from "@/lib/auth/session";
-import { canDeleteRecords } from "@/types/auth";
+import { canDeleteRecords, canWriteRecords } from "@/types/auth";
 
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();
+  const canWrite = user ? canWriteRecords(user.role) : false;
   const canDelete = user ? canDeleteRecords(user.role) : false;
   const event = await getEvent(id);
   if (!event) redirect("/events");
@@ -51,12 +52,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       )}
       <Card><CardContent className="pt-6">
         <form action={saveAction} className="space-y-4">
-          <div className="space-y-1"><Label>Title</Label><Input name="title" defaultValue={event.title} required /></div>
-          <div className="space-y-1"><Label>Location</Label><Input name="location" defaultValue={event.location} required /></div>
+          <div className="space-y-1"><Label>Title</Label><Input name="title" defaultValue={event.title} required disabled={!canWrite} /></div>
+          <div className="space-y-1"><Label>Location</Label><Input name="location" defaultValue={event.location} required disabled={!canWrite} /></div>
           <input type="hidden" name="event_type" value={event.event_type} />
           <input type="hidden" name="starts_at" value={event.starts_at} />
-          <textarea name="description" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={event.description ?? ""} />
-          <SubmitButton label="Save" />
+          <textarea name="description" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={event.description ?? ""} disabled={!canWrite} />
+          {canWrite ? <SubmitButton label="Save" /> : null}
         </form>
       </CardContent></Card>
       <Card><CardContent className="pt-6">

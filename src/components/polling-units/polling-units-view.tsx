@@ -136,8 +136,8 @@ export function PollingUnitsView({
       <PageHeader title="Polling Units" description="Edo State register — search by LGA, ward, or PU code">
         <div className="flex flex-wrap gap-2">
           {canCreate ? <SyncInecRegisterButton /> : null}
-          <FormatPuCodesButton />
-          <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} />
+          {canCreate ? <FormatPuCodesButton /> : null}
+          {canCreate ? <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} /> : null}
           {canCreate ? (
           <Button variant="outline" asChild>
             <Link href="/polling-units/agents">Assign agents</Link>

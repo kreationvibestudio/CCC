@@ -100,7 +100,7 @@ export function CommunicationsView({
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge>{c.status}</Badge>
-                    {c.status === "draft" && c.channel === "sms" && (
+                    {canCreate && c.status === "draft" && c.channel === "sms" && (
                       <SendCampaignDialog campaign={c} templates={smsTemplates} />
                     )}
                   </div>

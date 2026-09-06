@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/session";
+import { denyWriteIfRestricted } from "@/types/auth";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
   FacebookApiError,
@@ -132,6 +133,8 @@ export async function saveFacebookConnection(input: {
 }) {
   try {
     const user = await requirePermission("social.manage");
+    const blocked = denyWriteIfRestricted(user.role);
+    if (blocked) return { error: blocked };
     const tenantId = user.profile.tenant_id;
     const pageId = input.pageId.trim();
     const pageAccessToken = input.pageAccessToken.trim();

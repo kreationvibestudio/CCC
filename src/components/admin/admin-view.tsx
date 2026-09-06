@@ -35,11 +35,13 @@ function CampaignDatesCard({
   campaignEndDate,
   electionDate,
   needsCampaignStartMigration,
+  readOnly = false,
 }: {
   campaignStartDate: string | null;
   campaignEndDate: string | null;
   electionDate: string | null;
   needsCampaignStartMigration?: boolean;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -76,7 +78,7 @@ function CampaignDatesCard({
         <CardTitle>Campaign dates</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {needsCampaignStartMigration ? (
+        {needsCampaignStartMigration && !readOnly ? (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
             <p className="font-medium">Database migration needed</p>
             <p className="mt-1 text-muted-foreground">
@@ -88,7 +90,7 @@ function CampaignDatesCard({
             </Button>
           </div>
         ) : null}
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-3">
+        <form onSubmit={readOnly ? (e) => e.preventDefault() : handleSubmit} className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1">
             <Label htmlFor="campaign_start_date">Campaign start</Label>
             <Input
@@ -96,6 +98,8 @@ function CampaignDatesCard({
               name="campaign_start_date"
               type="date"
               defaultValue={toDateInputValue(campaignStartDate)}
+              disabled={readOnly}
+              readOnly={readOnly}
             />
           </div>
           <div className="space-y-1">
@@ -105,6 +109,8 @@ function CampaignDatesCard({
               name="campaign_end_date"
               type="date"
               defaultValue={toDateInputValue(campaignEndDate)}
+              disabled={readOnly}
+              readOnly={readOnly}
             />
           </div>
           <div className="space-y-1">
@@ -114,12 +120,16 @@ function CampaignDatesCard({
               name="election_date"
               type="date"
               defaultValue={toDateInputValue(electionDate)}
+              disabled={readOnly}
+              readOnly={readOnly}
             />
           </div>
           <div className="sm:col-span-3">
+            {readOnly ? null : (
             <Button type="submit" disabled={pending} size="sm">
               {pending ? "Saving…" : "Save dates"}
             </Button>
+            )}
             <p className="mt-2 text-xs text-muted-foreground">
               These dates power the countdown timers on the Executive Dashboard.
             </p>
@@ -387,7 +397,7 @@ export function AdminView({
         description={
           canCreate
             ? "Invite team members, assign roles, and check production secrets"
-            : "View the team, assign roles, and check production secrets"
+            : "View-only Admin access — team, roles, and production secrets"
         }
       />
 
@@ -637,7 +647,7 @@ export function AdminView({
             </Button>
           </div>
           ) : (
-            <p className="text-xs text-muted-foreground">Director General can change roles, not add or delete people.</p>
+            <p className="text-xs text-muted-foreground">Director General has view-only Admin access.</p>
           )}
         </CardHeader>
         <CardContent className="space-y-2">
@@ -684,6 +694,7 @@ export function AdminView({
                       </dl>
                     </div>
                   </div>
+                  {canCreate ? (
                   <form action={handleRoleChange} className="flex items-center gap-2">
                     <input type="hidden" name="user_id" value={p.id} />
                     <NativeSelect
@@ -703,6 +714,9 @@ export function AdminView({
                     </Button>
                     <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
                   </form>
+                  ) : (
+                    <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
+                  )}
                 </div>
               );
             })
@@ -715,6 +729,7 @@ export function AdminView({
         campaignEndDate={campaignEndDate}
         electionDate={electionDate}
         needsCampaignStartMigration={needsCampaignStartMigration}
+        readOnly={!canCreate}
       />
 
       <Card>

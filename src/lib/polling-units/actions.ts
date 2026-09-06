@@ -290,6 +290,8 @@ export async function createPollingUnit(formData: FormData) {
 export async function updatePollingUnit(id: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const writeBlocked = denyCreateIfRestricted(user.role);
+  if (writeBlocked) return { error: writeBlocked };
   const blocked = edoOnlyFormError(formData);
   if (blocked) return { error: blocked };
   const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;

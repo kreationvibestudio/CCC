@@ -17,6 +17,7 @@ import { AgentReportForm } from "@/components/agent/agent-report-form";
 import { PollingUnitPicker } from "@/components/agent/polling-unit-picker";
 import { toast } from "sonner";
 import { formatDateTime } from "@/lib/utils";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 const OFFLINE_KEY = "ccc-agent-queue";
 
@@ -66,6 +67,7 @@ async function flushQueue() {
 }
 
 export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }) {
+  const { canWrite } = usePermissions();
   const [pending, startTransition] = useTransition();
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [selected, setSelected] = useState<AgentPollingUnit | null>(null);
@@ -138,6 +140,12 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
         onSelect={(unit) => setSelected(unit)}
       />
 
+      {!canWrite ? (
+        <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
+          Director General can view the Agent Portal, but cannot submit reports or results.
+        </p>
+      ) : (
+      <>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -214,6 +222,8 @@ export function AgentPortalClient({ assigned }: { assigned: AgentPollingUnit[] }
         <p className="text-xs text-muted-foreground">Date and time are recorded automatically when you tap submit.</p>
         <Button type="submit" variant="destructive" disabled={pending} className="w-full">Report incident</Button>
       </form>
+      </>
+      )}
     </div>
   );
 }

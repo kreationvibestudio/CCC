@@ -133,27 +133,35 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 };
 
 export const SYSTEM_MUTATION_DENIED =
-  "Director General can view and update existing records, but cannot add or delete anything.";
+  "Director General has Admin visibility with read-only access. They cannot add, change, or delete anything.";
 
-/** Same HQ visibility as Admin, without create or delete. */
+/** Same HQ visibility as Admin, view-only. */
 export function isDirectorGeneral(role: UserRole) {
   return role === "director_general";
 }
 
-export function canCreateRecords(role: UserRole): boolean {
+export function canWriteRecords(role: UserRole): boolean {
   return !isDirectorGeneral(role);
+}
+
+export function canCreateRecords(role: UserRole): boolean {
+  return canWriteRecords(role);
 }
 
 export function canDeleteRecords(role: UserRole): boolean {
-  return !isDirectorGeneral(role);
+  return canWriteRecords(role);
+}
+
+export function denyWriteIfRestricted(role: UserRole): string | null {
+  return canWriteRecords(role) ? null : SYSTEM_MUTATION_DENIED;
 }
 
 export function denyCreateIfRestricted(role: UserRole): string | null {
-  return canCreateRecords(role) ? null : SYSTEM_MUTATION_DENIED;
+  return denyWriteIfRestricted(role);
 }
 
 export function denyDeleteIfRestricted(role: UserRole): string | null {
-  return canDeleteRecords(role) ? null : SYSTEM_MUTATION_DENIED;
+  return denyWriteIfRestricted(role);
 }
 
 export function hasPermission(role: UserRole, permission: Permission): boolean {

@@ -9,16 +9,32 @@ export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: 
   return 2 * 6371000 * Math.asin(Math.sqrt(a));
 }
 
-/** Field GPS is noisy and map pins are often approximate; 5 km covers the PU area without opening the whole LGA. */
-export const AGENT_LOGIN_RADIUS_M = 5000;
+export const FEET_PER_METER = 3.280839895;
+
+/** HQ rule: the agent must be on the unit grounds — 100 ft in any direction. */
+export const AGENT_LOGIN_RADIUS_FT = 100;
+
+/** 100 feet, in metres. Phone GPS is noisy; this is still a tight on-site fence. */
+export const AGENT_LOGIN_RADIUS_M = AGENT_LOGIN_RADIUS_FT / FEET_PER_METER;
+
+export function metersToFeet(meters: number) {
+  return meters * FEET_PER_METER;
+}
+
+export function formatLoginDistance(meters: number) {
+  const feet = Math.round(metersToFeet(meters));
+  return `${feet} ft`;
+}
 
 export function isWithinAgentLoginRadius(distanceM: number) {
   return Number.isFinite(distanceM) && distanceM <= AGENT_LOGIN_RADIUS_M;
 }
 
-/** When true (default), agents can sign in with code alone if GPS is unavailable. */
+/**
+ * Soft check-in (code only, no GPS) is opt-in for labs.
+ * Production must send a location that matches the unit pin.
+ */
 export function isAgentSoftGpsEnabled() {
   const flag = process.env.AGENT_LOGIN_SOFT_GPS?.trim().toLowerCase();
-  if (flag === "0" || flag === "false" || flag === "off") return false;
-  return true;
+  return flag === "1" || flag === "true" || flag === "on";
 }

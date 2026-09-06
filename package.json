@@ -21,6 +21,7 @@
     "pu:geocode": "node --experimental-strip-types scripts/geocode-polling-units.mjs",
     "pu:sync-inec": "node --experimental-strip-types scripts/sync-inec-polling-units.mjs",
     "pu:bootstrap": "npm run pu:import && npm run pu:pins",
+    "agent:issue-codes": "node --experimental-strip-types scripts/issue-agent-codes.mjs",
     "cloud:setup": "node scripts/cloud-setup.mjs",
     "cloud:audit": "node scripts/cloud-setup.mjs --audit",
     "data:zero": "node scripts/zero-operational-data.mjs",

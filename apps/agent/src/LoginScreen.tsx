@@ -91,7 +91,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
         <Image source={require("../assets/icon.png")} style={styles.logo} accessibilityLabel="Campaign Command Center" />
         <Text style={styles.title}>CCC Agent</Text>
         <Text style={styles.sub}>
-          Enter the code HQ gave you for your polling unit. Turn on location so we can confirm you are at that unit.
+          Enter the code HQ gave you for your polling unit. Turn on location — you must be within 100 feet of that unit.
         </Text>
         {!emailMode ? (
           <>

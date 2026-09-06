@@ -13,11 +13,17 @@ import {
 } from "@/lib/agent/access-code";
 import { encryptAgentCode } from "@/lib/agent/code-vault";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { AGENT_LOGIN_RADIUS_M, haversineMeters, isAgentSoftGpsEnabled, isWithinAgentLoginRadius } from "@/lib/agent/geo";
+import {
+  AGENT_LOGIN_RADIUS_FT,
+  formatLoginDistance,
+  haversineMeters,
+  isAgentSoftGpsEnabled,
+  isWithinAgentLoginRadius,
+} from "@/lib/agent/geo";
 import { isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
 
-export { AGENT_LOGIN_RADIUS_M };
+export { AGENT_LOGIN_RADIUS_FT };
 
 function retryLabel(seconds: number) {
   if (seconds >= 120) return `${Math.ceil(seconds / 60)} minutes`;
@@ -175,9 +181,8 @@ export async function loginWithAgentCode(input: {
     } else {
       distanceM = haversineMeters(lat!, lng!, Number(pu.latitude), Number(pu.longitude));
       if (!isWithinAgentLoginRadius(distanceM)) {
-        const km = (distanceM / 1000).toFixed(1);
         return {
-          error: `You are ${km} km from ${formatPollingUnitCode(pu)}. Sign in at your assigned polling unit (within ${(AGENT_LOGIN_RADIUS_M / 1000).toFixed(1)} km), or turn off GPS and use soft check-in.`,
+          error: `You are ${formatLoginDistance(distanceM)} from ${formatPollingUnitCode(pu)}. Sign in at your assigned polling unit (within ${AGENT_LOGIN_RADIUS_FT} ft).`,
         };
       }
       gpsVerified = true;

@@ -35,7 +35,7 @@ Your Facebook page **Hon Akhakon Annenih** is set up in `.env.local`. No action 
 4. Click **Sync Facebook Now** (works in demo mode without Meta tokens; add a page token later for live data)
 5. Your posts will appear on the page
 
-Field Agents: HQ issues a 10-character code under **Polling units → PU Agents**. Agents sign in at **http://localhost:3000/agent/login** (or the CCC Agent app). GPS must match the assigned unit (5 km). Older 8-character codes still work until they expire.
+Field Agents: HQ issues a 10-character code under **Polling units → PU Agents**. Agents sign in at **http://localhost:3000/agent/login** (or the CCC Agent app). GPS must be within 100 feet of the assigned unit pin. Older 8-character codes still work until they expire.
 
 After a fresh database reset, load Edo polling units:
 

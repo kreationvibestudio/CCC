@@ -12,13 +12,16 @@ import { Label } from "@/components/ui/label";
 import {
   assignPollingAgent,
   getAgentAccessCodesSql,
+  issueMissingAgentCodes,
   listAgentAssignments,
   listAgentCodesByName,
   nudgeAssignedAgent,
+  provisionPinnedPollingUnits,
   resetAgentAccessCode,
   unassignPollingAgent,
   type AssignmentRow,
 } from "@/lib/agents/actions";
+import { AGENT_LOGIN_RADIUS_FT } from "@/lib/agent/geo";
 import { AGENT_CSV_TEMPLATE, parseAgentAssignmentCsv } from "@/lib/agents/csv";
 import { queryPollingUnits, type PollingUnitListItem } from "@/lib/polling-units/actions";
 
@@ -239,6 +242,73 @@ export function AgentRosterView({
     });
   }
 
+  function handleIssueMissing() {
+    startTransition(async () => {
+      const result = await issueMissingAgentCodes();
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.codes?.length) {
+        setIssued((prev) => [
+          ...result.codes!.map((c) => ({ code: c.code, puCode: c.puCode, name: c.name })),
+          ...prev,
+        ]);
+      }
+      toast.success(
+        result.issued
+          ? `Issued ${result.issued} missing code${result.issued === 1 ? "" : "s"}`
+          : "Every assigned unit already has a code"
+      );
+      await reloadRoster();
+    });
+  }
+
+  function handleProvisionPinned() {
+    if (
+      !window.confirm(
+        `Create a Field Agent login and 10-character code for every polling unit that has a map pin and no agent yet?\n\nThe agent must be within ${AGENT_LOGIN_RADIUS_FT} ft of that pin to sign in. Units without a pin are skipped.`
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      let created = 0;
+      let missingPin = 0;
+      const collected: IssuedCode[] = [];
+      try {
+        for (let i = 0; i < 400; i += 1) {
+          const result = await provisionPinnedPollingUnits({ limit: 15 });
+          if (result.error) {
+            toast.error(result.error);
+            return;
+          }
+          created += result.created;
+          missingPin = result.missingPin;
+          if (result.codes?.length) {
+            collected.push(
+              ...result.codes.map((c) => ({ code: c.code, puCode: c.puCode, name: c.name }))
+            );
+          }
+          if (result.created === 0 || result.remaining === 0) break;
+        }
+      } finally {
+        if (collected.length) setIssued((prev) => [...collected, ...prev]);
+      }
+      toast.success(
+        created
+          ? `Issued codes for ${created} polling unit${created === 1 ? "" : "s"}`
+          : "No pinned unit was waiting for a code"
+      );
+      if (missingPin) {
+        toast.warning(
+          `${missingPin} unit${missingPin === 1 ? "" : "s"} have no map pin. Apply INEC GPS before those agents can check in.`
+        );
+      }
+      await reloadRoster();
+    });
+  }
+
   function handleNudge(userId: string | null) {
     if (!userId) {
       toast.error("No agent login on this unit");
@@ -274,7 +344,7 @@ export function AgentRosterView({
     <div className="space-y-6">
       <PageHeader
         title="Polling agents"
-        description="Issue a 10-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must match the unit at sign-in. Older 8-character codes still work until they expire. Units without a map pin cannot check in — fill pins from Polling Units first."
+        description={`Issue a 10-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must be within ${AGENT_LOGIN_RADIUS_FT} ft of the unit pin. Older 8-character codes still work until they expire. Units without a map pin cannot check in.`}
       >
         <Button variant="outline" asChild>
           <Link href="/polling-units">Back to polling units</Link>
@@ -305,13 +375,24 @@ export function AgentRosterView({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Every assigned Field Agent, listed by name. Share the code; they enter it in CCC Agent at the unit.
+            Every assigned Field Agent, listed by name. Share the code; they enter it in CCC Agent at the
+            unit. Sign-in only works within {AGENT_LOGIN_RADIUS_FT} ft of that unit&apos;s map pin.
           </p>
-          {codesByName.length > 0 ? (
-            <>
-              <Button type="button" variant="secondary" onClick={downloadCodes}>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" disabled={pending} onClick={handleProvisionPinned}>
+              {pending ? "Issuing…" : "Issue codes for pinned units"}
+            </Button>
+            <Button type="button" variant="outline" disabled={pending} onClick={handleIssueMissing}>
+              Fill missing codes
+            </Button>
+            {codesByName.length > 0 ? (
+              <Button type="button" variant="outline" onClick={downloadCodes}>
                 Download codes CSV
               </Button>
+            ) : null}
+          </div>
+          {codesByName.length > 0 ? (
+            <>
               <div className="max-h-80 space-y-2 overflow-auto text-sm">
                 {codesByName.map((c) => (
                   <div key={`${c.name}-${c.puCode}`} className="flex flex-wrap items-center justify-between gap-2">
@@ -335,8 +416,9 @@ export function AgentRosterView({
             </>
           ) : (
             <p className="text-sm">
-              No Field Agent is tied to a polling unit yet. Use <span className="font-medium">Assign one agent</span> below
-              with a name and PU code. The code will show here next to that name.
+              No Field Agent is tied to a polling unit yet. Click{" "}
+              <span className="font-medium">Issue codes for pinned units</span> to create one login per
+              mapped unit, or assign a named agent below.
             </p>
           )}
         </CardContent>

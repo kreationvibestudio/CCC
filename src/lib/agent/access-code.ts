@@ -97,7 +97,9 @@ export function validateAgentCodeLogin(input: {
     return `Enter the ${AGENT_CODE_LENGTH}-character agent code HQ gave you`;
   }
   if (input.requireGps) {
-    if (!Number.isFinite(Number(input.latitude)) || !Number.isFinite(Number(input.longitude))) {
+    const lat = input.latitude;
+    const lng = input.longitude;
+    if (lat == null || lng == null || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
       return "Turn on location so we can confirm you are at your polling unit";
     }
   }

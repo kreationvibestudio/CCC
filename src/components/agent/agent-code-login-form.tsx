@@ -78,7 +78,7 @@ export function AgentCodeLoginForm() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Field Agent sign-in</h1>
           <p className="mt-2 text-sm text-white/70">
-            Enter the code from HQ (Polling units → PU Agents). Turn on location so we can confirm you are at your polling unit.
+            Enter the code from HQ (Polling units → PU Agents). Turn on location — you must be within 100 feet of your polling unit.
           </p>
         </div>
         <Input

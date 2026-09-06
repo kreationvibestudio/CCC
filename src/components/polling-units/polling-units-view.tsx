@@ -138,9 +138,15 @@ export function PollingUnitsView({
           {canCreate ? <SyncInecRegisterButton /> : null}
           <FormatPuCodesButton />
           <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} />
+          {canCreate ? (
           <Button variant="outline" asChild>
             <Link href="/polling-units/agents">Assign agents</Link>
           </Button>
+          ) : (
+          <Button variant="outline" asChild>
+            <Link href="/polling-units/agents">PU Agents</Link>
+          </Button>
+          )}
           {canCreate ? (
           <Button variant="outline" asChild>
             <label className="cursor-pointer">

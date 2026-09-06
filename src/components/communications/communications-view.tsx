@@ -41,7 +41,11 @@ export function CommunicationsView({
     <div className="space-y-6">
       <PageHeader
         title="Communications"
-        description="Create SMS templates and send Termii broadcasts to CRM contacts"
+        description={
+          canCreate
+            ? "Create SMS templates and send Termii broadcasts to CRM contacts"
+            : "View SMS templates and send Termii broadcasts to CRM contacts"
+        }
       >
         {canCreate ? (
         <div className="flex gap-2">

@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth/session";
+import { authorize } from "@/lib/auth/session";
 import { withDisplayCode } from "@/lib/polling-units/code";
 import { pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
 import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
@@ -69,8 +69,8 @@ export async function getFieldStatusMapData(input?: {
   mappedUnits: number;
   tenantId: string;
 }> {
-  const user = await getCurrentUser();
-  if (!user) {
+  const gate = await authorize("maps.view");
+  if (!gate.ok) {
     return {
       pins: [],
       counts: emptyCounts(),
@@ -80,7 +80,7 @@ export async function getFieldStatusMapData(input?: {
     };
   }
 
-  const tenantId = user.profile.tenant_id;
+  const tenantId = gate.user.profile.tenant_id;
   const lga = sanitizeFilter(input?.lga ?? "");
   const ward = sanitizeFilter(input?.ward ?? "");
   const search = sanitizeFilter(input?.search ?? "");

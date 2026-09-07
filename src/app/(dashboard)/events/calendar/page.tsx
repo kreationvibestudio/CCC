@@ -1,12 +1,10 @@
-import { getCurrentUser } from "@/lib/auth/session";
 import { getEvents } from "@/lib/events/actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
 import Link from "next/link";
 
 export default async function EventsCalendarPage() {
-  const user = await getCurrentUser();
-  const events = await getEvents(user!.profile.tenant_id);
+  const events = await getEvents();
   const byMonth = new Map<string, typeof events>();
   for (const e of events) {
     const key = format(new Date(e.starts_at), "MMMM yyyy");

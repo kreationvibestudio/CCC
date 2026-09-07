@@ -7,6 +7,18 @@ import {
   renderTemplate,
   sendTermiiSms,
 } from "@/lib/integrations/termii/client";
+import { fetchAllRows } from "@/lib/supabase/paginate";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
+
+/**
+ * Ceiling on one broadcast. The old code silently took the first 100 matching
+ * contacts, so a campaign looked "sent" while most of the audience never got a
+ * message. Raise with COMMUNICATIONS_MAX_RECIPIENTS.
+ */
+function maxRecipients() {
+  const configured = Number(process.env.COMMUNICATIONS_MAX_RECIPIENTS);
+  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 1000;
+}
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -16,6 +28,12 @@ export async function POST(req: NextRequest) {
   }
   const blocked = denyWriteIfRestricted(user.role);
   if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
+
+  // Bulk SMS spends real money, so throttle by workspace rather than by user.
+  const burst = await checkRateLimit("smsBurst", user.profile.tenant_id);
+  if (!burst.allowed) {
+    return tooManyRequests(burst, "Too many send requests. Wait a moment and try again.");
+  }
 
   const account = await getTermiiAccount();
   if (!account.ok) {
@@ -62,19 +80,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let q = supabase
-      .from("contacts")
-      .select("phone, full_name")
-      .eq("tenant_id", tenantId)
-      .not("phone", "is", null);
-    if (ward) q = q.eq("ward", ward);
-    if (supportLevel) q = q.eq("support_level", supportLevel);
-    const { data: contacts } = await q.limit(100);
+    const cap = maxRecipients();
+    const contacts = await fetchAllRows<{ phone: string | null; full_name: string | null }>(
+      (rangeFrom, rangeTo) => {
+        let q = supabase
+          .from("contacts")
+          .select("phone, full_name")
+          .eq("tenant_id", tenantId)
+          .not("phone", "is", null)
+          .order("created_at");
+        if (ward) q = q.eq("ward", ward);
+        if (supportLevel) q = q.eq("support_level", supportLevel);
+        return q.range(rangeFrom, rangeTo);
+      },
+      { max: cap + 1 }
+    );
 
-    if (!contacts?.length) {
+    if (!contacts.length) {
       return NextResponse.json(
         { error: "No contacts with phone numbers match these audience filters" },
         { status: 400 }
+      );
+    }
+
+    // One extra row was fetched purely to detect that more exist.
+    const capped = contacts.length > cap;
+    const audience = capped ? contacts.slice(0, cap) : contacts;
+
+    const daily = await checkRateLimit("smsDaily", tenantId, { increment: audience.length });
+    if (!daily.allowed) {
+      return tooManyRequests(
+        daily,
+        "This workspace has reached its daily SMS allowance. Try again tomorrow or raise the limit."
       );
     }
 
@@ -103,7 +140,7 @@ export async function POST(req: NextRequest) {
     let sent = 0;
     let failed = 0;
     const reasons: string[] = [];
-    for (const c of contacts) {
+    for (const c of audience) {
       if (!c.phone) continue;
       const text = renderTemplate(templateBody, {
         name: (c.full_name ?? "Friend").split(" ")[0],
@@ -152,7 +189,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true, sent, failed, recipients: contacts.length });
+    return NextResponse.json({
+      success: true,
+      sent,
+      failed,
+      recipients: audience.length,
+      capped,
+      cap,
+    });
   }
 
   if (!phone || !message) {

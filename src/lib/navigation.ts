@@ -47,6 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export const QUICK_ACTIONS = [
+  { title: "Issue PU codes", href: "/polling-units/agents", permission: "polling_units.manage" as Permission, creates: true },
   { title: "New Event", href: "/events/new", permission: "events.manage" as Permission, creates: true },
   { title: "Send Broadcast", href: "/communications/campaigns/new", permission: "communications.send" as Permission, creates: true },
   { title: "Add Volunteer", href: "/volunteers/new", permission: "volunteers.manage" as Permission, creates: true },

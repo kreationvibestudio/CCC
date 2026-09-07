@@ -2,7 +2,8 @@
 /**
  * Fill missing Edo polling-unit map pins from LGA centroids + deterministic jitter.
  * INEC CSV has names, not GPS; public geocoders are slow/noisy for 4k+ units.
- * These pins are good enough for Field Agent check-in (5 km radius).
+ * These pins are LGA-scale only. Do not use them for Field Agent check-in
+ * (100 ft). Apply official INEC GPS with `npm run pu:apply-gps` instead.
  *
  * Usage: node scripts/seed-edo-approx-pins.mjs [--tenant-id=UUID] [--force]
  */

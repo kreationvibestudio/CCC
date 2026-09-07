@@ -19,6 +19,12 @@ import {
   unassignPollingAgent,
   type AssignmentRow,
 } from "@/lib/agents/actions";
+import { AGENT_LOGIN_RADIUS_FT } from "@/lib/agent/geo";
+import {
+  FillMissingCodesButton,
+  IssueCodesCallout,
+  IssuePinnedCodesButton,
+} from "@/components/polling-units/issue-pinned-codes-button";
 import { AGENT_CSV_TEMPLATE, parseAgentAssignmentCsv } from "@/lib/agents/csv";
 import { queryPollingUnits, type PollingUnitListItem } from "@/lib/polling-units/actions";
 import { usePermissions } from "@/components/providers/auth-provider";
@@ -241,6 +247,14 @@ export function AgentRosterView({
     });
   }
 
+  function rememberIssued(codes: { name: string; code: string; puCode: string }[]) {
+    setIssued((prev) => [
+      ...codes.map((c) => ({ code: c.code, puCode: c.puCode, name: c.name })),
+      ...prev,
+    ]);
+    void reloadRoster();
+  }
+
   function handleNudge(userId: string | null) {
     if (!userId) {
       toast.error("No agent login on this unit");
@@ -276,12 +290,16 @@ export function AgentRosterView({
     <div className="space-y-6">
       <PageHeader
         title="Polling agents"
-        description="Issue an 8-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must match the unit at sign-in. Units without a map pin cannot check in — fill pins from Polling Units first."
+        description={`Issue a 10-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must be within ${AGENT_LOGIN_RADIUS_FT} ft of the unit pin. Older 8-character codes still work until they expire. Units without a map pin cannot check in.`}
       >
+        <IssuePinnedCodesButton onIssued={rememberIssued} />
+        <FillMissingCodesButton onIssued={rememberIssued} />
         <Button variant="outline" asChild>
           <Link href="/polling-units">Back to polling units</Link>
         </Button>
       </PageHeader>
+
+      <IssueCodesCallout onIssued={rememberIssued} />
 
       {codesTableMissing && (
         <Card className="border-amber-500/40">
@@ -307,13 +325,20 @@ export function AgentRosterView({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Every assigned Field Agent, listed by name. Share the code; they enter it in CCC Agent at the unit.
+            Every assigned Field Agent, listed by name. Share the code; they enter it in CCC Agent at the
+            unit. Sign-in only works within {AGENT_LOGIN_RADIUS_FT} ft of that unit&apos;s map pin.
           </p>
-          {codesByName.length > 0 ? (
-            <>
-              <Button type="button" variant="secondary" onClick={downloadCodes}>
+          <div className="flex flex-wrap gap-2">
+            <IssuePinnedCodesButton variant="secondary" onIssued={rememberIssued} />
+            <FillMissingCodesButton onIssued={rememberIssued} />
+            {codesByName.length > 0 ? (
+              <Button type="button" variant="outline" onClick={downloadCodes}>
                 Download codes CSV
               </Button>
+            ) : null}
+          </div>
+          {codesByName.length > 0 ? (
+            <>
               <div className="max-h-80 space-y-2 overflow-auto text-sm">
                 {codesByName.map((c) => (
                   <div key={`${c.name}-${c.puCode}`} className="flex flex-wrap items-center justify-between gap-2">
@@ -337,8 +362,9 @@ export function AgentRosterView({
             </>
           ) : (
             <p className="text-sm">
-              No Field Agent is tied to a polling unit yet. Use <span className="font-medium">Assign one agent</span> below
-              with a name and PU code. The code will show here next to that name.
+              No Field Agent is tied to a polling unit yet. Click{" "}
+              <span className="font-medium">Issue codes for pinned units</span> to create one login per
+              mapped unit, or assign a named agent below.
             </p>
           )}
         </CardContent>

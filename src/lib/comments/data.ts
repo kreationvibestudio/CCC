@@ -17,7 +17,11 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
       "super_administrator", "campaign_director", "media_director",
       "social_media_team", "call_center_agent", "data_analyst",
     ])
-    .order("full_name");
+    .order("full_name")
+    // Feeds an assignee <select>. Field agents are excluded by the role filter,
+    // so HQ staff comfortably fit; the bound is here so an unexpectedly large
+    // workspace cannot hit PostgREST's cap without anyone noticing.
+    .limit(500);
 
   return data ?? [];
 }

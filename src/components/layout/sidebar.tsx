@@ -77,7 +77,11 @@ export function Sidebar() {
         <nav className="space-y-1 px-2">
           {visibleItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname.startsWith(item.href);
+            const isActive =
+              item.href === "/polling-units"
+                ? pathname === "/polling-units" ||
+                  (pathname.startsWith("/polling-units/") && !pathname.startsWith("/polling-units/agents"))
+                : pathname === item.href || pathname.startsWith(`${item.href}/`);
             const link = (
               <Link
                 key={item.href}

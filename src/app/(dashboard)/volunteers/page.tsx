@@ -5,7 +5,7 @@ import { appBaseUrl } from "@/lib/campaign";
 
 export default async function VolunteersPage() {
   const user = await getCurrentUser();
-  const volunteers = await getVolunteers(user!.profile.tenant_id);
+  const volunteers = await getVolunteers();
   const base =
     appBaseUrl() ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}` : "");

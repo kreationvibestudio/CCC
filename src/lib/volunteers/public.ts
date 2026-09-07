@@ -1,7 +1,9 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { CAMPAIGN_TENANT_ID } from "@/lib/campaign";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export type PublicCampaign = {
   id: string;
@@ -53,6 +55,14 @@ export async function registerVolunteerPublic(
 ): Promise<{ error?: string; success?: true; alreadyRegistered?: boolean; campaignName?: string }> {
   const campaign = await getPublicCampaignBySlug(slug);
   if (!campaign) return { error: "This volunteer signup link is invalid." };
+
+  // Unauthenticated service-role write: throttle by source so the volunteer
+  // table cannot be filled with junk PII.
+  const ip = clientIp(await headers());
+  const verdict = await checkRateLimit("volunteerSignup", `${campaign.slug}:${ip}`);
+  if (!verdict.allowed) {
+    return { error: "Too many signups from this connection. Try again later." };
+  }
 
   const fullName = input.fullName.trim();
   const phone = cleanPhone(input.phone);

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-shell";
+import { CampaignWebsite } from "@/components/shared/campaign-website";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +20,7 @@ import {
   getPurgeNonEdoMigrationSql,
   getInviteRepairSql,
   updateCampaignDates,
+  updateCampaignWebsite,
   getCampaignDatesMigrationSql,
   deleteTeamMembers,
   testTermiiConnection,
@@ -209,6 +212,7 @@ export function AdminView({
   donateUrl,
   volunteerUrl,
   paystackCheckoutUrl,
+  campaignWebsite,
   campaignStartDate,
   campaignEndDate,
   electionDate,
@@ -221,6 +225,7 @@ export function AdminView({
   donateUrl: string;
   volunteerUrl: string;
   paystackCheckoutUrl: string;
+  campaignWebsite: string;
   campaignStartDate: string | null;
   campaignEndDate: string | null;
   electionDate: string | null;
@@ -312,6 +317,18 @@ export function AdminView({
   }
 
   const webhookUrl = donateUrl ? `${donateUrl.replace(/\/donate$/, "")}/api/donations/webhook` : "";
+
+  function handleCampaignWebsite(formData: FormData) {
+    startTransition(async () => {
+      const result = await updateCampaignWebsite(formData);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.website ? "Campaign website saved" : "Campaign website cleared");
+      router.refresh();
+    });
+  }
 
   function handleInvite(formData: FormData) {
     startTransition(async () => {
@@ -436,16 +453,8 @@ export function AdminView({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Share this link on{" "}
-            <a
-              className="underline underline-offset-2"
-              href="https://akhakonanenih.info"
-              target="_blank"
-              rel="noreferrer"
-            >
-              akhakonanenih.info
-            </a>{" "}
-            (for example a “Volunteer” button in Get in touch). New signups appear under Volunteers.
+            Share this link on <CampaignWebsite /> (for example a “Volunteer” button in Get in
+            touch). New signups appear under Volunteers.
           </p>
           <div className="space-y-1">
             <Label>Signup page</Label>
@@ -468,6 +477,24 @@ export function AdminView({
               ) : null}
             </div>
           </div>
+          <form action={handleCampaignWebsite} className="space-y-1">
+            <Label htmlFor="campaign_website">Campaign website</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                id="campaign_website"
+                name="campaign_website"
+                placeholder="example.org"
+                defaultValue={campaignWebsite}
+              />
+              <Button type="submit" variant="secondary" disabled={pending}>
+                Save
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Used wherever this console tells you where to publish a public link. Leave empty if
+              the campaign has no site yet.
+            </p>
+          </form>
         </CardContent>
       </Card>
 
@@ -604,8 +631,12 @@ export function AdminView({
                 ))}
               </NativeSelect>
               <p className="text-xs text-muted-foreground">
-                Field Agents only use the CCC Agent app. Create them under Polling units → PU Agents to
-                issue an agent code tied to a unit. GPS is checked at sign-in. Email is optional.
+                Field Agents only use the CCC Agent app. Open{" "}
+                <Link href="/polling-units/agents" className="font-medium text-primary hover:underline">
+                  PU Agents
+                </Link>{" "}
+                and click <span className="font-medium">Issue codes for pinned units</span> to create a
+                login code per mapped unit. GPS is checked at sign-in. Email is optional.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

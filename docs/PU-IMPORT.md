@@ -43,7 +43,7 @@ npm run pu:bootstrap   # import Edo CSV + approximate LGA map pins for agent che
 npm run pu:sync-inec
 ```
 
-Field Agent check-in uses a **5 km** radius around the stored pin. GPS is preferred; when location is unavailable, soft check-in (`AGENT_LOGIN_SOFT_GPS=true`) still allows the agent code. Web login: `/agent/login`.
+Field Agent check-in uses a **100 ft** radius around the stored pin. Location is required. Soft check-in (`AGENT_LOGIN_SOFT_GPS=true`) is lab-only. Web login: `/agent/login`. Use official INEC GPS (`npm run pu:apply-gps`), not LGA-centroid approximations — those pins are kilometres off and will fail a 100 ft fence.
 
 ## Official INEC CSV columns
 

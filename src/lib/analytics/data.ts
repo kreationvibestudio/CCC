@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import { generateBriefingFromComments } from "@/lib/ai/briefing";
+import { briefingFromTotals, totalsFromComments } from "@/lib/ai/briefing";
 import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { isMissingColumnError } from "@/lib/public-error";
 import {
   buildDecisionCalls,
@@ -113,19 +114,34 @@ export async function getAnalyticsSummary(tenantId: string) {
       .in("support_level", ["strong", "leaning"]),
   ]);
 
-  const { data: commentRows } = await supabase
-    .from("comments")
-    .select("content, sentiment, issue_topic, is_misinformation, created_at, ward, status")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(2000);
+  // Trend, ward pressure and hot issues are deliberately computed over the most
+  // recent slice rather than all history. `.limit(2000)` alone silently returned
+  // 1000, so page through to actually get the window the analysis assumes.
+  const COMMENT_WINDOW = 2000;
+  const commentRows = await fetchAllRows<{
+    sentiment: string | null;
+    issue_topic: string | null;
+    is_misinformation: boolean | null;
+    created_at: string | null;
+    ward: string | null;
+    status: string | null;
+  }>(
+    (from, to) =>
+      supabase
+        .from("comments")
+        .select("sentiment, issue_topic, is_misinformation, created_at, ward, status")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .range(from, to),
+    { max: COMMENT_WINDOW }
+  );
 
   const sentiment = { positive: 0, neutral: 0, negative: 0 };
   const issueMap = new Map<string, { total: number; negative: number }>();
   const byDay = new Map<string, { positive: number; negative: number; neutral: number }>();
   const byWard = new Map<string, { positive: number; negative: number; neutral: number }>();
 
-  for (const c of commentRows ?? []) {
+  for (const c of commentRows) {
     if (c.sentiment && c.sentiment in sentiment) {
       sentiment[c.sentiment as keyof typeof sentiment]++;
     }
@@ -204,20 +220,40 @@ export async function getAnalyticsSummary(tenantId: string) {
   ).length;
   const uncoveredHighVoterPus = uncovered.filter((p) => Number(p.registered_voters ?? 0) >= 500).length;
 
-  const { data: donations } = await supabase
-    .from("donations")
-    .select("amount, created_at")
-    .eq("tenant_id", tenantId)
-    .order("created_at");
-  const donationByMonth = new Map<string, number>();
-  for (const d of donations ?? []) {
-    const key = (d.created_at ?? "").slice(0, 7) || "unknown";
-    donationByMonth.set(key, (donationByMonth.get(key) ?? 0) + Number(d.amount ?? 0));
+  // Bucketed in SQL. Reducing fetched rows here flattened the trend once a
+  // workspace passed PostgREST's 1000-row response cap.
+  const monthlyDonations = await supabase.rpc("donation_monthly_totals", {
+    p_tenant_id: tenantId,
+    p_months: 12,
+  });
+  let donationTrend: { month: string; amount: number }[] = Array.isArray(monthlyDonations.data)
+    ? monthlyDonations.data.map((row: { month?: string; amount?: number | string }) => ({
+        month: String(row.month ?? "unknown"),
+        amount: Number(row.amount ?? 0),
+      }))
+    : [];
+
+  if (monthlyDonations.error) {
+    const donations = await fetchAllRows<{ amount: number | null; created_at: string | null }>(
+      (from, to) =>
+        supabase
+          .from("donations")
+          .select("amount, created_at")
+          .eq("tenant_id", tenantId)
+          .order("created_at")
+          .range(from, to),
+      { max: 20_000 }
+    );
+    const donationByMonth = new Map<string, number>();
+    for (const d of donations) {
+      const key = (d.created_at ?? "").slice(0, 7) || "unknown";
+      donationByMonth.set(key, (donationByMonth.get(key) ?? 0) + Number(d.amount ?? 0));
+    }
+    donationTrend = [...donationByMonth.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12)
+      .map(([month, amount]) => ({ month, amount }));
   }
-  const donationTrend = [...donationByMonth.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-12)
-    .map(([month, amount]) => ({ month, amount }));
 
   const rpcWards = await supabase.rpc("top_polling_wards", { p_limit: 8 });
   const geographic = Array.isArray(rpcWards.data)
@@ -227,23 +263,44 @@ export async function getAnalyticsSummary(tenantId: string) {
       }))
     : [];
 
-  const { data: posts } = await supabase
-    .from("social_posts")
-    .select("likes, comments_count, shares")
-    .eq("tenant_id", tenantId);
-  const socialEngagement = (posts ?? []).reduce(
-    (s, p) => s + (p.likes ?? 0) + (p.comments_count ?? 0) + (p.shares ?? 0),
-    0
-  );
+  const metricsRes = await supabase.rpc("dashboard_metrics", { p_tenant_id: tenantId });
+  const metrics = (metricsRes.error ? null : metricsRes.data) as
+    | { likes?: number; shares?: number; post_comments?: number; posts?: number }
+    | null;
+
+  let socialEngagement =
+    Number(metrics?.likes ?? 0) + Number(metrics?.shares ?? 0) + Number(metrics?.post_comments ?? 0);
+  let postCount = Number(metrics?.posts ?? 0);
+
+  if (!metrics) {
+    const posts = await fetchAllRows<{ likes: number | null; comments_count: number | null; shares: number | null }>(
+      (from, to) =>
+        supabase
+          .from("social_posts")
+          .select("likes, comments_count, shares")
+          .eq("tenant_id", tenantId)
+          .range(from, to),
+      { max: 20_000 }
+    );
+    socialEngagement = posts.reduce((s, p) => s + (p.likes ?? 0) + (p.comments_count ?? 0) + (p.shares ?? 0), 0);
+    postCount = posts.length;
+  }
 
   let aiInsight = "";
   let recommendations: string[] = [];
   try {
-    const { count: postCount } = await supabase
-      .from("social_posts")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", tenantId);
-    const briefing = generateBriefingFromComments(commentRows ?? [], postCount ?? 0, socialEngagement);
+    // Sentiment shares come from the sampled rows, but the headline counts are
+    // the workspace-wide ones so the summary sentence cannot understate them.
+    const sampled = totalsFromComments(commentRows);
+    const briefing = briefingFromTotals(
+      {
+        ...sampled,
+        total: commentCount ?? sampled.total,
+        misinformation: misinfoOpen ?? sampled.misinformation,
+      },
+      postCount,
+      socialEngagement
+    );
     aiInsight = briefing.summary;
     recommendations = briefing.recommendations;
   } catch {

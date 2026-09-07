@@ -9,8 +9,8 @@ import { createCampaign, getTemplates } from "@/lib/communications/actions";
 import { requireCanCreateOrRedirect } from "@/lib/auth/session";
 
 export default async function NewCampaignPage() {
-  const user = await requireCanCreateOrRedirect("/communications");
-  const templates = (await getTemplates(user.profile.tenant_id)).filter(
+  await requireCanCreateOrRedirect("/communications");
+  const templates = (await getTemplates()).filter(
     (t: { channel: string }) => t.channel === "sms"
   );
 

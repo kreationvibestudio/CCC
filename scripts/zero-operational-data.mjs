@@ -151,7 +151,7 @@ async function main() {
     console.log("\n⚠ No polling units found. Continuing wipe of operational tables anyway.");
   }
 
-  const rpc = await admin.rpc("zero_operational_campaign_data");
+  const rpc = await admin.rpc("zero_operational_campaign_data", { p_tenant_id: TENANT });
   if (!rpc.error) {
     ok(`Truncated operational tables via SQL (${rpc.data?.polling_units ?? "?"} polling units kept)`);
   } else {

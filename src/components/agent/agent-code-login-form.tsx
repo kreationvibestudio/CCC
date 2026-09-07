@@ -6,12 +6,7 @@ import { BrandLogo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-
-function formatCodeInput(raw: string) {
-  const compact = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
-  if (compact.length <= 4) return compact;
-  return `${compact.slice(0, 4)}-${compact.slice(4)}`;
-}
+import { formatAgentCodeInput, isAgentCodeShape } from "@/lib/agent/access-code";
 
 async function readGpsOptional(): Promise<{ latitude: number; longitude: number } | null> {
   if (typeof navigator === "undefined" || !navigator.geolocation) return null;
@@ -35,8 +30,8 @@ export function AgentCodeLoginForm() {
     e.preventDefault();
     setError("");
     setInfo("");
-    if (code.replace(/[^A-Z0-9]/gi, "").length !== 8) {
-      setError("Enter the 8-character code HQ gave you");
+    if (!isAgentCodeShape(code)) {
+      setError("Enter the agent code HQ gave you");
       return;
     }
     setLoading(true);
@@ -83,13 +78,13 @@ export function AgentCodeLoginForm() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Field Agent sign-in</h1>
           <p className="mt-2 text-sm text-white/70">
-            Enter the code from HQ (Polling units → PU Agents). Location is checked when your browser allows it.
+            Enter the code from HQ (Polling units → PU Agents). Turn on location — you must be within 100 feet of your polling unit.
           </p>
         </div>
         <Input
           value={code}
-          onChange={(e) => setCode(formatCodeInput(e.target.value))}
-          placeholder="XXXX-XXXX"
+          onChange={(e) => setCode(formatAgentCodeInput(e.target.value))}
+          placeholder="XXXXX-XXXXX"
           autoComplete="one-time-code"
           className="h-14 border-white/20 bg-white/10 text-center text-2xl font-bold tracking-[0.35em] text-white placeholder:text-white/40"
           aria-label="Agent access code"

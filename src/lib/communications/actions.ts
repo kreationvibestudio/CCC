@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth/session";
+import { authorize } from "@/lib/auth/session";
 import { denyCreateIfRestricted } from "@/types/auth";
 
 export async function createTemplate(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("communications.send");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
   if (blocked) return { error: blocked };
   const supabase = await createClient();
@@ -25,8 +26,9 @@ export async function createTemplate(formData: FormData) {
 }
 
 export async function createCampaign(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("communications.send");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
   if (blocked) return { error: blocked };
   const supabase = await createClient();
@@ -44,14 +46,28 @@ export async function createCampaign(formData: FormData) {
   return { success: true };
 }
 
-export async function getTemplates(tenantId: string) {
+/** Tenant comes from the session, never from a caller-supplied argument. */
+export async function getTemplates() {
+  const gate = await authorize("communications.view");
+  if (!gate.ok) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("message_templates").select("*").eq("tenant_id", tenantId).order("name");
+  const { data } = await supabase
+    .from("message_templates")
+    .select("*")
+    .eq("tenant_id", gate.user.profile.tenant_id)
+    .order("name");
   return data ?? [];
 }
 
-export async function getCampaigns(tenantId: string) {
+/** Tenant comes from the session, never from a caller-supplied argument. */
+export async function getCampaigns() {
+  const gate = await authorize("communications.view");
+  if (!gate.ok) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("message_campaigns").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+  const { data } = await supabase
+    .from("message_campaigns")
+    .select("*")
+    .eq("tenant_id", gate.user.profile.tenant_id)
+    .order("created_at", { ascending: false });
   return data ?? [];
 }

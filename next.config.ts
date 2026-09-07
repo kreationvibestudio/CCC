@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { STATIC_SECURITY_HEADERS } from "./src/lib/security/headers";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -13,6 +14,11 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.facebook.com" },
       { protocol: "https", hostname: "**.instagram.com" },
     ],
+  },
+  // Content-Security-Policy is set in middleware instead: it carries a
+  // per-request nonce, which a static header cannot.
+  async headers() {
+    return [{ source: "/:path*", headers: STATIC_SECURITY_HEADERS }];
   },
 };
 

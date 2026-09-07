@@ -2,23 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/admin";
-import { getCurrentUser } from "@/lib/auth/session";
+import { authorize } from "@/lib/auth/session";
 import { denyCreateIfRestricted, denyDeleteIfRestricted } from "@/types/auth";
-import type { Donation } from "@/types/database";
+import { fetchAllRows } from "@/lib/supabase/paginate";
+import type { Contact, Donation } from "@/types/database";
 import { assertContactInTenant } from "@/lib/tenancy";
 
+/**
+ * CRM writes go through the caller's own session so tenant RLS applies on top of
+ * the explicit tenant filters. These used to run as the service role, which
+ * bypassed RLS entirely for contact PII.
+ */
 async function crmDb() {
-  try {
-    return createServiceClient();
-  } catch {
-    return createClient();
-  }
+  return createClient();
 }
 
 export async function createContact(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("crm.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
   if (blocked) return { error: blocked };
   const fullName = String(formData.get("full_name") ?? "").trim();
@@ -39,29 +41,36 @@ export async function createContact(formData: FormData) {
   return { success: true };
 }
 
-export async function getContacts(tenantId: string) {
+/** Tenant comes from the session, never from a caller-supplied argument. */
+export async function getContacts() {
+  const gate = await authorize("crm.view");
+  if (!gate.ok) return [];
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("contacts")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("full_name")
-    .limit(2000);
-  if (error) return [];
-  return data ?? [];
+  return fetchAllRows<Contact>(
+    (from, to) =>
+      supabase
+        .from("contacts")
+        .select("*")
+        .eq("tenant_id", gate.user.profile.tenant_id)
+        .order("full_name")
+        .range(from, to),
+    { max: 5000 }
+  );
 }
 
 export async function getContact(id: string) {
-  const user = await getCurrentUser();
-  if (!user) return null;
+  const gate = await authorize("crm.view");
+  if (!gate.ok) return null;
+  const user = gate.user;
   const supabase = await createClient();
   const { data } = await supabase.from("contacts").select("*").eq("id", id).eq("tenant_id", user.profile.tenant_id).single();
   return data;
 }
 
 export async function updateContact(id: string, formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("crm.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
   if (blocked) return { error: blocked };
   const supabase = await crmDb();
@@ -82,8 +91,9 @@ export async function updateContact(id: string, formData: FormData) {
 }
 
 export async function deleteContact(id: string) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("crm.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const blocked = denyDeleteIfRestricted(user.role);
   if (blocked) return { error: blocked };
   const supabase = await crmDb();
@@ -94,8 +104,9 @@ export async function deleteContact(id: string) {
 }
 
 export async function logInteraction(contactId: string, formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("crm.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
   if (blocked) return { error: blocked };
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
@@ -113,8 +124,9 @@ export async function logInteraction(contactId: string, formData: FormData) {
 }
 
 export async function recordDonation(contactId: string, formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Unauthorized" };
+  const gate = await authorize("crm.manage");
+  if (!gate.ok) return { error: gate.error };
+  const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
   if (blocked) return { error: blocked };
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
@@ -145,8 +157,9 @@ export async function recordDonation(contactId: string, formData: FormData) {
 }
 
 export async function getContactInteractions(contactId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const gate = await authorize("crm.view");
+  if (!gate.ok) return [];
+  const user = gate.user;
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
   if (contactError) return [];
   const supabase = await createClient();
@@ -155,8 +168,9 @@ export async function getContactInteractions(contactId: string) {
 }
 
 export async function getContactDonations(contactId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const gate = await authorize("crm.view");
+  if (!gate.ok) return [];
+  const user = gate.user;
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
   if (contactError) return [];
   const supabase = await createClient();

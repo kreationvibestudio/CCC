@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { denyCreateIfRestricted, denyDeleteIfRestricted, hasPermission, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { issueAgentAccessCode } from "@/lib/agent/code-login";
+import { decryptAgentCode } from "@/lib/agent/code-vault";
 import { isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
 import { findPollingUnitByCode, pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
@@ -167,7 +168,10 @@ export async function listAgentAssignments(input?: {
       for (const row of fallback.data ?? []) codes.set(row.profile_id, { display: null, hint: row.code_hint });
     } else {
       for (const row of codesRes.data ?? []) {
-        codes.set(row.profile_id, { display: row.code_display ?? null, hint: row.code_hint });
+        codes.set(row.profile_id, {
+          display: decryptAgentCode(row.code_display),
+          hint: row.code_hint,
+        });
       }
     }
   } else {
@@ -202,17 +206,34 @@ export async function listAgentAssignments(input?: {
   };
 }
 
+async function listAllAssignedRows(): Promise<{
+  rows: AssignmentRow[];
+  codesTableMissing?: boolean;
+}> {
+  const rows: AssignmentRow[] = [];
+  let codesTableMissing = false;
+  for (let page = 0; page < 200; page += 1) {
+    const listed = await listAgentAssignments({ page, pageSize: 100 });
+    codesTableMissing = Boolean(listed.codesTableMissing);
+    rows.push(...listed.rows);
+    if (listed.rows.length < 100) break;
+  }
+  return { rows, codesTableMissing };
+}
+
 export async function listAgentCodesByName(): Promise<{
   rows: { name: string; code: string; puCode: string; unitName: string }[];
   codesTableMissing?: boolean;
 }> {
-  const listed = await listAgentAssignments({ page: 0, pageSize: 100 });
+  const listed = await listAllAssignedRows();
   if (!listed.rows.length) return { rows: [], codesTableMissing: listed.codesTableMissing };
-  const missing = listed.rows.filter((row) => row.assigned_agent_id && !row.agent_code);
+  const missing = listed.rows.filter(
+    (row) => row.assigned_agent_id && !row.agent_code && !row.agent_code_hint
+  );
   for (const row of missing) {
     await resetAgentAccessCode(row.id);
   }
-  const refreshed = missing.length ? await listAgentAssignments({ page: 0, pageSize: 100 }) : listed;
+  const refreshed = missing.length ? await listAllAssignedRows() : listed;
   const rows = refreshed.rows
     .filter((row) => row.agent_name)
     .map((row) => ({
@@ -223,6 +244,125 @@ export async function listAgentCodesByName(): Promise<{
     }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   return { rows, codesTableMissing: refreshed.codesTableMissing };
+}
+
+/**
+ * Issue a login code for every assigned PU that does not already have one.
+ * Existing codes (even if we cannot decrypt them) are left alone.
+ */
+export async function issueMissingAgentCodes(): Promise<{
+  error?: string;
+  issued: number;
+  skipped: number;
+  codes?: { name: string; code: string; puCode: string; unitName: string }[];
+}> {
+  const auth = await requireStaff();
+  if (!auth.user) return { error: "Unauthorized", issued: 0, skipped: 0 };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked, issued: 0, skipped: 0 };
+  const listed = await listAllAssignedRows();
+  if (listed.codesTableMissing) {
+    return { error: "Agent codes are not in this database yet", issued: 0, skipped: 0 };
+  }
+  let issued = 0;
+  let skipped = 0;
+  const codes: { name: string; code: string; puCode: string; unitName: string }[] = [];
+  for (const row of listed.rows) {
+    if (!row.assigned_agent_id) continue;
+    if (row.agent_code || row.agent_code_hint) {
+      skipped += 1;
+      continue;
+    }
+    const result = await resetAgentAccessCode(row.id);
+    if (result.agentCode) {
+      issued += 1;
+      codes.push({
+        name: row.agent_name || "Field Agent",
+        code: result.agentCode,
+        puCode: row.code,
+        unitName: row.name,
+      });
+    }
+  }
+  return { issued, skipped, codes };
+}
+
+/**
+ * Create a Field Agent login and access code for pinned units that have no agent.
+ * One named agent per unit. Units without a map pin are skipped — 100 ft check-in
+ * is impossible without a pin.
+ */
+export async function provisionPinnedPollingUnits(input?: { limit?: number }): Promise<{
+  error?: string;
+  created: number;
+  remaining: number;
+  missingPin: number;
+  codes?: { name: string; code: string; puCode: string; unitName: string }[];
+}> {
+  const auth = await requireStaff();
+  if (!auth.user) return { error: "Unauthorized", created: 0, remaining: 0, missingPin: 0 };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked, created: 0, remaining: 0, missingPin: 0 };
+  const limit = Math.min(Math.max(input?.limit ?? 15, 1), 25);
+  const supabase = db();
+  const tenantId = auth.user.profile.tenant_id;
+
+  const [{ data: pinned }, { count: missingPin }, { count: stillOpen }] = await Promise.all([
+    applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select("id, code, pu_code, name, ward, lga, latitude, longitude")
+        .eq("tenant_id", tenantId)
+        .is("assigned_agent_id", null)
+        .not("latitude", "is", null)
+        .not("longitude", "is", null)
+    )
+      .order("code")
+      .limit(limit + 1),
+    applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .is("assigned_agent_id", null)
+        .or("latitude.is.null,longitude.is.null")
+    ),
+    applyCampaignStateFilter(
+      supabase
+        .from("polling_units")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .is("assigned_agent_id", null)
+        .not("latitude", "is", null)
+        .not("longitude", "is", null)
+    ),
+  ]);
+
+  const batch = (pinned ?? []).slice(0, limit);
+  const codes: { name: string; code: string; puCode: string; unitName: string }[] = [];
+  let created = 0;
+  for (const pu of batch) {
+    const display = formatPollingUnitCode(pu);
+    const result = await assignPollingAgent({
+      puCode: display,
+      fullName: `Agent ${display}`,
+    });
+    if (result.error || !result.agentCode) continue;
+    created += 1;
+    codes.push({
+      name: result.fullName || `Agent ${display}`,
+      code: result.agentCode,
+      puCode: result.puCode || display,
+      unitName: pu.name,
+    });
+  }
+
+  return {
+    created,
+    remaining: Math.max(0, (stillOpen ?? 0) - created),
+    missingPin: missingPin ?? 0,
+    codes,
+  };
 }
 
 export async function assignPollingAgent(input: {

@@ -40,6 +40,8 @@ const MIGRATIONS = [
   "supabase/migrations/20260820000005_agent_reports_rls_and_race.sql",
   "supabase/migrations/20260820000006_list_pages_scale.sql",
   "supabase/migrations/20260820000007_polling_agent_assignment.sql",
+  "supabase/migrations/20260821000000_party_workspace_isolation.sql",
+  "supabase/migrations/20260822000000_agent_device_tokens.sql",
   "supabase/migrations/20260822000001_pu_status_voting_finished.sql",
   "supabase/migrations/20260822000002_tenant_invites.sql",
   "supabase/migrations/20260823000001_hq_invite_handle_new_user.sql",
@@ -53,6 +55,11 @@ const MIGRATIONS = [
   "supabase/migrations/20260904000000_zero_situation_room_data.sql",
   "supabase/migrations/20260904120000_purge_non_edo_sample_data.sql",
   "supabase/migrations/20260904130000_strict_edo_campaign_polling_unit.sql",
+  "supabase/migrations/20260905000000_secure_signup_role_assignment.sql",
+  "supabase/migrations/20260905010000_rate_limits.sql",
+  "supabase/migrations/20260905020000_agent_code_expiry.sql",
+  "supabase/migrations/20260905030000_tenant_scoped_admin_functions.sql",
+  "supabase/migrations/20260905040000_dashboard_metrics.sql",
 ];
 
 loadEnvLocal();
@@ -230,13 +237,22 @@ async function ensureAdmin(admin) {
 async function ensureBucket(admin) {
   const listed = await admin.storage.listBuckets();
   if (listed.error) fail(`List buckets: ${listed.error.message}`);
-  if (listed.data?.some((b) => b.name === BUCKET)) {
-    ok(`Storage bucket '${BUCKET}' exists`);
+  const existing = listed.data?.find((b) => b.name === BUCKET);
+  if (existing) {
+    if (existing.public) {
+      const updated = await admin.storage.updateBucket(BUCKET, { public: false });
+      if (updated.error) fail(`Make bucket private: ${updated.error.message}`);
+      ok(`Storage bucket '${BUCKET}' switched from public to private`);
+    } else {
+      ok(`Storage bucket '${BUCKET}' exists (private)`);
+    }
     return;
   }
-  const created = await admin.storage.createBucket(BUCKET, { public: true });
+  // Private: reads go through the signed URLs minted in src/lib/agent/media.ts.
+  // A public bucket would expose every result sheet to anyone who can guess a path.
+  const created = await admin.storage.createBucket(BUCKET, { public: false });
   if (created.error) fail(`Create bucket: ${created.error.message}`);
-  ok(`Created storage bucket '${BUCKET}' (public)`);
+  ok(`Created storage bucket '${BUCKET}' (private)`);
 }
 
 async function importPollingUnitsIfNeeded(admin, beforeCount) {

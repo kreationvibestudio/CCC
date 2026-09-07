@@ -6,11 +6,12 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { ROLE_LABELS, type UserRole } from "@/types/auth";
+import { denyCreateIfRestricted, denyDeleteIfRestricted, ROLE_LABELS, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
 import { openAiConfigured } from "@/lib/ai/openai";
+import { getTermiiAccount, termiiSenderIdConfigured } from "@/lib/integrations/termii/client";
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[];
 const KEEP_ROLES = new Set<string>([
@@ -31,6 +32,8 @@ function tempPassword() {
 export async function inviteUser(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
+    const blocked = denyCreateIfRestricted(adminUser.role);
+    if (blocked) return { error: blocked };
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const fullName = String(formData.get("full_name") ?? "").trim() || email.split("@")[0];
     const roleRaw = String(formData.get("role") ?? "supporter");
@@ -109,6 +112,8 @@ export async function inviteUser(formData: FormData) {
 export async function updateCampaignDates(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
+    const blocked = denyCreateIfRestricted(adminUser.role);
+    if (blocked) return { error: blocked };
     const campaignStart = String(formData.get("campaign_start_date") ?? "").trim() || null;
     const campaignEnd = String(formData.get("campaign_end_date") ?? "").trim() || null;
     const electionDate = String(formData.get("election_date") ?? "").trim() || null;
@@ -222,6 +227,8 @@ WHERE slug = 'campaign';`;
 export async function updateUserRole(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
+    const blocked = denyCreateIfRestricted(adminUser.role);
+    if (blocked) return { error: blocked };
     const userId = String(formData.get("user_id") ?? "").trim();
     const roleRaw = String(formData.get("role") ?? "");
 
@@ -281,6 +288,8 @@ async function clearProfileReferences(admin: ReturnType<typeof createServiceClie
 export async function deleteTeamMembers(formData: FormData) {
   try {
     const adminUser = await requirePermission("admin.users");
+    const blocked = denyDeleteIfRestricted(adminUser.role);
+    if (blocked) return { error: blocked };
     const rawIds = formData.getAll("user_ids").map((v) => String(v).trim()).filter(Boolean);
     const uniqueIds = [...new Set(rawIds)];
     if (!uniqueIds.length) return { error: "Select at least one team member to delete" };
@@ -366,7 +375,7 @@ export async function getSecretsStatus() {
     appUrl: isLiveSecret(appUrl),
     appUrlProduction: isLiveSecret(appUrl) && !/localhost|127\.0\.0\.1/.test(appUrl),
     termiiApiKey: isLiveSecret(process.env.TERMII_API_KEY),
-    termiiSenderId: isLiveSecret(process.env.TERMII_SENDER_ID),
+    termiiSenderId: termiiSenderIdConfigured(),
     facebookPageId: isLiveSecret(process.env.FACEBOOK_PAGE_ID, 5),
     facebookUserToken: isLiveSecret(process.env.FACEBOOK_USER_ACCESS_TOKEN, 40),
     facebookPageToken: isLiveSecret(process.env.FACEBOOK_PAGE_ACCESS_TOKEN, 40),
@@ -376,6 +385,21 @@ export async function getSecretsStatus() {
     mapboxToken: isLiveSecret(process.env.NEXT_PUBLIC_MAPBOX_TOKEN, 20),
     cronSecret: isLiveSecret(process.env.CRON_SECRET, 16),
     paystackSecret: isLiveSecret(process.env.PAYSTACK_SECRET_KEY, 20),
+  };
+}
+
+/** Live Termii wallet check — no SMS is sent. */
+export async function testTermiiConnection(): Promise<{
+  ok: boolean;
+  error?: string;
+  hasCredit?: boolean;
+}> {
+  await requirePermission("admin.users");
+  const account = await getTermiiAccount();
+  if (!account.ok) return { ok: false, error: account.error };
+  return {
+    ok: true,
+    hasCredit: account.balance == null ? undefined : account.balance > 0,
   };
 }
 

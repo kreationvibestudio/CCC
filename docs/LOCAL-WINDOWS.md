@@ -124,7 +124,7 @@ Minimum for SMS:
 
 ```env
 TERMII_API_KEY=...
-TERMII_SENDER_ID=HoR 2027
+TERMII_SENDER_ID=HoR2027
 ```
 
 ## 4. Run locally

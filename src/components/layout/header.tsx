@@ -31,7 +31,7 @@ export function Header() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const user = useAuth();
-  const { can } = usePermissions();
+  const { can, canCreate } = usePermissions();
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifications, unreadCount } = useNotifications(user?.id);
@@ -69,6 +69,7 @@ export function Header() {
           <Search className="h-4 w-4" />
         </Button>
 
+        {canCreate ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon">
@@ -78,13 +79,14 @@ export function Header() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {QUICK_ACTIONS.filter((a) => can(a.permission)).map((action) => (
+            {QUICK_ACTIONS.filter((a) => can(a.permission) && (!a.creates || canCreate)).map((action) => (
               <DropdownMenuItem key={action.href} onClick={() => router.push(action.href)}>
                 {action.title}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        ) : null}
 
         <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
           <DropdownMenuTrigger asChild>
@@ -184,7 +186,7 @@ export function Header() {
             ))}
           </CommandGroup>
           <CommandGroup heading="Quick Actions">
-            {QUICK_ACTIONS.filter((a) => can(a.permission)).map((action) => (
+            {QUICK_ACTIONS.filter((a) => can(a.permission) && (!a.creates || canCreate)).map((action) => (
               <CommandItem
                 key={action.href}
                 onSelect={() => { setSearchOpen(false); router.push(action.href); }}

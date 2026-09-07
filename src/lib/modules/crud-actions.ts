@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/session";
+import { denyDeleteIfRestricted } from "@/types/auth";
 import type { Permission } from "@/types/auth";
 import { TABLE_RULES, pickAllowedColumns, type ManagedTable } from "@/lib/modules/table-rules";
 
@@ -17,6 +18,8 @@ export async function deleteRecord(table: string, id: string, revalidate: string
   if (!rules) return { error: "Invalid table" };
   const gate = await authorize(rules.manage);
   if (!gate.ok) return { error: gate.error };
+  const blocked = denyDeleteIfRestricted(gate.user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase
     .from(rules.table)
@@ -62,6 +65,8 @@ export async function updateRecord(
   if (!rules) return { error: "Invalid table" };
   const gate = await authorize(rules.manage);
   if (!gate.ok) return { error: gate.error };
+  const blocked = denyDeleteIfRestricted(gate.user.role);
+  if (blocked) return { error: blocked };
 
   const picked = pickAllowedColumns(rules.table, updates);
   if (picked.rejected.length > 0) {

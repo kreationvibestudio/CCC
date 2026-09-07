@@ -9,9 +9,15 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getContact, getContactInteractions, getContactDonations, updateContact, deleteContact, logInteraction, recordDonation } from "@/lib/crm/actions";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canCreateRecords, canDeleteRecords, canWriteRecords } from "@/types/auth";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
+  const canWrite = user ? canWriteRecords(user.role) : false;
+  const canCreate = user ? canCreateRecords(user.role) : false;
+  const canDelete = user ? canDeleteRecords(user.role) : false;
   const contact = await getContact(id);
   if (!contact) redirect("/crm");
   const [interactions, donations] = await Promise.all([getContactInteractions(id), getContactDonations(id)]);
@@ -50,15 +56,15 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       <Card><CardContent className="pt-6">
         <form action={saveAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1"><Label>Name</Label><Input name="full_name" defaultValue={contact.full_name} required /></div>
-            <div className="space-y-1"><Label>Phone</Label><Input name="phone" defaultValue={contact.phone ?? ""} /></div>
-            <div className="space-y-1"><Label>Ward</Label><Input name="ward" defaultValue={contact.ward ?? ""} /></div>
-            <div className="space-y-1"><Label>LGA</Label><Input name="lga" defaultValue={contact.lga ?? ""} /></div>
+            <div className="space-y-1"><Label>Name</Label><Input name="full_name" defaultValue={contact.full_name} required disabled={!canWrite} /></div>
+            <div className="space-y-1"><Label>Phone</Label><Input name="phone" defaultValue={contact.phone ?? ""} disabled={!canWrite} /></div>
+            <div className="space-y-1"><Label>Ward</Label><Input name="ward" defaultValue={contact.ward ?? ""} disabled={!canWrite} /></div>
+            <div className="space-y-1"><Label>LGA</Label><Input name="lga" defaultValue={contact.lga ?? ""} disabled={!canWrite} /></div>
           </div>
           <input type="hidden" name="contact_type" value={contact.contact_type} />
           <input type="hidden" name="support_level" value={contact.support_level} />
-          <textarea name="notes" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={contact.notes ?? ""} placeholder="Notes" />
-          <SubmitButton label="Save" />
+          <textarea name="notes" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={contact.notes ?? ""} placeholder="Notes" disabled={!canWrite} />
+          {canWrite ? <SubmitButton label="Save" /> : null}
         </form>
       </CardContent></Card>
       <Card><CardContent className="pt-6">
@@ -66,6 +72,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         {interactions.map((i) => (
           <p key={i.id} className="mb-1 text-sm text-muted-foreground">{i.interaction_type}: {i.notes}</p>
         ))}
+        {canCreate ? (
         <form action={interactionAction} className="mt-3 space-y-2">
           <NativeSelect name="interaction_type">
             <option value="call">Call</option>
@@ -75,6 +82,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           <Input name="notes" placeholder="Notes" required />
           <Button type="submit" size="sm">Log interaction</Button>
         </form>
+        ) : null}
       </CardContent></Card>
       <Card><CardContent className="pt-6">
         <h2 className="mb-2 font-semibold">Donations (₦{Number(contact.total_donations).toLocaleString()})</h2>
@@ -84,13 +92,17 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             {d.payment_reference ? ` · ${d.payment_reference}` : ""}
           </p>
         ))}
+        {canCreate ? (
         <form action={donationAction} className="mt-3 flex gap-2">
           <Input name="amount" type="number" placeholder="Amount" required />
           <Input name="payment_method" placeholder="Method" defaultValue="bank_transfer" />
           <Button type="submit" size="sm">Record</Button>
         </form>
+        ) : null}
       </CardContent></Card>
+      {canDelete ? (
       <form action={deleteAction}><Button type="submit" variant="destructive" size="sm">Delete contact</Button></form>
+      ) : null}
     </div>
   );
 }

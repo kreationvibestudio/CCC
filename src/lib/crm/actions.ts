@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/session";
+import { denyCreateIfRestricted, denyDeleteIfRestricted } from "@/types/auth";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import type { Contact, Donation } from "@/types/database";
 import { assertContactInTenant } from "@/lib/tenancy";
@@ -20,6 +21,8 @@ export async function createContact(formData: FormData) {
   const gate = await authorize("crm.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const fullName = String(formData.get("full_name") ?? "").trim();
   if (!fullName) return { error: "Name is required" };
   const supabase = await crmDb();
@@ -68,6 +71,8 @@ export async function updateContact(id: string, formData: FormData) {
   const gate = await authorize("crm.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await crmDb();
   const { error } = await supabase.from("contacts").update({
     full_name: formData.get("full_name"),
@@ -89,6 +94,8 @@ export async function deleteContact(id: string) {
   const gate = await authorize("crm.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyDeleteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await crmDb();
   const { error } = await supabase.from("contacts").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
@@ -100,6 +107,8 @@ export async function logInteraction(contactId: string, formData: FormData) {
   const gate = await authorize("crm.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
   if (contactError) return { error: contactError };
   const supabase = await crmDb();
@@ -118,6 +127,8 @@ export async function recordDonation(contactId: string, formData: FormData) {
   const gate = await authorize("crm.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
   if (contactError) return { error: contactError };
   const supabase = await crmDb();

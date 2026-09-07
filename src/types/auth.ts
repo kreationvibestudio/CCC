@@ -89,10 +89,15 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "reports.view", "reports.generate",
   ],
   director_general: [
-    "dashboard.view", "social.view", "comments.view", "ai.use", "sentiment.view",
-    "volunteers.view", "crm.view", "events.view", "polling_units.view", "polling_units.manage",
-    "maps.view", "situation_room.view", "analytics.view", "reports.view",
-    "reports.generate",
+    "dashboard.view", "social.view", "social.manage", "comments.view",
+    "comments.reply", "comments.assign", "comments.moderate", "ai.use",
+    "sentiment.view", "volunteers.view", "volunteers.manage", "crm.view",
+    "crm.manage", "events.view", "events.manage", "polling_units.view",
+    "polling_units.manage", "maps.view", "maps.voter_lookup",
+    "situation_room.view", "situation_room.manage", "election_results.submit",
+    "agent.portal",
+    "communications.view", "communications.send", "analytics.view",
+    "reports.view", "reports.generate", "admin.users", "admin.audit",
   ],
   media_director: [
     "dashboard.view", "social.view", "social.manage", "comments.view",
@@ -127,6 +132,38 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   supporter: ["dashboard.view", "events.view", "maps.view"],
 };
+
+export const SYSTEM_MUTATION_DENIED =
+  "Director General has Admin visibility with read-only access. They cannot add, change, or delete anything.";
+
+/** Same HQ visibility as Admin, view-only. */
+export function isDirectorGeneral(role: UserRole) {
+  return role === "director_general";
+}
+
+export function canWriteRecords(role: UserRole): boolean {
+  return !isDirectorGeneral(role);
+}
+
+export function canCreateRecords(role: UserRole): boolean {
+  return canWriteRecords(role);
+}
+
+export function canDeleteRecords(role: UserRole): boolean {
+  return canWriteRecords(role);
+}
+
+export function denyWriteIfRestricted(role: UserRole): string | null {
+  return canWriteRecords(role) ? null : SYSTEM_MUTATION_DENIED;
+}
+
+export function denyCreateIfRestricted(role: UserRole): string | null {
+  return denyWriteIfRestricted(role);
+}
+
+export function denyDeleteIfRestricted(role: UserRole): string | null {
+  return denyWriteIfRestricted(role);
+}
 
 export function hasPermission(role: UserRole, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;

@@ -1,5 +1,6 @@
 ﻿import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
+import { canWriteRecords } from "@/types/auth";
 import { updateOwnProfile } from "@/lib/settings/actions";
 import { PageHeader } from "@/components/shared/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { redirect } from "next/navigation";
 export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const canWrite = canWriteRecords(user.role);
 
   async function action(formData: FormData) {
     "use server";
@@ -37,6 +39,7 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <form action={action} className="mx-auto max-w-lg space-y-4">
+            <fieldset disabled={!canWrite} className="space-y-4">
             <div className="space-y-1">
               <Label htmlFor="email">Email</Label>
               <Input id="email" value={user.email} disabled readOnly />
@@ -78,7 +81,10 @@ export default async function SettingsPage() {
                 />
               </div>
             </div>
-            <SubmitButton label="Save profile" />
+            {canWrite ? <SubmitButton label="Save profile" /> : (
+              <p className="text-sm text-muted-foreground">Director General profiles are view-only.</p>
+            )}
+            </fieldset>
           </form>
           <p className="mt-4 text-sm text-muted-foreground">
             For MFA, open{" "}

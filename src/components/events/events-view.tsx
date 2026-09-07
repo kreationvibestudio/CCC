@@ -9,16 +9,20 @@ import { DataTable } from "@/components/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CampaignEvent } from "@/types/database";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 export function EventsView({ events }: { events: CampaignEvent[] }) {
   const router = useRouter();
+  const { canCreate } = usePermissions();
   const upcoming = events.filter((e) => new Date(e.starts_at) > new Date()).length;
   return (
     <div className="space-y-6">
       <PageHeader title="Campaign Events" description="Rallies, town halls, ward meetings and check-in">
         <div className="flex gap-2">
           <Button variant="outline" asChild><Link href="/events/calendar">Calendar</Link></Button>
+          {canCreate ? (
           <Button asChild><Link href="/events/new"><Plus className="mr-2 h-4 w-4" />Create Event</Link></Button>
+          ) : null}
         </div>
       </PageHeader>
       <div className="grid gap-4 sm:grid-cols-3">

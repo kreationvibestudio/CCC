@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { sendAiMessage } from "@/lib/ai/chat";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 export function AiAssistant({ openaiConfigured }: { openaiConfigured: boolean }) {
+  const { canWrite } = usePermissions();
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [pending, startTransition] = useTransition();
@@ -51,6 +53,7 @@ export function AiAssistant({ openaiConfigured }: { openaiConfigured: boolean })
               </div>
             ))}
           </div>
+          {canWrite ? (
           <div className="flex gap-2">
             <Input
               value={input}
@@ -63,6 +66,9 @@ export function AiAssistant({ openaiConfigured }: { openaiConfigured: boolean })
               {pending ? "…" : "Send"}
             </Button>
           </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Director General can view this assistant, but cannot send prompts.</p>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasPermission } from "@/types/auth";
+import { denyWriteIfRestricted, hasPermission } from "@/types/auth";
 import { createClient } from "@/lib/supabase/server";
-import { sendTermiiSms, renderTemplate } from "@/lib/integrations/termii/client";
+import {
+  getTermiiAccount,
+  renderTemplate,
+  sendTermiiSms,
+} from "@/lib/integrations/termii/client";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
@@ -22,6 +26,8 @@ export async function POST(req: NextRequest) {
   if (!hasPermission(user.role, "communications.send")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
   // Bulk SMS spends real money, so throttle by workspace rather than by user.
   const burst = await checkRateLimit("smsBurst", user.profile.tenant_id);
@@ -29,10 +35,14 @@ export async function POST(req: NextRequest) {
     return tooManyRequests(burst, "Too many send requests. Wait a moment and try again.");
   }
 
-  if (!process.env.TERMII_API_KEY) {
+  const account = await getTermiiAccount();
+  if (!account.ok) {
+    return NextResponse.json({ error: account.error }, { status: 503 });
+  }
+  if (account.balance != null && account.balance <= 0) {
     return NextResponse.json(
-      { error: "TERMII_API_KEY is not configured. Add it in Vercel env or .env.local." },
-      { status: 503 }
+      { error: "Termii wallet has no credit. Top up the Termii balance, then retry." },
+      { status: 402 }
     );
   }
 
@@ -129,35 +139,28 @@ export async function POST(req: NextRequest) {
 
     let sent = 0;
     let failed = 0;
+    const reasons: string[] = [];
     for (const c of audience) {
       if (!c.phone) continue;
       const text = renderTemplate(templateBody, {
         name: (c.full_name ?? "Friend").split(" ")[0],
       });
-      try {
-        const result = await sendTermiiSms(c.phone, text);
-        const ok = Boolean(result.message_id);
-        await supabase.from("messages").insert({
-          tenant_id: tenantId,
-          campaign_id: campaignId,
-          recipient_phone: c.phone,
-          channel: "sms",
-          body: text,
-          status: ok ? "sent" : "failed",
-          sent_at: ok ? new Date().toISOString() : null,
-        });
-        if (ok) sent++;
-        else failed++;
-      } catch {
+      const result = await sendTermiiSms(c.phone, text);
+      await supabase.from("messages").insert({
+        tenant_id: tenantId,
+        campaign_id: campaignId,
+        recipient_phone: c.phone,
+        channel: "sms",
+        body: text,
+        status: result.ok ? "sent" : "failed",
+        sent_at: result.ok ? new Date().toISOString() : null,
+      });
+      if (result.ok) sent++;
+      else {
         failed++;
-        await supabase.from("messages").insert({
-          tenant_id: tenantId,
-          campaign_id: campaignId,
-          recipient_phone: c.phone,
-          channel: "sms",
-          body: text,
-          status: "failed",
-        });
+        if (result.error && reasons.length < 3 && !reasons.includes(result.error)) {
+          reasons.push(result.error);
+        }
       }
     }
 
@@ -176,10 +179,11 @@ export async function POST(req: NextRequest) {
         {
           error:
             failed > 0
-              ? `All ${failed} SMS sends failed. Check TERMII_API_KEY / sender ID.`
+              ? `All ${failed} SMS send${failed === 1 ? "" : "s"} failed. ${reasons.join(" ")}`
               : "No messages were sent",
           sent: 0,
           failed,
+          reasons,
         },
         { status: 502 }
       );
@@ -199,18 +203,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "phone and message required" }, { status: 400 });
   }
 
-  try {
-    const result = await sendTermiiSms(phone, message);
-    await supabase.from("messages").insert({
-      tenant_id: tenantId,
-      recipient_phone: phone,
-      channel: "sms",
-      body: message,
-      status: result.message_id ? "sent" : "failed",
-      sent_at: result.message_id ? new Date().toISOString() : null,
-    });
-    return NextResponse.json({ success: true, result });
-  } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Send failed" }, { status: 500 });
+  const result = await sendTermiiSms(phone, message);
+  await supabase.from("messages").insert({
+    tenant_id: tenantId,
+    recipient_phone: phone,
+    channel: "sms",
+    body: message,
+    status: result.ok ? "sent" : "failed",
+    sent_at: result.ok ? new Date().toISOString() : null,
+  });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error ?? "Send failed", result }, { status: 502 });
   }
+  return NextResponse.json({ success: true, result });
 }

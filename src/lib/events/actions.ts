@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { authorize } from "@/lib/auth/session";
+import { denyCreateIfRestricted, denyDeleteIfRestricted } from "@/types/auth";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import type { CampaignEvent } from "@/types/database";
 import { assertEventInTenant } from "@/lib/tenancy";
@@ -24,6 +25,8 @@ export async function createEvent(formData: FormData) {
   const gate = await authorize("events.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const qrCode = `evt-${crypto.randomUUID().slice(0, 8)}`;
   const { error } = await supabase.from("campaign_events").insert({
@@ -87,6 +90,8 @@ export async function updateEvent(id: string, formData: FormData) {
   const gate = await authorize("events.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase.from("campaign_events").update({
     title: formData.get("title"),
@@ -109,6 +114,8 @@ export async function deleteEvent(id: string) {
   const gate = await authorize("events.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyDeleteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase.from("campaign_events").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };

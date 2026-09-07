@@ -23,9 +23,39 @@ import {
   updateCampaignWebsite,
   getCampaignDatesMigrationSql,
   deleteTeamMembers,
+  testTermiiConnection,
 } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
+import { usePermissions } from "@/components/providers/auth-provider";
+
+function TestTermiiButton() {
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          const result = await testTermiiConnection();
+          if (!result.ok) {
+            toast.error(result.error ?? "Termii check failed", { duration: 10000 });
+            return;
+          }
+          toast.success(
+            result.hasCredit === false
+              ? "Termii accepted the API key, but the wallet has no credit."
+              : "Termii accepted the API key and sender ID."
+          );
+        })
+      }
+    >
+      {pending ? "Checking Termii…" : "Test Termii"}
+    </Button>
+  );
+}
 
 function toDateInputValue(iso: string | null): string {
   if (!iso) return "";
@@ -37,11 +67,13 @@ function CampaignDatesCard({
   campaignEndDate,
   electionDate,
   needsCampaignStartMigration,
+  readOnly = false,
 }: {
   campaignStartDate: string | null;
   campaignEndDate: string | null;
   electionDate: string | null;
   needsCampaignStartMigration?: boolean;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -78,7 +110,7 @@ function CampaignDatesCard({
         <CardTitle>Campaign dates</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {needsCampaignStartMigration ? (
+        {needsCampaignStartMigration && !readOnly ? (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
             <p className="font-medium">Database migration needed</p>
             <p className="mt-1 text-muted-foreground">
@@ -90,7 +122,7 @@ function CampaignDatesCard({
             </Button>
           </div>
         ) : null}
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-3">
+        <form onSubmit={readOnly ? (e) => e.preventDefault() : handleSubmit} className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1">
             <Label htmlFor="campaign_start_date">Campaign start</Label>
             <Input
@@ -98,6 +130,8 @@ function CampaignDatesCard({
               name="campaign_start_date"
               type="date"
               defaultValue={toDateInputValue(campaignStartDate)}
+              disabled={readOnly}
+              readOnly={readOnly}
             />
           </div>
           <div className="space-y-1">
@@ -107,6 +141,8 @@ function CampaignDatesCard({
               name="campaign_end_date"
               type="date"
               defaultValue={toDateInputValue(campaignEndDate)}
+              disabled={readOnly}
+              readOnly={readOnly}
             />
           </div>
           <div className="space-y-1">
@@ -116,12 +152,16 @@ function CampaignDatesCard({
               name="election_date"
               type="date"
               defaultValue={toDateInputValue(electionDate)}
+              disabled={readOnly}
+              readOnly={readOnly}
             />
           </div>
           <div className="sm:col-span-3">
+            {readOnly ? null : (
             <Button type="submit" disabled={pending} size="sm">
               {pending ? "Saving…" : "Save dates"}
             </Button>
+            )}
             <p className="mt-2 text-xs text-muted-foreground">
               These dates power the countdown timers on the Executive Dashboard.
             </p>
@@ -193,6 +233,7 @@ export function AdminView({
   currentUserId: string;
 }) {
   const router = useRouter();
+  const { canCreate, canDelete } = usePermissions();
   const [pending, startTransition] = useTransition();
   const [invitePassword, setInvitePassword] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -399,7 +440,11 @@ export function AdminView({
     <div className="space-y-6">
       <PageHeader
         title="Administration"
-        description="Invite team members, assign roles, and check production secrets"
+        description={
+          canCreate
+            ? "Invite team members, assign roles, and check production secrets"
+            : "View-only Admin access — team, roles, and production secrets"
+        }
       />
 
       <Card>
@@ -498,6 +543,8 @@ export function AdminView({
         </CardContent>
       </Card>
 
+      {canDelete ? (
+      <>
       <Card className="border-destructive/40">
         <CardHeader>
           <CardTitle>Edo-only data</CardTitle>
@@ -536,6 +583,8 @@ export function AdminView({
           </Button>
         </CardContent>
       </Card>
+      </>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
@@ -552,6 +601,7 @@ export function AdminView({
         </Card>
       </div>
 
+      {canCreate ? (
       <Card>
         <CardHeader>
           <CardTitle>Invite team member</CardTitle>
@@ -629,10 +679,12 @@ export function AdminView({
           </p>
         </CardContent>
       </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
           <CardTitle>Team members</CardTitle>
+          {canDelete ? (
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
@@ -654,6 +706,9 @@ export function AdminView({
               {pending ? "Deleting…" : `Delete${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
             </Button>
           </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Director General has view-only Admin access.</p>
+          )}
         </CardHeader>
         <CardContent className="space-y-2">
           {profiles.length === 0 ? (
@@ -667,6 +722,7 @@ export function AdminView({
                   className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
                 >
                   <div className="flex min-w-0 items-start gap-3">
+                    {canDelete ? (
                     <input
                       type="checkbox"
                       className="mt-1 h-4 w-4 shrink-0 accent-primary"
@@ -676,6 +732,7 @@ export function AdminView({
                       onChange={(e) => toggleOne(p.id, e.target.checked)}
                       aria-label={`Select ${p.full_name}`}
                     />
+                    ) : null}
                     <div className="min-w-0">
                       <p className="font-medium">
                         {p.full_name}
@@ -697,6 +754,7 @@ export function AdminView({
                       </dl>
                     </div>
                   </div>
+                  {canCreate ? (
                   <form action={handleRoleChange} className="flex items-center gap-2">
                     <input type="hidden" name="user_id" value={p.id} />
                     <NativeSelect
@@ -716,6 +774,9 @@ export function AdminView({
                     </Button>
                     <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
                   </form>
+                  ) : (
+                    <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
+                  )}
                 </div>
               );
             })
@@ -728,6 +789,7 @@ export function AdminView({
         campaignEndDate={campaignEndDate}
         electionDate={electionDate}
         needsCampaignStartMigration={needsCampaignStartMigration}
+        readOnly={!canCreate}
       />
 
       <Card>
@@ -750,10 +812,14 @@ export function AdminView({
               </div>
             );
           })}
-          <p className="sm:col-span-2 text-xs text-muted-foreground">
-            Values are never shown here. Set missing keys in `.env.local`, then
-            `npm run secrets:backup` + Vercel/GitHub. See docs/SECRETS.md and docs/TERMII-SETUP.md.
-          </p>
+          <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+            <TestTermiiButton />
+            <p className="text-xs text-muted-foreground">
+              Values are never shown here. Set missing keys in `.env.local`, then
+              `npm run secrets:backup` + Vercel/GitHub. See docs/SECRETS.md and docs/TERMII-SETUP.md.
+              Sender IDs must be 3–11 letters or numbers with no spaces (`HoR2027`, not `HoR 2027`).
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

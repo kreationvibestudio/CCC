@@ -9,9 +9,14 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getPollingUnit, updatePollingUnit, deletePollingUnit, getTeamForAssignment } from "@/lib/polling-units/actions";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canDeleteRecords, canWriteRecords } from "@/types/auth";
 
 export default async function PollingUnitDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
+  const canWrite = user ? canWriteRecords(user.role) : false;
+  const canDelete = user ? canDeleteRecords(user.role) : false;
   const pu = await getPollingUnit(id);
   if (!pu) redirect("/polling-units");
 
@@ -39,6 +44,7 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
       <Card>
         <CardContent className="pt-6">
           <form action={saveAction} className="space-y-4">
+            <fieldset disabled={!canWrite} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1"><Label htmlFor="code">PU Code</Label><Input id="code" name="code" defaultValue={pu.code as string} required /></div>
               <div className="space-y-1"><Label htmlFor="pu_code">PU code (INEC)</Label><Input id="pu_code" name="pu_code" defaultValue={(pu.pu_code as string) ?? ""} /></div>
@@ -81,16 +87,19 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
             <div className="space-y-1"><Label htmlFor="security_notes">Security notes</Label><textarea id="security_notes" name="security_notes" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={(pu.security_notes as string) ?? ""} /></div>
             <div className="space-y-1"><Label htmlFor="logistics">Logistics</Label><textarea id="logistics" name="logistics" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={(pu.logistics as string) ?? ""} /></div>
             {pu.geocode_status ? <Badge variant="outline">Geocode: {String(pu.geocode_status)}</Badge> : null}
-            <SubmitButton label="Save changes" />
+            {canWrite ? <SubmitButton label="Save changes" /> : null}
+            </fieldset>
           </form>
         </CardContent>
       </Card>
 
+      {canDelete ? (
       <form action={deleteAction} className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
         <p className="font-medium">Delete this polling unit?</p>
         <p className="mt-1 text-sm text-muted-foreground">This cannot be undone.</p>
         <Button type="submit" variant="destructive" size="sm" className="mt-3">Delete</Button>
       </form>
+      ) : null}
     </div>
   );
 }

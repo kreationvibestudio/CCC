@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/session";
+import { denyCreateIfRestricted } from "@/types/auth";
 import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-actions";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
@@ -238,8 +239,10 @@ export async function createPollingUnit(formData: FormData) {
   const gate = await authorize("polling_units.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
-  const blocked = edoOnlyFormError(formData);
-  if (blocked) return { error: blocked };
+  const writeBlocked = denyCreateIfRestricted(user.role);
+  if (writeBlocked) return { error: writeBlocked };
+  const edoBlocked = edoOnlyFormError(formData);
+  if (edoBlocked) return { error: edoBlocked };
   const supabase = await createClient();
   const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
   const lng = formData.get("longitude") ? Number(formData.get("longitude")) : null;
@@ -283,6 +286,8 @@ export async function createPollingUnit(formData: FormData) {
 export async function updatePollingUnit(id: string, formData: FormData) {
   const gate = await authorize("polling_units.manage");
   if (!gate.ok) return { error: gate.error };
+  const writeBlocked = denyCreateIfRestricted(gate.user.role);
+  if (writeBlocked) return { error: writeBlocked };
   const blocked = edoOnlyFormError(formData);
   if (blocked) return { error: blocked };
   const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
@@ -353,6 +358,8 @@ export async function importPollingUnitsCsv(csvText: string) {
   const gate = await authorize("polling_units.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const rows = parsePollingUnitsCsv(csvText).filter((row) => isCampaignPollingUnit(row));
   const supabase = await createClient();
   const { imported } = await upsertPollingUnitRows(supabase, user.profile.tenant_id, rows);

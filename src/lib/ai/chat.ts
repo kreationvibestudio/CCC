@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/session";
 import { openAiChatCompletion } from "@/lib/ai/openai";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { denyWriteIfRestricted } from "@/types/auth";
 
 const MAX_MESSAGE_CHARS = 4000;
 
@@ -12,6 +13,8 @@ export async function sendAiMessage(message: string): Promise<{ reply: string; e
   const gate = await authorize("ai.use");
   if (!gate.ok) return { reply: "", error: gate.error };
   const user = gate.user;
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { reply: "", error: blocked };
 
   const prompt = message.trim();
   if (!prompt) return { reply: "", error: "Ask a question first" };

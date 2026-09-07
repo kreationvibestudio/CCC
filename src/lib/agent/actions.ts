@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { authorize } from "@/lib/auth/session";
+import { denyCreateIfRestricted } from "@/types/auth";
 import { parsePartyVotes, totalPartyVotes } from "@/lib/elections/parties";
 import { parsePollingUnitStatus } from "@/lib/agent/pu-status";
 import { haversineMeters } from "@/lib/agent/geo";
@@ -21,7 +22,11 @@ import { applyCampaignStateFilter, isCampaignPollingUnit, isCampaignState } from
  * because they file results for unstaffed units.
  */
 async function authorizeFieldWork() {
-  return authorize("agent.portal", "election_results.submit");
+  const gate = await authorize("agent.portal", "election_results.submit");
+  if (!gate.ok) return gate;
+  const blocked = denyCreateIfRestricted(gate.user.role);
+  if (blocked) return { ok: false as const, error: blocked };
+  return gate;
 }
 
 /** User session for auth; service role for writes so missing INSERT policies cannot block agents. */

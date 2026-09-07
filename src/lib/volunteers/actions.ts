@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/session";
+import { denyCreateIfRestricted, denyDeleteIfRestricted } from "@/types/auth";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import type { Volunteer } from "@/types/database";
 
@@ -10,6 +11,8 @@ export async function createVolunteer(formData: FormData) {
   const gate = await authorize("volunteers.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const skills = (formData.get("skills") as string)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
   const { error } = await supabase.from("volunteers").insert({
@@ -58,6 +61,8 @@ export async function updateVolunteer(id: string, formData: FormData) {
   const gate = await authorize("volunteers.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const skills = (formData.get("skills") as string)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
   const { error } = await supabase.from("volunteers").update({
@@ -80,6 +85,8 @@ export async function deleteVolunteer(id: string) {
   const gate = await authorize("volunteers.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyDeleteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase.from("volunteers").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
@@ -91,6 +98,8 @@ export async function assignVolunteerTask(volunteerId: string, formData: FormDat
   const gate = await authorize("volunteers.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { data: volunteer } = await supabase
     .from("volunteers")

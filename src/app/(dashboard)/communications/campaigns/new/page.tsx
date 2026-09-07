@@ -6,8 +6,10 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createCampaign, getTemplates } from "@/lib/communications/actions";
+import { requireCanCreateOrRedirect } from "@/lib/auth/session";
 
 export default async function NewCampaignPage() {
+  await requireCanCreateOrRedirect("/communications");
   const templates = (await getTemplates()).filter(
     (t: { channel: string }) => t.channel === "sms"
   );

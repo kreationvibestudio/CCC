@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Volunteer } from "@/types/database";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 export function VolunteersView({
   volunteers,
@@ -21,6 +22,7 @@ export function VolunteersView({
   signupUrl?: string;
 }) {
   const router = useRouter();
+  const { canCreate } = usePermissions();
   const trained = volunteers.filter((v) => v.training_status === "completed").length;
 
   function copySignupLink() {
@@ -35,12 +37,14 @@ export function VolunteersView({
   return (
     <div className="space-y-6">
       <PageHeader title="Volunteers" description="Manage field volunteers and coordinators">
+        {canCreate ? (
         <Button asChild>
           <Link href="/volunteers/new">
             <Plus className="mr-2 h-4 w-4" />
             Add Volunteer
           </Link>
         </Button>
+        ) : null}
       </PageHeader>
 
       {signupUrl ? (
@@ -80,9 +84,11 @@ export function VolunteersView({
           title="No volunteers yet"
           description="Share the public signup link or add someone manually."
           action={
-            <Button asChild>
-              <Link href="/volunteers/new">Add Volunteer</Link>
-            </Button>
+            canCreate ? (
+              <Button asChild>
+                <Link href="/volunteers/new">Add Volunteer</Link>
+              </Button>
+            ) : undefined
           }
         />
       ) : (

@@ -27,6 +27,7 @@ import {
   type PollingUnitListItem,
   type PollingUnitSummary,
 } from "@/lib/polling-units/actions";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
   ssr: false,
@@ -49,6 +50,7 @@ export function PollingUnitsView({
   canManageAgents?: boolean;
 }) {
   const router = useRouter();
+  const { canCreate } = usePermissions();
   const [lga, setLga] = useState("");
   const [ward, setWard] = useState("");
   const [search, setSearch] = useState("");
@@ -139,30 +141,34 @@ export function PollingUnitsView({
     <div className="space-y-6">
       <PageHeader title="Polling Units" description="Edo State register — search by LGA, ward, or PU code">
         <div className="flex flex-wrap gap-2">
-          <SyncInecRegisterButton />
-          <FormatPuCodesButton />
-          <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} />
-          {canManageAgents ? <IssuePinnedCodesButton /> : null}
+          {canCreate ? <SyncInecRegisterButton /> : null}
+          {canCreate ? <FormatPuCodesButton /> : null}
+          {canCreate ? <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} /> : null}
+          {canCreate && canManageAgents ? <IssuePinnedCodesButton /> : null}
           <Button variant="outline" asChild>
             <Link href="/polling-units/agents">PU Agents</Link>
           </Button>
-          <Button variant="outline" asChild>
-            <label className="cursor-pointer">
-              <Upload className="mr-2 h-4 w-4" />
-              {importing ? (importProgress ? `Importing ${importProgress}…` : "Importing…") : "Import CSV"}
-              <input type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
-            </label>
-          </Button>
-          <Button asChild>
-            <Link href="/polling-units/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add PU
-            </Link>
-          </Button>
+          {canCreate ? (
+            <Button variant="outline" asChild>
+              <label className="cursor-pointer">
+                <Upload className="mr-2 h-4 w-4" />
+                {importing ? (importProgress ? `Importing ${importProgress}…` : "Importing…") : "Import CSV"}
+                <input type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
+              </label>
+            </Button>
+          ) : null}
+          {canCreate ? (
+            <Button asChild>
+              <Link href="/polling-units/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Add PU
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </PageHeader>
 
-      {canManageAgents ? <IssueCodesCallout /> : null}
+      {canCreate && canManageAgents ? <IssueCodesCallout /> : null}
 
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard title="Total PUs" value={summary.puCount.toLocaleString()} />

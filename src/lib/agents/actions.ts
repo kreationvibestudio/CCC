@@ -6,7 +6,7 @@ import { join } from "path";
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasPermission, type UserRole } from "@/types/auth";
+import { denyCreateIfRestricted, denyDeleteIfRestricted, hasPermission, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { issueAgentAccessCode } from "@/lib/agent/code-login";
 import { decryptAgentCode } from "@/lib/agent/code-vault";
@@ -258,6 +258,8 @@ export async function issueMissingAgentCodes(): Promise<{
 }> {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized", issued: 0, skipped: 0 };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked, issued: 0, skipped: 0 };
   const listed = await listAllAssignedRows();
   if (listed.codesTableMissing) {
     return { error: "Agent codes are not in this database yet", issued: 0, skipped: 0 };
@@ -299,6 +301,8 @@ export async function provisionPinnedPollingUnits(input?: { limit?: number }): P
 }> {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized", created: 0, remaining: 0, missingPin: 0 };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked, created: 0, remaining: 0, missingPin: 0 };
   const limit = Math.min(Math.max(input?.limit ?? 15, 1), 25);
   const supabase = db();
   const tenantId = auth.user.profile.tenant_id;
@@ -378,6 +382,8 @@ export async function assignPollingAgent(input: {
   try {
     const auth = await requireStaff();
     if (!auth.user) return { error: "Unauthorized" };
+    const blocked = denyCreateIfRestricted(auth.user.role);
+    if (blocked) return { error: blocked };
 
     const emailInput = (input.email ?? "").trim().toLowerCase();
     const puCode = input.puCode.trim();
@@ -513,6 +519,8 @@ export async function getAgentAccessCodesSql() {
 export async function resetAgentAccessCode(pollingUnitId: string): Promise<{ error?: string; agentCode?: string }> {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked };
   const supabase = db();
   const tenantId = auth.user.profile.tenant_id;
   const { data: pu } = await supabase
@@ -535,6 +543,8 @@ export async function resetAgentAccessCode(pollingUnitId: string): Promise<{ err
 export async function unassignPollingAgent(pollingUnitId: string) {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized" };
+  const blocked = denyDeleteIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked };
   const supabase = db();
   const tenantId = auth.user.profile.tenant_id;
   const { data: pu } = await supabase
@@ -566,6 +576,8 @@ export async function unassignPollingAgent(pollingUnitId: string) {
 export async function nudgeAssignedAgent(userId: string) {
   const auth = await requireStaff();
   if (!auth.user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked };
   const { nudgeAgent } = await import("@/lib/agent/media");
   return nudgeAgent(auth.user, userId, "Please open the Agent app and submit your unit update.");
 }

@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { denyCreateIfRestricted } from "@/types/auth";
 
 export async function createTemplate(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const { error } = await supabase.from("message_templates").insert({
     tenant_id: user.profile.tenant_id,
@@ -24,6 +27,8 @@ export async function createTemplate(formData: FormData) {
 export async function createCampaign(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await createClient();
   const templateId = (formData.get("template_id") as string | null)?.trim() || null;
   const { error } = await supabase.from("message_campaigns").insert({

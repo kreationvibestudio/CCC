@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
+import { denyCreateIfRestricted, denyDeleteIfRestricted } from "@/types/auth";
 import type { Donation } from "@/types/database";
 import { assertContactInTenant } from "@/lib/tenancy";
 
@@ -18,6 +19,8 @@ async function crmDb() {
 export async function createContact(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const fullName = String(formData.get("full_name") ?? "").trim();
   if (!fullName) return { error: "Name is required" };
   const supabase = await crmDb();
@@ -59,6 +62,8 @@ export async function getContact(id: string) {
 export async function updateContact(id: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await crmDb();
   const { error } = await supabase.from("contacts").update({
     full_name: formData.get("full_name"),
@@ -79,6 +84,8 @@ export async function updateContact(id: string, formData: FormData) {
 export async function deleteContact(id: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyDeleteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const supabase = await crmDb();
   const { error } = await supabase.from("contacts").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
@@ -89,6 +96,8 @@ export async function deleteContact(id: string) {
 export async function logInteraction(contactId: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
   if (contactError) return { error: contactError };
   const supabase = await crmDb();
@@ -106,6 +115,8 @@ export async function logInteraction(contactId: string, formData: FormData) {
 export async function recordDonation(contactId: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return { error: blocked };
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);
   if (contactError) return { error: contactError };
   const supabase = await crmDb();

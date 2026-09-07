@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { denyWriteIfRestricted } from "@/types/auth";
 import { syncFacebookToDatabase } from "@/lib/integrations/facebook/sync";
 import { FacebookApiError, isUsableFacebookToken } from "@/lib/integrations/facebook/client";
 import { getFacebookConnectionStatus, recordFacebookSyncOutcome } from "@/lib/social/facebook-connection";
@@ -17,6 +18,8 @@ export async function POST() {
     if (!user.permissions.includes("social.manage") && !user.permissions.includes("social.view")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const blocked = denyWriteIfRestricted(user.role);
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
     const result = await syncFacebookToDatabase(user.profile.tenant_id);
     const isDemo = result.tokenSource === "demo";

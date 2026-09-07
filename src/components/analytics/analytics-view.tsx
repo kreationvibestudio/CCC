@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AnalyticsSummary } from "@/lib/analytics/data";
 import type { CallSeverity } from "@/lib/analytics/decisions";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 const SEVERITY_STYLES: Record<CallSeverity, string> = {
   critical: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
@@ -40,6 +41,7 @@ function severityLabel(s: CallSeverity) {
 
 export function AnalyticsView({ summary }: { summary: AnalyticsSummary }) {
   const { kpis, groundGame } = summary;
+  const { canCreate } = usePermissions();
 
   return (
     <div className="space-y-6">
@@ -219,7 +221,7 @@ export function AnalyticsView({ summary }: { summary: AnalyticsSummary }) {
               <p className="text-sm text-muted-foreground">All listed PUs have agents assigned — or no PU data yet.</p>
             )}
             <Link href="/polling-units/agents" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
-              Assign agents →
+              {canCreate ? "Assign agents →" : "View PU Agents →"}
             </Link>
           </CardContent>
         </Card>

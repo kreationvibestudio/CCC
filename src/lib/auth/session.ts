@@ -3,7 +3,8 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { UserRole, Permission } from "@/types/auth";
-import { hasPermission, ROLE_PERMISSIONS } from "@/types/auth";
+import { canCreateRecords, hasPermission, ROLE_PERMISSIONS } from "@/types/auth";
+import { redirect } from "next/navigation";
 import type { Profile } from "@/types/database";
 import { platformOperatorEmails } from "@/lib/tenancy";
 import { parseBearer } from "@/lib/auth/bearer";
@@ -202,6 +203,13 @@ export async function requireAuth(): Promise<AuthUser> {
 export async function requirePermission(permission: Permission): Promise<AuthUser> {
   const user = await requireAuth();
   if (!hasPermission(user.role, permission)) throw new Error("Forbidden");
+  return user;
+}
+
+/** Director General may open HQ screens but cannot use write forms. */
+export async function requireCanCreateOrRedirect(fallback: string): Promise<AuthUser> {
+  const user = await requireAuth();
+  if (!canCreateRecords(user.role)) redirect(fallback);
   return user;
 }
 

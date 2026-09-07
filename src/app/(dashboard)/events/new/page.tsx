@@ -6,8 +6,10 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createEvent } from "@/lib/events/actions";
+import { requireCanCreateOrRedirect } from "@/lib/auth/session";
 
-export default function NewEventPage() {
+export default async function NewEventPage() {
+  await requireCanCreateOrRedirect("/events");
   async function action(formData: FormData) {
     "use server";
     const result = await createEvent(formData);

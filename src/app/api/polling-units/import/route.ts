@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasPermission } from "@/types/auth";
+import { denyCreateIfRestricted, hasPermission } from "@/types/auth";
 import { createClient } from "@/lib/supabase/server";
 import { parsePollingUnitsCsv, type NormalizedPollingUnit } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
   if (!hasPermission(user.role, "polling_units.manage")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const blocked = denyCreateIfRestricted(user.role);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
   const contentType = req.headers.get("content-type") ?? "";
   let rows: NormalizedPollingUnit[] = [];

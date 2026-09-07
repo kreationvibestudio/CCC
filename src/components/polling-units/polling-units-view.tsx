@@ -23,6 +23,7 @@ import {
   type PollingUnitListItem,
   type PollingUnitSummary,
 } from "@/lib/polling-units/actions";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then((m) => m.CampaignMap), {
   ssr: false,
@@ -43,6 +44,7 @@ export function PollingUnitsView({
   tenantId: string;
 }) {
   const router = useRouter();
+  const { canCreate } = usePermissions();
   const [lga, setLga] = useState("");
   const [ward, setWard] = useState("");
   const [search, setSearch] = useState("");
@@ -133,12 +135,19 @@ export function PollingUnitsView({
     <div className="space-y-6">
       <PageHeader title="Polling Units" description="Edo State register — search by LGA, ward, or PU code">
         <div className="flex flex-wrap gap-2">
-          <SyncInecRegisterButton />
-          <FormatPuCodesButton />
-          <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} />
+          {canCreate ? <SyncInecRegisterButton /> : null}
+          {canCreate ? <FormatPuCodesButton /> : null}
+          {canCreate ? <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} /> : null}
+          {canCreate ? (
           <Button variant="outline" asChild>
             <Link href="/polling-units/agents">Assign agents</Link>
           </Button>
+          ) : (
+          <Button variant="outline" asChild>
+            <Link href="/polling-units/agents">PU Agents</Link>
+          </Button>
+          )}
+          {canCreate ? (
           <Button variant="outline" asChild>
             <label className="cursor-pointer">
               <Upload className="mr-2 h-4 w-4" />
@@ -146,12 +155,15 @@ export function PollingUnitsView({
               <input type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
             </label>
           </Button>
+          ) : null}
+          {canCreate ? (
           <Button asChild>
             <Link href="/polling-units/new">
               <Plus className="mr-2 h-4 w-4" />
               Add PU
             </Link>
           </Button>
+          ) : null}
         </div>
       </PageHeader>
 

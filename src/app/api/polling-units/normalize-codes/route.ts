@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasPermission } from "@/types/auth";
+import { denyWriteIfRestricted, hasPermission } from "@/types/auth";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { normalizePollingUnitCodes } from "@/lib/polling-units/normalize-codes";
 
@@ -14,6 +14,8 @@ export async function POST(req: NextRequest) {
   if (!hasPermission(user.role, "polling_units.manage")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
   let limit = 200;
   try {

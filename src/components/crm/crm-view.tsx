@@ -8,14 +8,18 @@ import { DataTable } from "@/components/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Contact as ContactRow } from "@/types/database";
+import { usePermissions } from "@/components/providers/auth-provider";
 
 export function CrmView({ contacts }: { contacts: ContactRow[] }) {
   const router = useRouter();
+  const { canCreate } = usePermissions();
   const supporters = contacts.filter((c) => c.support_level === "strong" || c.support_level === "leaning").length;
   return (
     <div className="space-y-6">
       <PageHeader title="Campaign CRM" description="Contacts, leaders, donors and supporters">
+        {canCreate ? (
         <Button asChild><Link href="/crm/new"><Plus className="mr-2 h-4 w-4" />Add Contact</Link></Button>
+        ) : null}
       </PageHeader>
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard title="Total Contacts" value={contacts.length} icon={Contact} />

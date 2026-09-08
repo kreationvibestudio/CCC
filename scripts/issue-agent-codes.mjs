@@ -16,6 +16,7 @@ import {
   generateAgentCode,
   hashAgentCode,
 } from "../src/lib/agent/access-code.ts";
+import { omitUnmigratedAgentCodeColumns } from "../src/lib/agent/code-columns.ts";
 import { encryptAgentCode } from "../src/lib/agent/code-vault.ts";
 
 loadEnvLocal();
@@ -111,7 +112,7 @@ for (const pu of units ?? []) {
   let insertError = null;
   for (let attempt = 0; attempt < 8; attempt += 1) {
     code = generateAgentCode();
-    const result = await admin.from("agent_access_codes").insert({
+    let payload = {
       tenant_id: tenantId,
       profile_id: userId,
       polling_unit_id: pu.id,
@@ -119,13 +120,21 @@ for (const pu of units ?? []) {
       code_hint: agentCodeHint(code),
       code_display: encryptAgentCode(code),
       expires_at: agentCodeExpiry().toISOString(),
-    });
-    if (!result.error) {
-      insertError = null;
-      break;
+    };
+    insertError = null;
+    for (let trim = 0; trim < 3; trim += 1) {
+      const result = await admin.from("agent_access_codes").insert(payload);
+      if (!result.error) {
+        insertError = null;
+        break;
+      }
+      insertError = result.error;
+      const stripped = omitUnmigratedAgentCodeColumns(payload, result.error.message);
+      if (!stripped) break;
+      payload = stripped;
     }
-    insertError = result.error;
-    if (!/duplicate|unique/i.test(result.error.message)) break;
+    if (!insertError) break;
+    if (!/duplicate|unique/i.test(insertError.message)) break;
   }
   if (insertError || !code) {
     console.error(`skip ${puLabel}: ${insertError?.message ?? "no code"}`);

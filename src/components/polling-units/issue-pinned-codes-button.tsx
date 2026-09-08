@@ -25,7 +25,7 @@ export function IssuePinnedCodesButton({
   function run() {
     if (
       !window.confirm(
-        `Create a Field Agent login and 10-character code for every polling unit that has a map pin and no agent yet?\n\nThe agent must be within ${AGENT_LOGIN_RADIUS_FT} ft of that pin to sign in. Units without a pin are skipped.`
+        `Create a Field Agent login and 8-character code for every polling unit that has a map pin and no agent yet?\n\nThe agent must be within ${AGENT_LOGIN_RADIUS_FT} ft of that pin to sign in. Units without a pin are skipped.`
       )
     ) {
       return;
@@ -110,7 +110,7 @@ export function IssueCodesCallout({
         <div className="space-y-1">
           <p className="text-base font-semibold">Issue codes for pinned units</p>
           <p className="text-sm text-muted-foreground">
-            Create a Field Agent login and 10-character code for every polling unit that already
+            Create a Field Agent login and 8-character code for every polling unit that already
             has a map pin. Agents must be within {AGENT_LOGIN_RADIUS_FT} ft of that pin to sign in.
           </p>
         </div>

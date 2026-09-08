@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, before, after } from "node:test";
 import { decryptAgentCode, encryptAgentCode, isEncryptedAgentCode } from "./code-vault.ts";
-import { generateAgentCode, normalizeAgentCode } from "./access-code.ts";
+import { formatAgentCode, generateAgentCode, normalizeAgentCode } from "./access-code.ts";
 
 const KEY_A = Buffer.alloc(32, 7).toString("base64");
 const KEY_B = Buffer.alloc(32, 9).toString("base64");
@@ -26,7 +26,7 @@ describe("agent code vault", () => {
     const code = generateAgentCode();
     const stored = encryptAgentCode(code);
     assert.ok(stored);
-    assert.equal(decryptAgentCode(stored), normalizeAgentCode(code));
+    assert.equal(decryptAgentCode(stored), formatAgentCode(code));
   });
 
   it("stores nothing resembling the code", () => {
@@ -77,7 +77,7 @@ describe("agent code vault", () => {
     try {
       const stored = encryptAgentCode("ABCDE-FGHJK");
       assert.ok(stored);
-      assert.equal(decryptAgentCode(stored), "ABCDEFGHJK");
+      assert.equal(decryptAgentCode(stored), formatAgentCode("ABCDE-FGHJK"));
     } finally {
       process.env.AGENT_CODE_ENCRYPTION_KEY = KEY_A;
     }

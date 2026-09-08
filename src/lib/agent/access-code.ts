@@ -3,10 +3,10 @@ import { createHash, randomBytes } from "crypto";
 /** Crockford-style alphabet: no O/I/L/U/0/1 to survive being read aloud. */
 const ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
 
-/** Codes issued from now on. */
-export const AGENT_CODE_LENGTH = 10;
-/** Codes issued before the length change stay usable until they are reissued. */
-export const LEGACY_AGENT_CODE_LENGTH = 8;
+/** Codes issued from HQ from now on — same XXXX-XXXX shape as existing printouts. */
+export const AGENT_CODE_LENGTH = 8;
+/** 10-character codes issued during the brief length change stay usable. */
+export const EXTENDED_AGENT_CODE_LENGTH = 10;
 
 /** How long a freshly issued code stays valid. */
 export const AGENT_CODE_TTL_DAYS = 90;
@@ -17,7 +17,7 @@ export function normalizeAgentCode(raw: string) {
 
 export function formatAgentCode(normalized: string) {
   const compact = normalizeAgentCode(normalized);
-  if (compact.length !== AGENT_CODE_LENGTH && compact.length !== LEGACY_AGENT_CODE_LENGTH) {
+  if (compact.length !== AGENT_CODE_LENGTH && compact.length !== EXTENDED_AGENT_CODE_LENGTH) {
     return compact;
   }
   const half = compact.length / 2;
@@ -26,12 +26,12 @@ export function formatAgentCode(normalized: string) {
 
 /**
  * Format as the user types. A finished 8-character code stays XXXX-XXXX;
- * anything else uses the new XXXXX-XXXXX grouping.
+ * a 10-character code uses XXXXX-XXXXX.
  */
 export function formatAgentCodeInput(raw: string) {
-  const compact = normalizeAgentCode(raw).slice(0, AGENT_CODE_LENGTH);
+  const compact = normalizeAgentCode(raw).slice(0, EXTENDED_AGENT_CODE_LENGTH);
   if (compact.length <= 5) return compact;
-  if (compact.length === LEGACY_AGENT_CODE_LENGTH) {
+  if (compact.length === AGENT_CODE_LENGTH) {
     return `${compact.slice(0, 4)}-${compact.slice(4)}`;
   }
   return `${compact.slice(0, 5)}-${compact.slice(5)}`;
@@ -73,7 +73,7 @@ export function agentCodeHint(formatted: string) {
 
 export function isAgentCodeShape(raw: string) {
   const length = normalizeAgentCode(raw).length;
-  return length === AGENT_CODE_LENGTH || length === LEGACY_AGENT_CODE_LENGTH;
+  return length === AGENT_CODE_LENGTH || length === EXTENDED_AGENT_CODE_LENGTH;
 }
 
 export function agentCodeExpiry(from = new Date()) {
@@ -94,7 +94,7 @@ export function validateAgentCodeLogin(input: {
   requireGps?: boolean;
 }) {
   if (!isAgentCodeShape(input.code)) {
-    return `Enter the ${AGENT_CODE_LENGTH}-character agent code HQ gave you`;
+    return "Enter the agent code HQ gave you";
   }
   if (input.requireGps) {
     const lat = input.latitude;

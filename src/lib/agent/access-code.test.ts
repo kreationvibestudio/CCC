@@ -56,11 +56,16 @@ describe("agent access codes", () => {
     assert.equal(validateAgentCodeLogin({ code: "K7M2-P9QX", latitude: 6.5, longitude: 3.3 }), null);
   });
 
-  it("generates a 10-character display code", () => {
+  it("generates an 8-character display code like existing printouts", () => {
     const code = generateAgentCode();
-    assert.match(code, /^[A-Z0-9]{5}-[A-Z0-9]{5}$/);
+    assert.match(code, /^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
     assert.equal(normalizeAgentCode(code).length, AGENT_CODE_LENGTH);
     assert.equal(isAgentCodeShape(code), true);
+  });
+
+  it("formats 10-character codes that were already issued", () => {
+    assert.equal(formatAgentCode("K3SWN9EC7J"), "K3SWN-9EC7J");
+    assert.equal(isAgentCodeShape("K3SWN9EC7J"), true);
   });
 
   it("keeps accepting the 8-character codes issued before the change", () => {

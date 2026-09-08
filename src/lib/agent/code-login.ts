@@ -20,6 +20,7 @@ import {
   isAgentSoftGpsEnabled,
   isWithinAgentLoginRadius,
 } from "@/lib/agent/geo";
+import { omitUnmigratedAgentCodeColumns } from "@/lib/agent/code-columns";
 import { isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
 
@@ -47,7 +48,7 @@ export async function issueAgentAccessCode(input: IssueInput): Promise<{ code?: 
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const code = generateAgentCode();
-    const { error } = await admin.from("agent_access_codes").insert({
+    let payload: Record<string, unknown> = {
       tenant_id: input.tenantId,
       profile_id: input.profileId,
       polling_unit_id: input.pollingUnitId,
@@ -56,18 +57,20 @@ export async function issueAgentAccessCode(input: IssueInput): Promise<{ code?: 
       // Encrypted at rest: a database dump alone must not yield working logins.
       code_display: encryptAgentCode(code),
       expires_at: agentCodeExpiry().toISOString(),
-    });
-    if (!error) return { code, hint: agentCodeHint(code) };
-    if (isMissingRelationError(error.message, "agent_access_codes")) {
-      return { error: "Agent codes need the latest database SQL. Run 20260823000003_agent_access_codes.sql and 20260823000004_agent_access_code_display.sql in Supabase." };
+    };
+    let error: { message: string } | null = null;
+    for (let trim = 0; trim < 3; trim += 1) {
+      const inserted = await admin.from("agent_access_codes").insert(payload);
+      error = inserted.error;
+      if (!error) return { code, hint: agentCodeHint(code) };
+      if (isMissingRelationError(error.message, "agent_access_codes")) {
+        return { error: "Agent codes need the latest database SQL. Run 20260823000003_agent_access_codes.sql and 20260823000004_agent_access_code_display.sql in Supabase." };
+      }
+      const stripped = omitUnmigratedAgentCodeColumns(payload, error.message);
+      if (!stripped) break;
+      payload = stripped;
     }
-    if (/code_display/i.test(error.message) && /column|schema cache|pgrst/i.test(error.message)) {
-      return { error: "Agent codes need the latest database SQL. Run 20260823000004_agent_access_code_display.sql in Supabase." };
-    }
-    if (/expires_at/i.test(error.message) && /column|schema cache|pgrst/i.test(error.message)) {
-      return { error: "Agent codes need the latest database SQL. Run 20260905020000_agent_code_expiry.sql in Supabase." };
-    }
-    if (!/duplicate|unique/i.test(error.message)) return { error: error.message };
+    if (error && !/duplicate|unique/i.test(error.message)) return { error: error.message };
   }
   return { error: "Could not allocate an agent code" };
 }

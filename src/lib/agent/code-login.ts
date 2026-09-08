@@ -20,7 +20,7 @@ import {
   isAgentSoftGpsEnabled,
   isWithinAgentLoginRadius,
 } from "@/lib/agent/geo";
-import { isMissingRelationError } from "@/lib/public-error";
+import { isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
 
 export { AGENT_LOGIN_RADIUS_FT };
@@ -131,10 +131,11 @@ export async function loginWithAgentCode(input: {
     .eq("code_hash", hashAgentCode(input.code))
     .is("revoked_at", null)
     .maybeSingle();
-  let { data: row } = codeQuery;
-  const { error } = codeQuery;
-  if (error && /expires_at/i.test(error.message)) {
+  let row = codeQuery.data;
+  let error = codeQuery.error;
+  if (error && isMissingColumnError(error.message, "expires_at")) {
     // Database predates the expiry column: fall back to the older shape.
+    // Do not treat this as a missing table — HQ already issued codes.
     const legacy = await admin
       .from("agent_access_codes")
       .select("id, tenant_id, profile_id, polling_unit_id")
@@ -142,11 +143,12 @@ export async function loginWithAgentCode(input: {
       .is("revoked_at", null)
       .maybeSingle();
     row = legacy.data ? { ...legacy.data, expires_at: null } : null;
+    error = legacy.error;
   }
   if (error && isMissingRelationError(error.message, "agent_access_codes")) {
     return { error: "Agent codes are not enabled on this campaign yet. Ask HQ to apply the latest SQL." };
   }
-  if (error && !/expires_at/i.test(error.message)) return { error: error.message };
+  if (error) return { error: error.message };
   if (!row) return { error: "That agent code is not valid" };
   if (isAgentCodeExpired(row.expires_at)) {
     return { error: "That agent code has expired. Ask HQ to issue a new one." };

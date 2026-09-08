@@ -511,6 +511,7 @@ export async function getAgentAccessCodesSql() {
   const files = [
     "supabase/migrations/20260823000003_agent_access_codes.sql",
     "supabase/migrations/20260823000004_agent_access_code_display.sql",
+    "supabase/migrations/20260905020000_agent_code_expiry.sql",
   ];
   const chunks = await Promise.all(files.map((file) => readFile(join(process.cwd(), file), "utf8")));
   return { sql: chunks.join("\n\n") };

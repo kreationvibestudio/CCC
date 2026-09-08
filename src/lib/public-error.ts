@@ -25,10 +25,15 @@ export function isMissingRelationError(message: string | undefined, relation: st
   if (!message) return false;
   const haystack = message.toLowerCase();
   const name = relation.toLowerCase();
-  return haystack.includes(name) && (
+  if (!haystack.includes(name)) return false;
+  // Missing-column errors also name the table and say "schema cache" (PGRST204).
+  // Those are not "table was never created".
+  if (haystack.includes("column") || haystack.includes("pgrst204")) return false;
+  return (
     haystack.includes("schema cache") ||
     haystack.includes("does not exist") ||
-    haystack.includes("pgrst205")
+    haystack.includes("pgrst205") ||
+    haystack.includes("could not find the table")
   );
 }
 

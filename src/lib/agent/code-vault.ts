@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "crypto";
-import { normalizeAgentCode, isAgentCodeShape } from "./access-code.ts";
+import { formatAgentCode, normalizeAgentCode, isAgentCodeShape } from "./access-code.ts";
 
 const PREFIX = "v1";
 const ALGORITHM = "aes-256-gcm";
@@ -60,7 +60,7 @@ export function decryptAgentCode(stored: string | null | undefined): string | nu
   if (!value) return null;
 
   if (!value.startsWith(`${PREFIX}:`)) {
-    return isAgentCodeShape(value) ? value : null;
+    return isAgentCodeShape(value) ? formatAgentCode(value) : null;
   }
 
   const key = encryptionKey();
@@ -76,7 +76,7 @@ export function decryptAgentCode(stored: string | null | undefined): string | nu
       decipher.update(Buffer.from(dataB64, "base64")),
       decipher.final(),
     ]).toString("utf8");
-    return isAgentCodeShape(plain) ? plain : null;
+    return isAgentCodeShape(plain) ? formatAgentCode(plain) : null;
   } catch {
     return null;
   }

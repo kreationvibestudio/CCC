@@ -90,6 +90,50 @@ async function mintAgentSession(email: string) {
   return { session: data.session };
 }
 
+async function recordAgentCheckin(
+  admin: ReturnType<typeof createServiceClient>,
+  input: {
+    codeId: string;
+    tenantId: string;
+    profileId: string;
+    pollingUnitId: string;
+    unitCode: string;
+    unitName: string;
+    latitude: number | null;
+    longitude: number | null;
+    distanceM: number | null;
+    gpsVerified: boolean;
+  }
+) {
+  const now = new Date().toISOString();
+  const distance = input.distanceM != null && Number.isFinite(input.distanceM) ? Math.round(input.distanceM) : null;
+  const lastLogin = {
+    last_used_at: now,
+    last_login_distance_m: distance,
+    last_login_gps_verified: input.gpsVerified,
+    last_login_latitude: input.latitude,
+    last_login_longitude: input.longitude,
+  };
+  const updated = await admin.from("agent_access_codes").update(lastLogin).eq("id", input.codeId);
+  if (updated.error && /last_login/i.test(updated.error.message)) {
+    await admin.from("agent_access_codes").update({ last_used_at: now }).eq("id", input.codeId);
+  }
+
+  await admin.from("agent_checkins").insert({
+    tenant_id: input.tenantId,
+    profile_id: input.profileId,
+    polling_unit_id: input.pollingUnitId,
+    access_code_id: input.codeId,
+    logged_in_at: now,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    distance_m: distance,
+    gps_verified: input.gpsVerified,
+    unit_code: input.unitCode,
+    unit_name: input.unitName,
+  });
+}
+
 export async function loginWithAgentCode(input: {
   code: string;
   latitude?: number | string | null;
@@ -204,10 +248,18 @@ export async function loginWithAgentCode(input: {
   const minted = await mintAgentSession(profile.email);
   if (minted.error || !minted.session) return { error: minted.error ?? "Could not start the agent session" };
 
-  await admin
-    .from("agent_access_codes")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", row.id);
+  await recordAgentCheckin(admin, {
+    codeId: row.id,
+    tenantId: profile.tenant_id,
+    profileId: profile.id,
+    pollingUnitId: pu.id,
+    unitCode: formatPollingUnitCode(pu),
+    unitName: pu.name,
+    latitude: hasGps ? lat : null,
+    longitude: hasGps ? lng : null,
+    distanceM,
+    gpsVerified,
+  });
 
   return {
     session: minted.session,

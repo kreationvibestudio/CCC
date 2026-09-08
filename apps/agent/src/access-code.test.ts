@@ -8,7 +8,7 @@ import {
 } from "./access-code.ts";
 
 describe("agent app access codes", () => {
-  it("accepts both 8-character legacy codes and 10-character HQ codes", () => {
+  it("accepts 8-character HQ codes and previously issued 10-character codes", () => {
     assert.equal(isAgentCodeShape("K7M2-P9QX"), true);
     assert.equal(isAgentCodeShape("ABCDE-FGHIJ"), true);
     assert.equal(isAgentCodeShape("ABC"), false);

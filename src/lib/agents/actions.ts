@@ -10,7 +10,8 @@ import { denyCreateIfRestricted, denyDeleteIfRestricted, hasPermission, type Use
 import { createInvitedAuthUser } from "@/lib/invites";
 import { issueAgentAccessCode } from "@/lib/agent/code-login";
 import { decryptAgentCode } from "@/lib/agent/code-vault";
-import { isMissingRelationError } from "@/lib/public-error";
+import { formatAgentCode } from "@/lib/agent/access-code";
+import { isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
 import { findPollingUnitByCode, pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
 import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
@@ -79,7 +80,95 @@ export type AssignmentRow = {
   agent_code: string | null;
   agent_code_hint: string | null;
   has_coordinates: boolean;
+  last_signed_in_at: string | null;
+  last_login_distance_m: number | null;
+  last_login_gps_verified: boolean | null;
 };
+
+export type AgentCheckinRow = {
+  id: string;
+  agentName: string;
+  puCode: string;
+  unitName: string;
+  loggedInAt: string;
+  distanceM: number | null;
+  gpsVerified: boolean;
+};
+
+type StoredCode = {
+  display: string | null;
+  hint: string | null;
+  lastSignedInAt: string | null;
+  lastLoginDistanceM: number | null;
+  lastLoginGpsVerified: boolean | null;
+};
+
+type CodeRow = {
+  profile_id: string;
+  code_hint: string | null;
+  code_display?: string | null;
+  last_used_at?: string | null;
+  last_login_distance_m?: number | null;
+  last_login_gps_verified?: boolean | null;
+};
+
+function storedCodeFromRow(row: CodeRow): StoredCode {
+  const decrypted = decryptAgentCode(row.code_display);
+  return {
+    display: decrypted ? formatAgentCode(decrypted) : null,
+    hint: row.code_hint,
+    lastSignedInAt: row.last_used_at ?? null,
+    lastLoginDistanceM: row.last_login_distance_m ?? null,
+    lastLoginGpsVerified: row.last_login_gps_verified ?? null,
+  };
+}
+
+async function loadActiveCodes(
+  supabase: ReturnType<typeof db>,
+  tenantId: string,
+  agentIds: string[]
+): Promise<{ codes: Map<string, StoredCode>; missingTable: boolean }> {
+  const codes = new Map<string, StoredCode>();
+  const apply = (rows: CodeRow[] | null) => {
+    for (const row of rows ?? []) codes.set(row.profile_id, storedCodeFromRow(row));
+  };
+
+  const full = await supabase
+    .from("agent_access_codes")
+    .select("profile_id, code_hint, code_display, last_used_at, last_login_distance_m, last_login_gps_verified")
+    .eq("tenant_id", tenantId)
+    .in("profile_id", agentIds)
+    .is("revoked_at", null);
+  if (!full.error) {
+    apply(full.data as CodeRow[]);
+    return { codes, missingTable: false };
+  }
+  if (isMissingRelationError(full.error.message, "agent_access_codes")) {
+    return { codes, missingTable: true };
+  }
+
+  if (isMissingColumnError(full.error.message, "last_login_distance_m") || isMissingColumnError(full.error.message, "last_login_gps_verified")) {
+    const mid = await supabase
+      .from("agent_access_codes")
+      .select("profile_id, code_hint, code_display, last_used_at")
+      .eq("tenant_id", tenantId)
+      .in("profile_id", agentIds)
+      .is("revoked_at", null);
+    if (!mid.error) {
+      apply(mid.data as CodeRow[]);
+      return { codes, missingTable: false };
+    }
+  }
+
+  const fallback = await supabase
+    .from("agent_access_codes")
+    .select("profile_id, code_hint, last_used_at")
+    .eq("tenant_id", tenantId)
+    .in("profile_id", agentIds)
+    .is("revoked_at", null);
+  if (!fallback.error) apply(fallback.data as CodeRow[]);
+  return { codes, missingTable: false };
+}
 
 export async function getAgentCoverage() {
   const auth = await requireStaff();
@@ -143,37 +232,16 @@ export async function listAgentAssignments(input?: {
   const units = data ?? [];
   const agentIds = [...new Set(units.map((u) => u.assigned_agent_id).filter(Boolean))] as string[];
   const names = new Map<string, { full_name: string; email: string; phone: string | null }>();
-  const codes = new Map<string, { display: string | null; hint: string | null }>();
+  let codes = new Map<string, StoredCode>();
   let codesTableMissing = false;
   if (agentIds.length) {
-    const [{ data: profiles }, codesRes] = await Promise.all([
+    const [{ data: profiles }, loaded] = await Promise.all([
       supabase.from("profiles").select("id, full_name, email, phone").eq("tenant_id", tenantId).in("id", agentIds),
-      supabase
-        .from("agent_access_codes")
-        .select("profile_id, code_hint, code_display")
-        .eq("tenant_id", tenantId)
-        .in("profile_id", agentIds)
-        .is("revoked_at", null),
+      loadActiveCodes(supabase, tenantId, agentIds),
     ]);
     for (const p of profiles ?? []) names.set(p.id, p);
-    if (codesRes.error && isMissingRelationError(codesRes.error.message, "agent_access_codes")) {
-      codesTableMissing = true;
-    } else if (codesRes.error && /code_display/i.test(codesRes.error.message)) {
-      const fallback = await supabase
-        .from("agent_access_codes")
-        .select("profile_id, code_hint")
-        .eq("tenant_id", tenantId)
-        .in("profile_id", agentIds)
-        .is("revoked_at", null);
-      for (const row of fallback.data ?? []) codes.set(row.profile_id, { display: null, hint: row.code_hint });
-    } else {
-      for (const row of codesRes.data ?? []) {
-        codes.set(row.profile_id, {
-          display: decryptAgentCode(row.code_display),
-          hint: row.code_hint,
-        });
-      }
-    }
+    codes = loaded.codes;
+    codesTableMissing = loaded.missingTable;
   } else {
     const probe = await supabase.from("agent_access_codes").select("id").eq("tenant_id", tenantId).limit(1);
     if (probe.error && isMissingRelationError(probe.error.message, "agent_access_codes")) {
@@ -201,6 +269,9 @@ export async function listAgentAssignments(input?: {
         agent_code: code?.display ?? null,
         agent_code_hint: code?.hint ?? null,
         has_coordinates: u.latitude != null && u.longitude != null,
+        last_signed_in_at: code?.lastSignedInAt ?? null,
+        last_login_distance_m: code?.lastLoginDistanceM ?? null,
+        last_login_gps_verified: code?.lastLoginGpsVerified ?? null,
       };
     }),
   };
@@ -222,7 +293,15 @@ async function listAllAssignedRows(): Promise<{
 }
 
 export async function listAgentCodesByName(): Promise<{
-  rows: { name: string; code: string; puCode: string; unitName: string }[];
+  rows: {
+    name: string;
+    code: string;
+    puCode: string;
+    unitName: string;
+    lastSignedInAt: string | null;
+    lastLoginDistanceM: number | null;
+    lastLoginGpsVerified: boolean | null;
+  }[];
   codesTableMissing?: boolean;
 }> {
   const listed = await listAllAssignedRows();
@@ -241,9 +320,44 @@ export async function listAgentCodesByName(): Promise<{
       code: row.agent_code || (row.agent_code_hint ? `…${row.agent_code_hint}` : "—"),
       puCode: row.code,
       unitName: row.name,
+      lastSignedInAt: row.last_signed_in_at,
+      lastLoginDistanceM: row.last_login_distance_m,
+      lastLoginGpsVerified: row.last_login_gps_verified,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   return { rows, codesTableMissing: refreshed.codesTableMissing };
+}
+
+export async function listRecentAgentCheckins(limit = 40): Promise<AgentCheckinRow[]> {
+  const auth = await requireStaff();
+  if (!auth.user) return [];
+  const supabase = db();
+  const tenantId = auth.user.profile.tenant_id;
+  const { data, error } = await supabase
+    .from("agent_checkins")
+    .select("id, profile_id, polling_unit_id, logged_in_at, distance_m, gps_verified, unit_code, unit_name")
+    .eq("tenant_id", tenantId)
+    .order("logged_in_at", { ascending: false })
+    .limit(Math.min(Math.max(limit, 1), 100));
+  if (error || !data?.length) return [];
+
+  const profileIds = [...new Set(data.map((row) => row.profile_id))];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .eq("tenant_id", tenantId)
+    .in("id", profileIds);
+  const names = new Map((profiles ?? []).map((p) => [p.id, p.full_name as string]));
+
+  return data.map((row) => ({
+    id: row.id,
+    agentName: names.get(row.profile_id) || "Field Agent",
+    puCode: row.unit_code || "",
+    unitName: row.unit_name || "",
+    loggedInAt: row.logged_in_at,
+    distanceM: row.distance_m,
+    gpsVerified: Boolean(row.gps_verified),
+  }));
 }
 
 /**
@@ -512,6 +626,7 @@ export async function getAgentAccessCodesSql() {
     "supabase/migrations/20260823000003_agent_access_codes.sql",
     "supabase/migrations/20260823000004_agent_access_code_display.sql",
     "supabase/migrations/20260905020000_agent_code_expiry.sql",
+    "supabase/migrations/20260908000000_agent_checkins.sql",
   ];
   const chunks = await Promise.all(files.map((file) => readFile(join(process.cwd(), file), "utf8")));
   return { sql: chunks.join("\n\n") };

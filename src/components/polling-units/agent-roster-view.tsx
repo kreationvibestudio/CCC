@@ -14,12 +14,14 @@ import {
   getAgentAccessCodesSql,
   listAgentAssignments,
   listAgentCodesByName,
+  listRecentAgentCheckins,
   nudgeAssignedAgent,
   resetAgentAccessCode,
   unassignPollingAgent,
+  type AgentCheckinRow,
   type AssignmentRow,
 } from "@/lib/agents/actions";
-import { AGENT_LOGIN_RADIUS_FT } from "@/lib/agent/geo";
+import { AGENT_LOGIN_RADIUS_FT, formatLoginDistance } from "@/lib/agent/geo";
 import {
   FillMissingCodesButton,
   IssueCodesCallout,
@@ -28,11 +30,45 @@ import {
 import { AGENT_CSV_TEMPLATE, parseAgentAssignmentCsv } from "@/lib/agents/csv";
 import { queryPollingUnits, type PollingUnitListItem } from "@/lib/polling-units/actions";
 import { usePermissions } from "@/components/providers/auth-provider";
+import { formatDateTime } from "@/lib/utils";
 
 type IssuedCode = { code: string; puCode: string; name: string };
 
+type NamedCode = {
+  name: string;
+  code: string;
+  puCode: string;
+  unitName: string;
+  lastSignedInAt: string | null;
+  lastLoginDistanceM: number | null;
+  lastLoginGpsVerified: boolean | null;
+};
+
 function copyText(value: string) {
   return navigator.clipboard.writeText(value);
+}
+
+function isShareableAgentCode(code: string) {
+  const compact = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return compact.length === 8 || compact.length === 10;
+}
+
+function checkinSummary(input: {
+  lastSignedInAt: string | null;
+  lastLoginDistanceM: number | null;
+  lastLoginGpsVerified: boolean | null;
+}) {
+  if (!input.lastSignedInAt) return "Has not signed in at the unit yet";
+  const when = formatDateTime(input.lastSignedInAt);
+  if (input.lastLoginGpsVerified) {
+    const distance =
+      input.lastLoginDistanceM != null ? ` · ${formatLoginDistance(input.lastLoginDistanceM)} from pin` : "";
+    return `Checked in at unit ${when}${distance}`;
+  }
+  if (input.lastLoginDistanceM != null) {
+    return `Signed in ${when} · ${formatLoginDistance(input.lastLoginDistanceM)} from pin`;
+  }
+  return `Signed in ${when}`;
 }
 
 export function AgentRosterView({
@@ -52,7 +88,8 @@ export function AgentRosterView({
   const [total, setTotal] = useState(0);
   const [codesTableMissing, setCodesTableMissing] = useState(false);
   const [issued, setIssued] = useState<IssuedCode[]>([]);
-  const [codesByName, setCodesByName] = useState<{ name: string; code: string; puCode: string; unitName: string }[]>([]);
+  const [codesByName, setCodesByName] = useState<NamedCode[]>([]);
+  const [checkins, setCheckins] = useState<AgentCheckinRow[]>([]);
   const [gapLga, setGapLga] = useState("");
   const [gaps, setGaps] = useState<PollingUnitListItem[]>([]);
   const [importing, setImporting] = useState("");
@@ -80,6 +117,7 @@ export function AgentRosterView({
         const directory = await listAgentCodesByName();
         setCodesByName(directory.rows);
         if (directory.codesTableMissing) setCodesTableMissing(true);
+        setCheckins(await listRecentAgentCheckins());
       } catch {
         setCodesByName([]);
       }
@@ -95,6 +133,7 @@ export function AgentRosterView({
       const directory = await listAgentCodesByName();
       setCodesByName(directory.rows);
       if (directory.codesTableMissing) setCodesTableMissing(true);
+      setCheckins(await listRecentAgentCheckins());
     } catch {
       setCodesByName([]);
     }
@@ -290,7 +329,7 @@ export function AgentRosterView({
     <div className="space-y-6">
       <PageHeader
         title="Polling agents"
-        description={`Issue a 10-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must be within ${AGENT_LOGIN_RADIUS_FT} ft of the unit pin. Older 8-character codes still work until they expire. Units without a map pin cannot check in.`}
+        description={`Issue an 8-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must be within ${AGENT_LOGIN_RADIUS_FT} ft of the unit pin. 10-character codes already issued still work. Units without a map pin cannot check in.`}
       >
         <IssuePinnedCodesButton onIssued={rememberIssued} />
         <FillMissingCodesButton onIssued={rememberIssued} />
@@ -325,8 +364,8 @@ export function AgentRosterView({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Every assigned Field Agent, listed by name. Share the code; they enter it in CCC Agent at the
-            unit. Sign-in only works within {AGENT_LOGIN_RADIUS_FT} ft of that unit&apos;s map pin.
+            Every assigned Field Agent, listed by name. Share the hyphenated code; they enter it in CCC Agent
+            at the unit. Sign-in only works within {AGENT_LOGIN_RADIUS_FT} ft of that unit&apos;s map pin.
           </p>
           <div className="flex flex-wrap gap-2">
             <IssuePinnedCodesButton variant="secondary" onIssued={rememberIssued} />
@@ -350,8 +389,9 @@ export function AgentRosterView({
                           · {c.puCode} · {c.unitName}
                         </span>
                       </p>
+                      <p className="text-xs text-muted-foreground">{checkinSummary(c)}</p>
                     </div>
-                    {c.code.includes("-") ? (
+                    {isShareableAgentCode(c.code) ? (
                       <Button type="button" size="sm" variant="outline" onClick={() => void copyText(c.code).then(() => toast.success("Copied"))}>
                         Copy
                       </Button>
@@ -366,6 +406,41 @@ export function AgentRosterView({
               <span className="font-medium">Issue codes for pinned units</span> to create one login per
               mapped unit, or assign a named agent below.
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent check-ins</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Each successful CCC Agent sign-in at the assigned polling unit. GPS must be within{" "}
+            {AGENT_LOGIN_RADIUS_FT} ft of the pin.
+          </p>
+          {checkins.length > 0 ? (
+            <div className="max-h-80 space-y-2 overflow-auto text-sm">
+              {checkins.map((row) => (
+                <div key={row.id} className="rounded-md border border-border/60 px-3 py-2">
+                  <p className="font-medium">{row.agentName}</p>
+                  <p className="text-muted-foreground">
+                    {row.puCode}
+                    {row.unitName ? ` · ${row.unitName}` : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDateTime(row.loggedInAt)}
+                    {row.gpsVerified
+                      ? ` · at the unit${row.distanceM != null ? ` · ${formatLoginDistance(row.distanceM)} from pin` : ""}`
+                      : row.distanceM != null
+                        ? ` · ${formatLoginDistance(row.distanceM)} from pin`
+                        : " · location not recorded"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No agent has signed in at a polling unit yet.</p>
           )}
         </CardContent>
       </Card>
@@ -483,9 +558,16 @@ export function AgentRosterView({
                   {row.agent_phone ? ` · ${row.agent_phone}` : ""}
                   {row.has_coordinates ? "" : " · no map pin"}
                 </p>
+                <p className="text-xs text-muted-foreground">
+                  {checkinSummary({
+                    lastSignedInAt: row.last_signed_in_at,
+                    lastLoginDistanceM: row.last_login_distance_m,
+                    lastLoginGpsVerified: row.last_login_gps_verified,
+                  })}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {row.agent_code?.includes("-") ? (
+                {row.agent_code && isShareableAgentCode(row.agent_code) ? (
                   <Button
                     type="button"
                     variant="outline"

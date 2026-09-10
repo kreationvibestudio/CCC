@@ -4,17 +4,32 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { authorize } from "@/lib/auth/session";
 import type { AuthUser } from "@/lib/auth/session";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { ensureLmsCatalog, type CourseRow } from "./ensure-catalog";
-import {
-  enrollIfNeeded,
-  enrollVolunteer,
-  ensureTrainingCode,
-  rolesForVolunteer,
-} from "./enroll";
+import { enrollIfNeeded } from "./enroll";
 import { isOverdue, percentComplete } from "./progress";
 import { parseSupportRoles, supportRoleLabel, VOLUNTEER_SUPPORT_ROLES } from "./roles";
 import type { EnrollmentRow, ProgressRow } from "./complete";
 import { LMS_CATALOG } from "./catalog";
+
+type OverviewEnrollment = Pick<EnrollmentRow, "volunteer_id" | "course_id" | "status" | "due_at" | "required">;
+
+const VOLUNTEER_OVERVIEW_COLUMNS =
+  "id, full_name, phone, lga, ward, support_roles, training_status, deployment_ready, training_code, trained_at";
+const ENROLLMENT_OVERVIEW_COLUMNS = "volunteer_id, course_id, status, due_at, required";
+
+export type TrainingVolunteer = {
+  id: string;
+  full_name: string;
+  phone: string;
+  lga?: string | null;
+  ward?: string | null;
+  support_roles?: string[];
+  training_status: string;
+  deployment_ready?: boolean;
+  training_code?: string | null;
+  trained_at?: string | null;
+};
 
 function scopeSql(user: AuthUser) {
   return {
@@ -29,22 +44,29 @@ async function viewGate() {
   return { user: gate.user, supabase: await createClient() };
 }
 
-export async function bootstrapLms(tenantId: string, actorId?: string | null) {
+async function loadScopedVolunteers(supabase: Awaited<ReturnType<typeof createClient>>, user: AuthUser) {
+  const tenantId = user.profile.tenant_id;
+  const scope = scopeSql(user);
+  return fetchAllRows<TrainingVolunteer>(
+    (from, to) => {
+      let query = supabase
+        .from("volunteers")
+        .select(VOLUNTEER_OVERVIEW_COLUMNS)
+        .eq("tenant_id", tenantId)
+        .order("full_name")
+        .range(from, to);
+      if (scope.ward) query = query.eq("ward", scope.ward);
+      else if (scope.lga) query = query.eq("lga", scope.lga);
+      return query;
+    },
+    { max: 10000 }
+  );
+}
+
+/** Seed missing catalog rows only. Volunteers enroll on signup, save, and when they open Learn. */
+export async function bootstrapLms(tenantId: string) {
   const admin = createServiceClient();
   await ensureLmsCatalog(admin, tenantId);
-  const { data: volunteers } = await admin.from("volunteers").select("*").eq("tenant_id", tenantId);
-  for (const volunteer of volunteers ?? []) {
-    await ensureTrainingCode(admin, tenantId, volunteer.id, volunteer.training_code);
-    const roles = rolesForVolunteer(volunteer);
-    if (roles.length) {
-      await enrollVolunteer(admin, {
-        tenantId,
-        volunteerId: volunteer.id,
-        roles,
-        actorId,
-      });
-    }
-  }
 }
 
 export async function getTrainingOverview() {
@@ -54,42 +76,61 @@ export async function getTrainingOverview() {
   const admin = createServiceClient();
   const tenantId = user.profile.tenant_id;
   try {
-    await bootstrapLms(tenantId, user.id);
+    await bootstrapLms(tenantId);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not load training catalog. Apply the LMS SQL in Supabase." };
   }
-  const scope = scopeSql(user);
-  let volunteerQuery = supabase.from("volunteers").select("*").eq("tenant_id", tenantId).order("full_name");
-  if (scope.ward) volunteerQuery = volunteerQuery.eq("ward", scope.ward);
-  else if (scope.lga) volunteerQuery = volunteerQuery.eq("lga", scope.lga);
+
   const [
-    { data: volunteers },
-    { data: enrollments, error: enrollmentError },
+    people,
+    enrollmentRows,
     { data: courses, error: courseError },
     { data: modules, error: moduleError },
-    { data: certificates, error: certError },
     { data: sessions },
     { data: logs },
   ] = await Promise.all([
-    volunteerQuery,
-    admin.from("lms_enrollments").select("*").eq("tenant_id", tenantId),
-    admin.from("lms_courses").select("*").eq("tenant_id", tenantId).order("sort_order"),
-    admin.from("lms_modules").select("id, course_id, slug, title, kind, body, estimated_minutes, sort_order, quiz").eq("tenant_id", tenantId).order("sort_order"),
-    admin.from("lms_certificates").select("*").eq("tenant_id", tenantId),
-    admin.from("lms_live_sessions").select("*").eq("tenant_id", tenantId).order("starts_at", { ascending: false }).limit(20),
-    admin.from("lms_activity_logs").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(25),
+    loadScopedVolunteers(supabase, user),
+    fetchAllRows<OverviewEnrollment>(
+      (from, to) =>
+        admin
+          .from("lms_enrollments")
+          .select(ENROLLMENT_OVERVIEW_COLUMNS)
+          .eq("tenant_id", tenantId)
+          .range(from, to),
+      { max: 50000 }
+    ),
+    admin
+      .from("lms_courses")
+      .select(
+        "id, tenant_id, slug, title, description, role_slug, estimated_minutes, status, pass_mark, max_attempts, is_required, sort_order"
+      )
+      .eq("tenant_id", tenantId)
+      .order("sort_order"),
+    admin
+      .from("lms_modules")
+      .select("id, course_id, slug, title, kind, body, estimated_minutes, sort_order, quiz")
+      .eq("tenant_id", tenantId)
+      .order("sort_order"),
+    admin
+      .from("lms_live_sessions")
+      .select("id, title, starts_at, location, meeting_url, capacity")
+      .eq("tenant_id", tenantId)
+      .order("starts_at", { ascending: false })
+      .limit(20),
+    admin
+      .from("lms_activity_logs")
+      .select("id, action, detail, created_at, volunteer_id")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false })
+      .limit(25),
   ]);
   if (courseError) return { error: courseError.message };
   if (moduleError) return { error: moduleError.message };
-  if (enrollmentError) return { error: enrollmentError.message };
-  if (certError) return { error: certError.message };
   if (!(courses ?? []).length) {
     return { error: "Training catalog is empty. Copy the training SQL and run it in Supabase, then refresh." };
   }
 
-  const people = volunteers ?? [];
-  const enrollmentRows = (enrollments ?? []) as EnrollmentRow[];
-  const byVolunteer = new Map<string, EnrollmentRow[]>();
+  const byVolunteer = new Map<string, OverviewEnrollment[]>();
   for (const row of enrollmentRows) {
     const list = byVolunteer.get(row.volunteer_id) ?? [];
     list.push(row);
@@ -133,7 +174,6 @@ export async function getTrainingOverview() {
       sort_order: number;
       quiz: { questions?: Array<{ id: string; prompt: string; choices: string[] }> } | null;
     }>,
-    certificates: certificates ?? [],
     sessions: sessions ?? [],
     logs: logs ?? [],
     stats: {
@@ -204,12 +244,11 @@ export async function getSessionAttendees(sessionId: string) {
 export async function getEligibleVolunteers(input?: { roleSlug?: string | null; requireReady?: boolean }) {
   const gate = await viewGate();
   if ("error" in gate) return [];
-  const overview = await getTrainingOverview();
-  if ("error" in overview) return [];
-  return overview.volunteers.filter((v) => {
+  const { user, supabase } = gate;
+  const people = await loadScopedVolunteers(supabase, user);
+  return people.filter((v) => {
     if (input?.requireReady !== false && !v.deployment_ready) return false;
     if (input?.roleSlug && !(v.support_roles ?? []).includes(input.roleSlug)) return false;
     return true;
   });
 }
-

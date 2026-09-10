@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildTermiiWhatsAppTemplateData,
+  buildTermiiWhatsAppTemplatePayload,
   compactTermiiSenderId,
   parseTermiiSendPayload,
+  parseTermiiWhatsAppDataKeys,
   resolveTermiiSenderId,
+  resolveTermiiWhatsAppConfig,
   sendTermiiSms,
+  sendTermiiWhatsAppTemplate,
+  termiiWhatsAppConfigured,
   toTermiiMsisdn,
 } from "./client.ts";
 
@@ -41,6 +47,22 @@ describe("parseTermiiSendPayload", () => {
     const result = parseTermiiSendPayload(401, "", "secret-key");
     assert.equal(result.ok, false);
     assert.match(result.error ?? "", /API key/);
+  });
+
+  it("accepts Termii WhatsApp array success payloads", () => {
+    const result = parseTermiiSendPayload(
+      200,
+      JSON.stringify([
+        {
+          code: "ok",
+          message_id: "2255298515609943356",
+          message: "Successfully Sent",
+        },
+      ]),
+      "secret-key"
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.messageId, "2255298515609943356");
   });
 
   it("accepts Termii success payloads", () => {
@@ -88,6 +110,122 @@ describe("sendTermiiSms", () => {
       else process.env.TERMII_API_KEY = prevKey;
       if (prevSender === undefined) delete process.env.TERMII_SENDER_ID;
       else process.env.TERMII_SENDER_ID = prevSender;
+    }
+  });
+});
+
+describe("Termii WhatsApp templates", () => {
+  it("defaults data keys to name, code, url", () => {
+    assert.deepEqual(parseTermiiWhatsAppDataKeys(""), ["name", "code", "url"]);
+    assert.deepEqual(parseTermiiWhatsAppDataKeys("1,2,3"), ["1", "2", "3"]);
+  });
+
+  it("maps name, code, and url onto template keys in order", () => {
+    assert.deepEqual(
+      buildTermiiWhatsAppTemplateData(["name", "code", "url"], {
+        name: "Ada",
+        code: "ABCD-EFGH",
+        url: "https://ccc.example/learn/campaign/login",
+      }),
+      {
+        name: "Ada",
+        code: "ABCD-EFGH",
+        url: "https://ccc.example/learn/campaign/login",
+      }
+    );
+    assert.deepEqual(
+      buildTermiiWhatsAppTemplateData(["1", "2", "3"], {
+        name: "Ada",
+        code: "ABCD-EFGH",
+        url: "https://ccc.example/learn/campaign/login",
+      }),
+      {
+        "1": "Ada",
+        "2": "ABCD-EFGH",
+        "3": "https://ccc.example/learn/campaign/login",
+      }
+    );
+  });
+
+  it("builds the Termii template POST body", () => {
+    const payload = buildTermiiWhatsAppTemplatePayload(
+      {
+        apiKey: "secret-key",
+        deviceId: "device-1",
+        templateId: "tpl-9",
+        dataKeys: ["name", "code", "url"],
+      },
+      "2348031234567",
+      { name: "Ada", code: "ABCD-EFGH", url: "https://example.test/learn/x/login" }
+    );
+    assert.deepEqual(payload, {
+      phone_number: "2348031234567",
+      device_id: "device-1",
+      template_id: "tpl-9",
+      api_key: "secret-key",
+      data: {
+        name: "Ada",
+        code: "ABCD-EFGH",
+        url: "https://example.test/learn/x/login",
+      },
+    });
+  });
+
+  it("reports WhatsApp as unconfigured when device or template is missing", () => {
+    const prevKey = process.env.TERMII_API_KEY;
+    const prevDevice = process.env.TERMII_WHATSAPP_DEVICE_ID;
+    const prevTemplate = process.env.TERMII_WHATSAPP_TEMPLATE_ID;
+    process.env.TERMII_API_KEY = "not-a-real-key";
+    delete process.env.TERMII_WHATSAPP_DEVICE_ID;
+    delete process.env.TERMII_WHATSAPP_TEMPLATE_ID;
+    try {
+      assert.equal(termiiWhatsAppConfigured(), false);
+      const config = resolveTermiiWhatsAppConfig();
+      assert.equal("error" in config, true);
+    } finally {
+      if (prevKey === undefined) delete process.env.TERMII_API_KEY;
+      else process.env.TERMII_API_KEY = prevKey;
+      if (prevDevice === undefined) delete process.env.TERMII_WHATSAPP_DEVICE_ID;
+      else process.env.TERMII_WHATSAPP_DEVICE_ID = prevDevice;
+      if (prevTemplate === undefined) delete process.env.TERMII_WHATSAPP_TEMPLATE_ID;
+      else process.env.TERMII_WHATSAPP_TEMPLATE_ID = prevTemplate;
+    }
+  });
+
+  it("does not treat an empty 401 as a successful WhatsApp send", async () => {
+    const prev = {
+      key: process.env.TERMII_API_KEY,
+      device: process.env.TERMII_WHATSAPP_DEVICE_ID,
+      template: process.env.TERMII_WHATSAPP_TEMPLATE_ID,
+    };
+    process.env.TERMII_API_KEY = "not-a-real-key";
+    process.env.TERMII_WHATSAPP_DEVICE_ID = "device-1";
+    process.env.TERMII_WHATSAPP_TEMPLATE_ID = "tpl-9";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+      assert.equal(String(input), "https://api.ng.termii.com/api/send/template");
+      assert.equal(body.phone_number, "2348031234567");
+      assert.equal(body.device_id, "device-1");
+      return new Response("", { status: 401 });
+    }) as typeof fetch;
+    try {
+      const result = await sendTermiiWhatsAppTemplate({
+        to: "08031234567",
+        name: "Ada",
+        code: "ABCD-EFGH",
+        url: "https://example.test/learn/x/login",
+      });
+      assert.equal(result.ok, false);
+      assert.match(result.error ?? "", /API key/);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (prev.key === undefined) delete process.env.TERMII_API_KEY;
+      else process.env.TERMII_API_KEY = prev.key;
+      if (prev.device === undefined) delete process.env.TERMII_WHATSAPP_DEVICE_ID;
+      else process.env.TERMII_WHATSAPP_DEVICE_ID = prev.device;
+      if (prev.template === undefined) delete process.env.TERMII_WHATSAPP_TEMPLATE_ID;
+      else process.env.TERMII_WHATSAPP_TEMPLATE_ID = prev.template;
     }
   });
 });

@@ -80,6 +80,7 @@ npm run dev
 | `NEXT_PUBLIC_APP_URL` | Auth redirects, QR check-in links (**must be the Vercel URL in production, not localhost**) |
 | `CRON_SECRET` | Daily Facebook sync (`Authorization: Bearer`; set on Vercel so Cron injects it) |
 | `TERMII_API_KEY` / `TERMII_SENDER_ID` | Communications SMS send |
+| `TERMII_WHATSAPP_DEVICE_ID` / `TERMII_WHATSAPP_TEMPLATE_ID` | WhatsApp training codes (signup + HQ Send codes) |
 | `PAYSTACK_SECRET_KEY` | Optional: auto-record Paystack charges into CRM |
 | `FACEBOOK_*` | Social sync / comments |
 | `OPENAI_API_KEY` | AI assistant (optional) |

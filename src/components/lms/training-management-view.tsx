@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { GraduationCap, Download } from "lucide-react";
+import { GraduationCap, Download, MessageCircle } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/shared/page-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import {
   duplicateCourse,
   exportTrainingCsv,
   saveCourseMeta,
+  sendTrainingCodesWhatsApp,
   sendTrainingReminders,
   setCourseStatus,
 } from "@/lib/lms/actions";
@@ -102,6 +103,7 @@ export function TrainingManagementView({
   const { canCreate } = usePermissions();
   const [pending, start] = useTransition();
   const [filter, setFilter] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const enrollByVolunteer = useMemo(() => {
     const map = new Map<string, Enrollment[]>();
     for (const row of enrollments) {
@@ -124,6 +126,33 @@ export function TrainingManagementView({
         title="Training Management"
         description="Role-based courses, live briefings, and who is ready for assignment"
       >
+        {canWrite ? (
+          <Button
+            variant="secondary"
+            onClick={() =>
+              start(async () => {
+                const ids = selectedIds.filter((id) => people.some((person) => person.id === id));
+                const result = await sendTrainingCodesWhatsApp(ids.length ? ids : undefined);
+                if ("error" in result && result.error) {
+                  toast.error(result.error);
+                  return;
+                }
+                const sent = "sent" in result ? result.sent : 0;
+                const failed = "failed" in result ? result.failed : 0;
+                toast.success(
+                  failed
+                    ? `WhatsApp codes sent to ${sent}. ${failed} failed.`
+                    : `WhatsApp codes sent to ${sent} volunteer${sent === 1 ? "" : "s"}.`
+                );
+                router.refresh();
+              })
+            }
+            disabled={pending}
+          >
+            <MessageCircle className="mr-2 h-4 w-4" />
+            {selectedIds.length ? `Send codes (${selectedIds.length})` : "Send codes"}
+          </Button>
+        ) : null}
         {canCreate ? (
           <Button
             variant="secondary"
@@ -192,6 +221,11 @@ export function TrainingManagementView({
 
         <TabsContent value="people" className="space-y-3">
           <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search volunteers…" className="max-w-sm" />
+          {canWrite ? (
+            <p className="text-xs text-muted-foreground">
+              Select rows and use Send codes to WhatsApp training logins. With none selected, every listed volunteer is sent (up to 200).
+            </p>
+          ) : null}
           {overdue.length > 0 ? (
             <p className="text-sm text-amber-600">{overdue.length} overdue. Filter the table or send reminders.</p>
           ) : null}
@@ -199,6 +233,19 @@ export function TrainingManagementView({
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left">
                 <tr>
+                  {canWrite ? (
+                    <th className="p-3 w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all volunteers"
+                        checked={people.length > 0 && people.every((person) => selectedIds.includes(person.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedIds(people.map((person) => person.id));
+                          else setSelectedIds([]);
+                        }}
+                      />
+                    </th>
+                  ) : null}
                   <th className="p-3">Volunteer</th>
                   <th className="p-3">Roles</th>
                   <th className="p-3">Progress</th>
@@ -214,6 +261,22 @@ export function TrainingManagementView({
                   const late = active.some((e) => isOverdue(e.due_at, e.status));
                   return (
                     <tr key={person.id} className="border-t">
+                      {canWrite ? (
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${person.full_name}`}
+                            checked={selectedIds.includes(person.id)}
+                            onChange={(e) => {
+                              setSelectedIds((current) =>
+                                e.target.checked
+                                  ? [...current, person.id]
+                                  : current.filter((id) => id !== person.id)
+                              );
+                            }}
+                          />
+                        </td>
+                      ) : null}
                       <td className="p-3">
                         <Link href={`/volunteers/${person.id}`} className="font-medium hover:underline">{person.full_name}</Link>
                         <p className="text-xs text-muted-foreground">{person.lga} · {person.ward}</p>

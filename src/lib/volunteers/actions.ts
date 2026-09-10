@@ -15,6 +15,7 @@ import {
 } from "@/lib/volunteers/training";
 import { parseSupportRoles } from "@/lib/lms/roles";
 import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
+import { resolveAppHost, sendVolunteerTrainingCodeWhatsApp, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
 
 export async function createVolunteer(formData: FormData) {
   const gate = await authorize("volunteers.manage");
@@ -45,7 +46,7 @@ export async function createVolunteer(formData: FormData) {
   if (error) return { error: error.message };
   if (data?.id) {
     try {
-      await ensureTrainingCode(supabase, user.profile.tenant_id, data.id, null);
+      const code = await ensureTrainingCode(supabase, user.profile.tenant_id, data.id, null);
       if (supportRoles.length) {
         await enrollVolunteer(supabase, {
           tenantId: user.profile.tenant_id,
@@ -54,6 +55,18 @@ export async function createVolunteer(formData: FormData) {
           actorId: user.id,
         });
       }
+      const { data: tenant } = await supabase.from("tenants").select("slug").eq("id", user.profile.tenant_id).maybeSingle();
+      const slug = tenant?.slug || user.workspace?.slug || "";
+      await sendVolunteerTrainingCodeWhatsApp({
+        supabase,
+        tenantId: user.profile.tenant_id,
+        volunteerId: data.id,
+        actorId: user.id,
+        phone: String(formData.get("phone") ?? ""),
+        name: String(formData.get("full_name") ?? ""),
+        trainingCode: code,
+        learnUrl: volunteerLearnLoginUrl(slug, resolveAppHost()),
+      });
     } catch {
       // LMS catalog is applied on first Training Management visit
     }

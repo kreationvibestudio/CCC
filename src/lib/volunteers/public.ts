@@ -7,6 +7,7 @@ import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { parseSupportRoles } from "@/lib/lms/roles";
 import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
 import { generateTrainingCode } from "@/lib/lms/codes";
+import { resolveAppHost, sendVolunteerTrainingCodeWhatsApp, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
 
 export type PublicCampaign = {
   id: string;
@@ -63,10 +64,13 @@ export async function registerVolunteerPublic(
   campaignName?: string;
   trainingCode?: string;
   slug?: string;
+  whatsappSent?: boolean;
 }> {
   const campaign = await getPublicCampaignBySlug(slug);
   if (!campaign) return { error: "This volunteer signup link is invalid." };
   const tenantId = campaign.id;
+  const campaignSlug = campaign.slug;
+  const campaignName = campaign.name;
 
   // Unauthenticated service-role write: throttle by source so the volunteer
   // table cannot be filled with junk PII.
@@ -125,6 +129,24 @@ export async function registerVolunteerPublic(
     return code;
   }
 
+  async function sendCode(volunteerId: string, trainingCode: string) {
+    if (!trainingCode) return false;
+    try {
+      const result = await sendVolunteerTrainingCodeWhatsApp({
+        supabase: admin,
+        tenantId,
+        volunteerId,
+        phone,
+        name: fullName,
+        trainingCode,
+        learnUrl: volunteerLearnLoginUrl(campaignSlug, resolveAppHost()),
+      });
+      return Boolean(result.sent);
+    } catch {
+      return false;
+    }
+  }
+
   if (existing?.id) {
     const patch: Record<string, unknown> = {
       full_name: fullName,
@@ -138,13 +160,15 @@ export async function registerVolunteerPublic(
 
     await admin.from("volunteers").update(patch).eq("id", existing.id).eq("tenant_id", tenantId);
     const trainingCode = await attachTraining(existing.id, existing.training_code);
+    const whatsappSent = await sendCode(existing.id, trainingCode);
 
     return {
       success: true,
       alreadyRegistered: true,
-      campaignName: campaign.name,
+      campaignName,
       trainingCode,
-      slug: campaign.slug,
+      slug: campaignSlug,
+      whatsappSent,
     };
   }
 
@@ -178,5 +202,7 @@ export async function registerVolunteerPublic(
     // non-fatal
   }
 
-  return { success: true, campaignName: campaign.name, trainingCode, slug: campaign.slug };
+  const whatsappSent = created?.id && trainingCode ? await sendCode(created.id, trainingCode) : false;
+
+  return { success: true, campaignName, trainingCode, slug: campaignSlug, whatsappSent };
 }

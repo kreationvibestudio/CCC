@@ -376,6 +376,8 @@ export async function getSecretsStatus() {
     appUrlProduction: isLiveSecret(appUrl) && !/localhost|127\.0\.0\.1/.test(appUrl),
     termiiApiKey: isLiveSecret(process.env.TERMII_API_KEY),
     termiiSenderId: termiiSenderIdConfigured(),
+    termiiWhatsAppDeviceId: isLiveSecret(process.env.TERMII_WHATSAPP_DEVICE_ID, 3),
+    termiiWhatsAppTemplateId: isLiveSecret(process.env.TERMII_WHATSAPP_TEMPLATE_ID, 3),
     facebookPageId: isLiveSecret(process.env.FACEBOOK_PAGE_ID, 5),
     facebookUserToken: isLiveSecret(process.env.FACEBOOK_USER_ACCESS_TOKEN, 40),
     facebookPageToken: isLiveSecret(process.env.FACEBOOK_PAGE_ACCESS_TOKEN, 40),

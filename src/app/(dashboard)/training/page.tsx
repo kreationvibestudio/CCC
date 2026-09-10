@@ -1,5 +1,6 @@
 import { getTrainingOverview } from "@/lib/lms/hq-data";
 import { TrainingManagementView } from "@/components/lms/training-management-view";
+import { TrainingSchemaSetup } from "@/components/lms/training-schema-setup";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canWriteRecords, hasPermission } from "@/types/auth";
 import { appBaseUrl } from "@/lib/campaign";
@@ -8,12 +9,7 @@ export default async function TrainingManagementPage() {
   const user = await getCurrentUser();
   const overview = await getTrainingOverview();
   if ("error" in overview) {
-    return (
-      <div className="mx-auto max-w-lg space-y-3">
-        <h1 className="text-2xl font-bold">Training Management</h1>
-        <p className="text-sm text-muted-foreground">{overview.error}</p>
-      </div>
-    );
+    return <TrainingSchemaSetup message={overview.error || "Could not load training catalog. Apply the LMS SQL in Supabase."} />;
   }
   const base =
     appBaseUrl() ||

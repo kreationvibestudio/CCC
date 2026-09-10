@@ -74,38 +74,52 @@ export async function enrollVolunteer(
     dueDays?: number;
   }
 ) {
-  await ensureLmsCatalog(supabase, input.tenantId);
-  const courses = await publishedCourses(supabase, input.tenantId);
+  let courses = await publishedCourses(supabase, input.tenantId);
+  if (!courses.length) {
+    await ensureLmsCatalog(supabase, input.tenantId);
+    courses = await publishedCourses(supabase, input.tenantId);
+  }
   const wanted = courses.filter(
     (c) => c.status === "published" && (c.role_slug == null || input.roles.includes(c.role_slug as SupportRoleSlug))
   );
+  if (!wanted.length) return wanted;
+
+  const { data: existing } = await supabase
+    .from("lms_enrollments")
+    .select("course_id")
+    .eq("tenant_id", input.tenantId)
+    .eq("volunteer_id", input.volunteerId)
+    .neq("status", "removed");
+  const have = new Set((existing ?? []).map((row) => row.course_id as string));
+  const toAdd = wanted.filter((course) => !have.has(course.id));
+  if (!toAdd.length) return wanted;
+
   const dueAt =
     input.dueDays != null
       ? new Date(Date.now() + input.dueDays * 24 * 60 * 60 * 1000).toISOString()
       : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
-  for (const course of wanted) {
-    await supabase.from("lms_enrollments").upsert(
-      {
-        tenant_id: input.tenantId,
-        volunteer_id: input.volunteerId,
-        course_id: course.id,
-        status: "assigned",
-        required: course.is_required !== false,
-        due_at: dueAt,
-        assigned_by: input.actorId ?? null,
-      },
-      { onConflict: "volunteer_id,course_id", ignoreDuplicates: true }
-    );
-  }
+  const { error } = await supabase.from("lms_enrollments").upsert(
+    toAdd.map((course) => ({
+      tenant_id: input.tenantId,
+      volunteer_id: input.volunteerId,
+      course_id: course.id,
+      status: "assigned",
+      required: course.is_required !== false,
+      due_at: dueAt,
+      assigned_by: input.actorId ?? null,
+    })),
+    { onConflict: "volunteer_id,course_id", ignoreDuplicates: true }
+  );
+  if (error) throw new Error(error.message);
 
   await logLmsActivity(supabase, {
     tenantId: input.tenantId,
     volunteerId: input.volunteerId,
     actorId: input.actorId,
     action: "training.enrolled",
-    detail: `Assigned ${wanted.length} course(s) for selected roles`,
-    metadata: { roles: input.roles, course_ids: wanted.map((c) => c.id) },
+    detail: `Assigned ${toAdd.length} course(s) for selected roles`,
+    metadata: { roles: input.roles, course_ids: toAdd.map((c) => c.id) },
   });
 
   return wanted;

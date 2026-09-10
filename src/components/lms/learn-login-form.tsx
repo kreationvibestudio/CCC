@@ -16,17 +16,21 @@ export function LearnLoginForm({ slug, campaignName }: { slug: string; campaignN
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     start(async () => {
-      const result = await loginVolunteerLearn({
-        slug,
-        phone: String(data.get("phone") ?? ""),
-        code: String(data.get("code") ?? ""),
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
+      try {
+        const result = await loginVolunteerLearn({
+          slug,
+          phone: String(data.get("phone") ?? ""),
+          code: String(data.get("code") ?? ""),
+        });
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
+        router.push(`/learn/${slug}`);
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not sign in. Try again.");
       }
-      router.push(`/learn/${slug}`);
-      router.refresh();
     });
   }
 

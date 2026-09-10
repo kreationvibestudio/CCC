@@ -131,6 +131,7 @@ export function LearnDashboardView({
                     <p className="text-xs text-muted-foreground">
                       {path.course.estimated_minutes ?? remaining} min · due {formatDue(path.enrollment.due_at) ?? "open"}
                       {path.enrollment.required ? " · required" : ""}
+                      {path.enrollment.status === "completed" ? " · certificate ready" : ""}
                     </p>
                   </CardContent>
                 </Card>

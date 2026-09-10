@@ -45,22 +45,35 @@ export function LearnCoursePlayer({
 
   if (!active) return <p>No modules in this course.</p>;
 
+  function goToCertificate() {
+    router.push(`/learn/${slug}/certificate/${course.id}`);
+  }
+
   function finish(extra?: { acknowledgement?: string; assignmentNotes?: string }) {
     start(async () => {
-      const result = await completeLearnModule({
-        moduleId: active.id,
-        acknowledgement: extra?.acknowledgement,
-        assignmentNotes: extra?.assignmentNotes,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
+      try {
+        const result = await completeLearnModule({
+          moduleId: active.id,
+          acknowledgement: extra?.acknowledgement,
+          assignmentNotes: extra?.assignmentNotes,
+        });
+        if ("error" in result) {
+          toast.error(result.error);
+          return;
+        }
+        if (result.courseCompleted) {
+          toast.success("Course complete — your certificate is ready");
+          goToCertificate();
+          return;
+        }
+        toast.success("Saved");
+        const idx = modules.findIndex((m) => m.id === active.id);
+        const upcoming = modules[idx + 1];
+        if (upcoming) setActiveId(upcoming.id);
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not save this module. Try again.");
       }
-      toast.success("Saved");
-      const idx = modules.findIndex((m) => m.id === active.id);
-      const upcoming = modules[idx + 1];
-      if (upcoming) setActiveId(upcoming.id);
-      router.refresh();
     });
   }
 
@@ -70,7 +83,14 @@ export function LearnCoursePlayer({
         <Button variant="outline" size="sm" asChild>
           <Link href={`/learn/${slug}`}>Back</Link>
         </Button>
-        {enrollmentStatus === "completed" ? <Badge variant="success">Course complete</Badge> : null}
+        {enrollmentStatus === "completed" ? (
+          <div className="flex items-center gap-2">
+            <Badge variant="success">Course complete</Badge>
+            <Button size="sm" asChild>
+              <Link href={`/learn/${slug}/certificate/${course.id}`}>View certificate</Link>
+            </Button>
+          </div>
+        ) : null}
       </div>
       <h1 className="text-2xl font-bold tracking-tight">{course.title}</h1>
       <ol className="grid gap-2 sm:grid-cols-2">
@@ -138,25 +158,54 @@ export function LearnCoursePlayer({
                 Pass mark {course.pass_mark ?? 70}% · up to {course.max_attempts ?? 3} attempts.
               </p>
               <Button
-                disabled={pending || done.has(active.id)}
+                disabled={pending}
                 onClick={() =>
                   start(async () => {
-                    const result = await submitLearnQuiz({ moduleId: active.id, answers });
-                    if (result.error) {
-                      toast.error(result.error);
-                      return;
+                    try {
+                      const result = await submitLearnQuiz({ moduleId: active.id, answers });
+                      if ("error" in result) {
+                        toast.error(result.error);
+                        return;
+                      }
+                      if (result.passed) {
+                        toast.success(
+                          result.courseCompleted
+                            ? `Passed with ${result.score}%. Your certificate is ready.`
+                            : `Passed with ${result.score}%`
+                        );
+                        if (result.courseCompleted) {
+                          goToCertificate();
+                          return;
+                        }
+                      } else {
+                        toast.error(
+                          `Score ${result.score}%. ${result.attempts}/${result.maxAttempts} attempts used.`
+                        );
+                      }
+                      router.refresh();
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Could not submit the quiz. Try again.");
                     }
-                    toast[result.passed ? "success" : "error"](
-                      result.passed
-                        ? `Passed with ${result.score}%`
-                        : `Score ${result.score}%. ${result.attempts}/${result.maxAttempts} attempts used.`
-                    );
-                    router.refresh();
                   })
                 }
               >
-                Submit quiz
+                {done.has(active.id) ? "View result" : "Submit quiz"}
               </Button>
+              {done.has(active.id) ? (
+                <p className="text-sm text-emerald-600">
+                  You passed this quiz.
+                  {enrollmentStatus === "completed" ? (
+                    <>
+                      {" "}
+                      <Link className="underline" href={`/learn/${slug}/certificate/${course.id}`}>
+                        Open your certificate
+                      </Link>
+                    </>
+                  ) : (
+                    " Finish any remaining modules to receive the certificate."
+                  )}
+                </p>
+              ) : null}
             </div>
           ) : done.has(active.id) ? (
             <p className="text-sm text-emerald-600">Completed. You can revisit this anytime.</p>

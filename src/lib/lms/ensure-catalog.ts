@@ -61,18 +61,18 @@ function missingCatalogModules(
     const row = coursesBySlug.get(course.slug);
     if (!row) continue;
     const slugs = modulesByCourse.get(row.id) ?? new Set<string>();
-    for (const [moduleIndex, module] of course.modules.entries()) {
-      if (slugs.has(module.slug)) continue;
+    for (const [unitIndex, unit] of course.modules.entries()) {
+      if (slugs.has(unit.slug)) continue;
       rows.push({
         courseId: row.id,
-        slug: module.slug,
-        title: module.title,
-        kind: module.kind,
-        body: module.body ?? null,
-        resourceUrl: module.resourceUrl ?? null,
-        minutes: module.minutes,
-        sortOrder: moduleIndex,
-        quiz: module.questions ? { questions: module.questions } : null,
+        slug: unit.slug,
+        title: unit.title,
+        kind: unit.kind,
+        body: unit.body ?? null,
+        resourceUrl: unit.resourceUrl ?? null,
+        minutes: unit.minutes,
+        sortOrder: unitIndex,
+        quiz: unit.questions ? { questions: unit.questions } : null,
       });
     }
   }
@@ -89,8 +89,8 @@ export async function ensureLmsCatalog(supabase: SupabaseClient, tenantId: strin
   if (moduleReadError) throw new Error(moduleReadError.message);
 
   let courses = (existingCourses ?? []) as Array<{ id: string; slug: string }>;
-  let modules = (existingModules ?? []) as Array<{ course_id: string; slug: string }>;
-  if (catalogCoverageComplete(courses, modules)) {
+  const existingUnits = (existingModules ?? []) as Array<{ course_id: string; slug: string }>;
+  if (catalogCoverageComplete(courses, existingUnits)) {
     return new Map(courses.map((course) => [course.slug, course]));
   }
 
@@ -120,26 +120,26 @@ export async function ensureLmsCatalog(supabase: SupabaseClient, tenantId: strin
 
   const coursesBySlug = new Map(courses.map((course) => [course.slug, course]));
   const modulesByCourse = new Map<string, Set<string>>();
-  for (const module of modules) {
-    const slugs = modulesByCourse.get(module.course_id) ?? new Set<string>();
-    slugs.add(module.slug);
-    modulesByCourse.set(module.course_id, slugs);
+  for (const unit of existingUnits) {
+    const slugs = modulesByCourse.get(unit.course_id) ?? new Set<string>();
+    slugs.add(unit.slug);
+    modulesByCourse.set(unit.course_id, slugs);
   }
 
   const missingModules = missingCatalogModules(coursesBySlug, modulesByCourse);
   if (missingModules.length) {
     const { error: moduleError } = await supabase.from("lms_modules").upsert(
-      missingModules.map((module) => ({
+      missingModules.map((unit) => ({
         tenant_id: tenantId,
-        course_id: module.courseId,
-        slug: module.slug,
-        title: module.title,
-        kind: module.kind,
-        body: module.body,
-        resource_url: module.resourceUrl,
-        estimated_minutes: module.minutes,
-        sort_order: module.sortOrder,
-        quiz: module.quiz,
+        course_id: unit.courseId,
+        slug: unit.slug,
+        title: unit.title,
+        kind: unit.kind,
+        body: unit.body,
+        resource_url: unit.resourceUrl,
+        estimated_minutes: unit.minutes,
+        sort_order: unit.sortOrder,
+        quiz: unit.quiz,
       })),
       { onConflict: "course_id,slug" }
     );

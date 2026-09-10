@@ -165,6 +165,7 @@ export async function getVolunteerTrainingSql() {
   const sql = [
     await readFile(join(process.cwd(), "supabase/migrations/20260910000000_volunteer_training.sql"), "utf8"),
     await readFile(join(process.cwd(), "supabase/migrations/20260910120000_volunteer_lms.sql"), "utf8"),
+    await readFile(join(process.cwd(), "supabase/migrations/20260910180000_lms_grants_and_catalog.sql"), "utf8"),
   ].join("\n\n");
   return { sql };
 }

@@ -81,6 +81,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
           deploymentReady={Boolean(volunteer.deployment_ready)}
           enrollments={lms.enrollments}
           courses={lms.courses}
+          certificates={lms.certificates as Array<{ id: string; course_id: string; code: string; issued_at: string }>}
           canWrite={canWrite}
         />
       ) : null}

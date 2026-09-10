@@ -51,23 +51,41 @@ export async function getTrainingOverview() {
   const gate = await viewGate();
   if ("error" in gate) return { error: gate.error };
   const { user, supabase } = gate;
+  const admin = createServiceClient();
+  const tenantId = user.profile.tenant_id;
   try {
-    await bootstrapLms(user.profile.tenant_id, user.id);
+    await bootstrapLms(tenantId, user.id);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not load training catalog. Apply the LMS SQL in Supabase." };
   }
   const scope = scopeSql(user);
-  let volunteerQuery = supabase.from("volunteers").select("*").eq("tenant_id", user.profile.tenant_id).order("full_name");
+  let volunteerQuery = supabase.from("volunteers").select("*").eq("tenant_id", tenantId).order("full_name");
   if (scope.ward) volunteerQuery = volunteerQuery.eq("ward", scope.ward);
   else if (scope.lga) volunteerQuery = volunteerQuery.eq("lga", scope.lga);
-  const [{ data: volunteers }, { data: enrollments }, { data: courses }, { data: sessions }, { data: logs }] =
-    await Promise.all([
-      volunteerQuery,
-      supabase.from("lms_enrollments").select("*").eq("tenant_id", user.profile.tenant_id),
-      supabase.from("lms_courses").select("*").eq("tenant_id", user.profile.tenant_id).order("sort_order"),
-      supabase.from("lms_live_sessions").select("*").eq("tenant_id", user.profile.tenant_id).order("starts_at", { ascending: false }).limit(20),
-      supabase.from("lms_activity_logs").select("*").eq("tenant_id", user.profile.tenant_id).order("created_at", { ascending: false }).limit(25),
-    ]);
+  const [
+    { data: volunteers },
+    { data: enrollments, error: enrollmentError },
+    { data: courses, error: courseError },
+    { data: modules, error: moduleError },
+    { data: certificates, error: certError },
+    { data: sessions },
+    { data: logs },
+  ] = await Promise.all([
+    volunteerQuery,
+    admin.from("lms_enrollments").select("*").eq("tenant_id", tenantId),
+    admin.from("lms_courses").select("*").eq("tenant_id", tenantId).order("sort_order"),
+    admin.from("lms_modules").select("id, course_id, slug, title, kind, body, estimated_minutes, sort_order, quiz").eq("tenant_id", tenantId).order("sort_order"),
+    admin.from("lms_certificates").select("*").eq("tenant_id", tenantId),
+    admin.from("lms_live_sessions").select("*").eq("tenant_id", tenantId).order("starts_at", { ascending: false }).limit(20),
+    admin.from("lms_activity_logs").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(25),
+  ]);
+  if (courseError) return { error: courseError.message };
+  if (moduleError) return { error: moduleError.message };
+  if (enrollmentError) return { error: enrollmentError.message };
+  if (certError) return { error: certError.message };
+  if (!(courses ?? []).length) {
+    return { error: "Training catalog is empty. Copy the training SQL and run it in Supabase, then refresh." };
+  }
 
   const people = volunteers ?? [];
   const enrollmentRows = (enrollments ?? []) as EnrollmentRow[];
@@ -104,6 +122,18 @@ export async function getTrainingOverview() {
     volunteers: people,
     enrollments: enrollmentRows,
     courses: (courses ?? []) as CourseRow[],
+    modules: (modules ?? []) as Array<{
+      id: string;
+      course_id: string;
+      slug: string;
+      title: string;
+      kind: string;
+      body: string | null;
+      estimated_minutes: number | null;
+      sort_order: number;
+      quiz: { questions?: Array<{ id: string; prompt: string; choices: string[] }> } | null;
+    }>,
+    certificates: certificates ?? [],
     sessions: sessions ?? [],
     logs: logs ?? [],
     stats: {
@@ -123,23 +153,29 @@ export async function getTrainingOverview() {
 export async function getHqVolunteerLms(volunteerId: string) {
   const gate = await viewGate();
   if ("error" in gate) return { error: gate.error };
-  const { user, supabase } = gate;
-  await ensureLmsCatalog(supabase, user.profile.tenant_id);
-  const { data: volunteer } = await supabase
+  const { user } = gate;
+  const admin = createServiceClient();
+  const tenantId = user.profile.tenant_id;
+  try {
+    await ensureLmsCatalog(admin, tenantId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not load training catalog." };
+  }
+  const { data: volunteer } = await admin
     .from("volunteers")
     .select("*")
     .eq("id", volunteerId)
-    .eq("tenant_id", user.profile.tenant_id)
+    .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!volunteer) return { error: "Volunteer not found." };
-  await enrollIfNeeded(supabase, volunteer, user.id);
+  await enrollIfNeeded(admin, volunteer, user.id);
   const [{ data: enrollments }, { data: courses }, { data: progress }, { data: certs }, { data: attempts }] =
     await Promise.all([
-      supabase.from("lms_enrollments").select("*").eq("volunteer_id", volunteerId).neq("status", "removed"),
-      supabase.from("lms_courses").select("*").eq("tenant_id", user.profile.tenant_id),
-      supabase.from("lms_module_progress").select("*").eq("volunteer_id", volunteerId),
-      supabase.from("lms_certificates").select("*").eq("volunteer_id", volunteerId),
-      supabase.from("lms_quiz_attempts").select("*").eq("volunteer_id", volunteerId).order("created_at", { ascending: false }).limit(20),
+      admin.from("lms_enrollments").select("*").eq("volunteer_id", volunteerId).neq("status", "removed"),
+      admin.from("lms_courses").select("*").eq("tenant_id", tenantId),
+      admin.from("lms_module_progress").select("*").eq("volunteer_id", volunteerId),
+      admin.from("lms_certificates").select("*").eq("volunteer_id", volunteerId),
+      admin.from("lms_quiz_attempts").select("*").eq("volunteer_id", volunteerId).order("created_at", { ascending: false }).limit(20),
     ]);
   const courseMap = new Map(((courses ?? []) as CourseRow[]).map((c) => [c.id, c]));
   return {

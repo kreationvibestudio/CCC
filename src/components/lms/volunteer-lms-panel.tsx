@@ -17,6 +17,7 @@ export function VolunteerLmsPanel({
   deploymentReady,
   enrollments,
   courses,
+  certificates,
   canWrite,
 }: {
   volunteerId: string;
@@ -24,6 +25,7 @@ export function VolunteerLmsPanel({
   deploymentReady?: boolean;
   enrollments: Array<{ course_id: string; status: string; required: boolean; course?: { id: string; title: string } | undefined }>;
   courses: Array<{ id: string; title: string }>;
+  certificates: Array<{ id: string; course_id: string; code: string; issued_at: string }>;
   canWrite: boolean;
 }) {
   const router = useRouter();
@@ -45,6 +47,24 @@ export function VolunteerLmsPanel({
         <ProgressBar value={percentComplete(done, enrollments.length)} label={`${done}/${enrollments.length} courses`} />
         {trainingCode ? (
           <p className="text-sm">Training code: <span className="font-mono">{trainingCode}</span></p>
+        ) : null}
+        {certificates.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Certificates</p>
+            <ul className="space-y-1 text-sm">
+              {certificates.map((cert) => {
+                const title = enrollments.find((e) => e.course_id === cert.course_id)?.course?.title
+                  ?? courses.find((c) => c.id === cert.course_id)?.title
+                  ?? "Course";
+                return (
+                  <li key={cert.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+                    <span>{title}</span>
+                    <span className="font-mono text-xs">{cert.code}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         ) : null}
         <ul className="space-y-2 text-sm">
           {enrollments.map((row) => (

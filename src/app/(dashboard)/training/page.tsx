@@ -26,6 +26,7 @@ export default async function TrainingManagementPage() {
       overdue={overview.overdue}
       sessions={overview.sessions}
       logs={overview.logs}
+      modules={overview.modules}
       learnBase={learnBase}
       canWrite={user ? canWriteRecords(user.role) && hasPermission(user.role, "training.manage") : false}
     />

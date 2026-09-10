@@ -63,6 +63,7 @@ const MIGRATIONS = [
   "supabase/migrations/20260908000000_agent_checkins.sql",
   "supabase/migrations/20260910000000_volunteer_training.sql",
   "supabase/migrations/20260910120000_volunteer_lms.sql",
+  "supabase/migrations/20260910180000_lms_grants_and_catalog.sql",
 ];
 
 loadEnvLocal();

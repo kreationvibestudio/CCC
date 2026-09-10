@@ -39,6 +39,18 @@ type Course = {
   is_required: boolean | null;
 };
 
+type CourseModule = {
+  id: string;
+  course_id: string;
+  slug: string;
+  title: string;
+  kind: string;
+  body: string | null;
+  estimated_minutes: number | null;
+  sort_order: number;
+  quiz: { questions?: Array<{ id: string; prompt: string; choices: string[] }> } | null;
+};
+
 type Volunteer = {
   id: string;
   full_name: string;
@@ -69,6 +81,7 @@ export function TrainingManagementView({
   overdue,
   sessions,
   logs,
+  modules,
   learnBase,
   canWrite,
 }: {
@@ -81,6 +94,7 @@ export function TrainingManagementView({
   overdue: Volunteer[];
   sessions: Array<{ id: string; title: string; starts_at: string; location: string | null; meeting_url: string | null; capacity: number | null }>;
   logs: Array<{ id: string; action: string; detail: string | null; created_at: string; volunteer_id: string | null }>;
+  modules: CourseModule[];
   learnBase: string;
   canWrite: boolean;
 }) {
@@ -167,10 +181,10 @@ export function TrainingManagementView({
         </Card>
       ) : null}
 
-      <Tabs defaultValue="people">
+      <Tabs defaultValue="courses">
         <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="people">People</TabsTrigger>
           <TabsTrigger value="courses">Courses</TabsTrigger>
+          <TabsTrigger value="people">People</TabsTrigger>
           <TabsTrigger value="analytics">By role / LGA</TabsTrigger>
           <TabsTrigger value="sessions">Live sessions</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
@@ -228,20 +242,51 @@ export function TrainingManagementView({
         </TabsContent>
 
         <TabsContent value="courses" className="space-y-4">
-          {courses.map((course) => (
+          {courses.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No published courses yet. Refresh after the catalog SQL has been applied.</p>
+          ) : null}
+          {courses.map((course) => {
+            const courseModules = modules
+              .filter((m) => m.course_id === course.id)
+              .sort((a, b) => a.sort_order - b.sort_order);
+            const quizzes = courseModules.filter((m) => m.kind === "quiz");
+            return (
             <Card key={course.id}>
               <CardHeader className="flex flex-row items-start justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">{course.title}</CardTitle>
                   <p className="text-sm text-muted-foreground">{course.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {course.role_slug ? supportRoleShort(course.role_slug) : "All roles"} · {course.estimated_minutes} min · pass {course.pass_mark}% · {course.max_attempts} attempts
+                    {course.role_slug ? supportRoleShort(course.role_slug) : "All roles"} · {course.estimated_minutes} min · pass {course.pass_mark}% · {course.max_attempts} attempts · {courseModules.length} modules · {quizzes.length} {quizzes.length === 1 ? "quiz" : "quizzes"}
                   </p>
                 </div>
                 <Badge variant={course.status === "published" ? "success" : "secondary"}>{course.status}</Badge>
               </CardHeader>
-              {canWrite ? (
-                <CardContent className="flex flex-wrap gap-2">
+              <CardContent className="space-y-4">
+                <ol className="space-y-3 text-sm">
+                  {courseModules.map((courseModule, index) => (
+                    <li key={courseModule.id} className="rounded-md border border-border px-3 py-2">
+                      <p className="font-medium">
+                        {index + 1}. {courseModule.title}
+                        <span className="ml-2 text-xs font-normal uppercase text-muted-foreground">{courseModule.kind}</span>
+                      </p>
+                      {courseModule.kind === "quiz" ? (
+                        <ul className="mt-2 space-y-2 text-muted-foreground">
+                          {(courseModule.quiz?.questions ?? []).map((question, qIndex) => (
+                            <li key={question.id}>
+                              <p>{qIndex + 1}. {question.prompt}</p>
+                              <p className="text-xs">{(question.choices ?? []).map((choice, cIndex) => `${String.fromCharCode(65 + cIndex)}. ${choice}`).join(" · ")}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : courseModule.body ? (
+                        <p className="mt-1 text-muted-foreground">{courseModule.body}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+                {canWrite ? (
+                <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => start(async () => { await setCourseStatus(course.id, course.status === "published" ? "archived" : "published"); router.refresh(); })}>
                     {course.status === "published" ? "Archive" : "Publish"}
                   </Button>
@@ -275,10 +320,12 @@ export function TrainingManagementView({
                     {course.is_required ? <input type="hidden" name="is_required" value="on" /> : null}
                     <Button size="sm" type="submit">Save rules</Button>
                   </form>
-                </CardContent>
-              ) : null}
+                </div>
+                ) : null}
+              </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </TabsContent>
 
         <TabsContent value="analytics" className="grid gap-4 lg:grid-cols-2">

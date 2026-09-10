@@ -36,7 +36,7 @@ export async function issueCertificate(
   }
 ) {
   const code = certificateCode(input.volunteerName, input.course.slug, new Date());
-  await supabase.from("lms_certificates").upsert(
+  const { error } = await supabase.from("lms_certificates").upsert(
     {
       tenant_id: input.tenantId,
       volunteer_id: input.volunteerId,
@@ -46,6 +46,7 @@ export async function issueCertificate(
     },
     { onConflict: "volunteer_id,course_id" }
   );
+  if (error) throw new Error(error.message);
   await logLmsActivity(supabase, {
     tenantId: input.tenantId,
     volunteerId: input.volunteerId,

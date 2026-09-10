@@ -3,14 +3,14 @@ import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getVolunteer, getVolunteerTasks, updateVolunteer, deleteVolunteer, assignVolunteerTask } from "@/lib/volunteers/actions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canCreateRecords, canDeleteRecords, canWriteRecords } from "@/types/auth";
+import { VolunteerTrainingCard } from "@/components/volunteers/volunteer-training-card";
 
 export default async function VolunteerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -46,7 +46,11 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
       <PageHeader title={volunteer.full_name} description={volunteer.phone}>
         <Button variant="outline" asChild><Link href="/volunteers">Back</Link></Button>
       </PageHeader>
-      <Card><CardContent className="pt-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Details</CardTitle>
+        </CardHeader>
+        <CardContent>
         <form action={saveAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1"><Label>Full name</Label><Input name="full_name" defaultValue={volunteer.full_name} required disabled={!canWrite} /></div>
@@ -56,14 +60,15 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
             <div className="space-y-1"><Label>LGA</Label><Input name="lga" defaultValue={volunteer.lga ?? ""} disabled={!canWrite} /></div>
             <div className="space-y-1"><Label>Skills (comma-separated)</Label><Input name="skills" defaultValue={volunteer.skills?.join(", ") ?? ""} disabled={!canWrite} /></div>
           </div>
-          <NativeSelect name="training_status" defaultValue={volunteer.training_status} disabled={!canWrite}>
-            <option value="pending">Pending</option>
-            <option value="in_progress">In progress</option>
-            <option value="completed">Completed</option>
-          </NativeSelect>
           {canWrite ? <SubmitButton label="Save" /> : null}
         </form>
-      </CardContent></Card>
+        </CardContent>
+      </Card>
+      <VolunteerTrainingCard
+        key={`${volunteer.id}-${volunteer.training_status}-${volunteer.trained_at ?? ""}`}
+        volunteer={volunteer}
+        canWrite={canWrite}
+      />
       <Card><CardContent className="pt-6">
         <h2 className="mb-3 font-semibold">Tasks ({tasks.length})</h2>
         {tasks.map((t) => (

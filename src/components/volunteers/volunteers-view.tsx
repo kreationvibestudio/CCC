@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -7,12 +8,18 @@ import { Users, Plus, Copy, ExternalLink } from "lucide-react";
 import { PageHeader, EmptyState, StatCard } from "@/components/shared/page-shell";
 import { CampaignWebsite } from "@/components/shared/campaign-website";
 import { DataTable } from "@/components/shared/data-table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Volunteer } from "@/types/database";
 import { usePermissions } from "@/components/providers/auth-provider";
+import { TrainingBadge } from "@/components/volunteers/training-badge";
+import { getVolunteerTrainingSql } from "@/lib/volunteers/actions";
+import {
+  countTraining,
+  filterByTraining,
+  type TrainingListFilter,
+} from "@/lib/volunteers/training";
 
 export function VolunteersView({
   volunteers,
@@ -23,7 +30,9 @@ export function VolunteersView({
 }) {
   const router = useRouter();
   const { canCreate } = usePermissions();
-  const trained = volunteers.filter((v) => v.training_status === "completed").length;
+  const [filter, setFilter] = useState<TrainingListFilter>("all");
+  const counts = countTraining(volunteers);
+  const rows = useMemo(() => filterByTraining(volunteers, filter), [volunteers, filter]);
 
   function copySignupLink() {
     if (!signupUrl) {
@@ -32,6 +41,16 @@ export function VolunteersView({
     }
     void navigator.clipboard.writeText(signupUrl);
     toast.success("Volunteer signup link copied");
+  }
+
+  async function copyTrainingSql() {
+    const result = await getVolunteerTrainingSql();
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    await navigator.clipboard.writeText(result.sql);
+    toast.success("SQL copied. Paste it in the Supabase SQL editor if Mark trained fails.");
   }
 
   return (
@@ -75,9 +94,27 @@ export function VolunteersView({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard title="Total Volunteers" value={volunteers.length} icon={Users} />
-        <StatCard title="Trained" value={trained} />
-        <StatCard title="Pending Training" value={volunteers.length - trained} />
+        <StatCard
+          title="Total Volunteers"
+          value={counts.total}
+          icon={Users}
+          onClick={() => setFilter("all")}
+          active={filter === "all"}
+        />
+        <StatCard
+          title="Trained"
+          value={counts.trained}
+          change="Completed campaign briefing"
+          onClick={() => setFilter("trained")}
+          active={filter === "trained"}
+        />
+        <StatCard
+          title="Pending Training"
+          value={counts.pending}
+          change="Includes in progress"
+          onClick={() => setFilter("needs_briefing")}
+          active={filter === "needs_briefing"}
+        />
       </div>
       {volunteers.length === 0 ? (
         <EmptyState
@@ -93,9 +130,17 @@ export function VolunteersView({
         />
       ) : (
         <DataTable
-          data={volunteers}
+          key={filter}
+          data={rows}
           searchKeys={["full_name", "phone", "ward", "lga"]}
           onRowClick={(v) => router.push(`/volunteers/${v.id}`)}
+          emptyMessage={
+            filter === "trained"
+              ? "No one is marked trained yet."
+              : filter === "needs_briefing"
+                ? "Everyone on the list has completed the briefing."
+                : "No records found."
+          }
           columns={[
             { key: "full_name", header: "Name" },
             { key: "phone", header: "Phone" },
@@ -104,11 +149,20 @@ export function VolunteersView({
             {
               key: "training_status",
               header: "Training",
-              render: (v) => <Badge variant="secondary">{v.training_status}</Badge>,
+              render: (v) => <TrainingBadge status={v.training_status} />,
             },
           ]}
         />
       )}
+      {canCreate ? (
+        <p className="text-xs text-muted-foreground">
+          If Mark trained fails because the database is behind,{" "}
+          <button type="button" className="underline underline-offset-2" onClick={() => void copyTrainingSql()}>
+            copy the training SQL
+          </button>{" "}
+          and run it in Supabase.
+        </p>
+      ) : null}
     </div>
   );
 }

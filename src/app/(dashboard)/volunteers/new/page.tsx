@@ -3,7 +3,6 @@ import { PageHeader } from "@/components/shared/page-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createVolunteer } from "@/lib/volunteers/actions";
 import { requireCanCreateOrRedirect } from "@/lib/auth/session";
@@ -32,14 +31,19 @@ export default async function NewVolunteerPage() {
             </div>
             <div className="space-y-1"><Label htmlFor="polling_unit">Polling unit</Label><Input id="polling_unit" name="polling_unit" /></div>
             <div className="space-y-1"><Label htmlFor="skills">Skills (comma-separated)</Label><Input id="skills" name="skills" placeholder="canvassing, driving, media" /></div>
-            <div className="space-y-1">
-              <Label htmlFor="training_status">Training status</Label>
-              <NativeSelect id="training_status" name="training_status">
-                <option value="pending">Pending</option>
-                <option value="in_progress">In progress</option>
-                <option value="completed">Completed</option>
-              </NativeSelect>
-            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="already_trained"
+                className="mt-1 h-4 w-4 rounded border-input"
+              />
+              <span>
+                Already completed the campaign briefing
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Leave unchecked for new signups. They start as pending training.
+                </span>
+              </span>
+            </label>
             <SubmitButton label="Add Volunteer" />
           </form>
         </CardContent>

@@ -113,6 +113,8 @@ export interface Volunteer {
   languages: string[];
   availability?: string;
   training_status: "pending" | "in_progress" | "completed";
+  trained_at?: string | null;
+  training_notes?: string | null;
   supervisor_id?: string;
   performance_rating?: number;
   created_at: string;

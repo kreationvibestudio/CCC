@@ -194,7 +194,7 @@ export async function inviteEligibleVolunteers(eventId: string) {
     .eq("tenant_id", gate.user.profile.tenant_id)
     .maybeSingle();
   if (!event) return { error: "Event not found" };
-  const { getEligibleVolunteers } = await import("@/lib/lms/actions");
+  const { getEligibleVolunteers } = await import("@/lib/lms/hq-data");
   const eligible = await getEligibleVolunteers({
     roleSlug: event.required_role_slug,
     requireReady: true,

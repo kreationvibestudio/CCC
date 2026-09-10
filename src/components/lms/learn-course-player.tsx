@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { completeLearnModule, submitLearnQuiz } from "@/lib/lms/learn";
+import { recoverStaleServerAction } from "@/lib/stale-server-action";
 
 type Module = {
   id: string;
@@ -72,6 +73,7 @@ export function LearnCoursePlayer({
         if (upcoming) setActiveId(upcoming.id);
         router.refresh();
       } catch (error) {
+        if (recoverStaleServerAction(error)) return;
         toast.error(error instanceof Error ? error.message : "Could not save this module. Try again.");
       }
     });
@@ -184,6 +186,7 @@ export function LearnCoursePlayer({
                       }
                       router.refresh();
                     } catch (error) {
+                      if (recoverStaleServerAction(error)) return;
                       toast.error(error instanceof Error ? error.message : "Could not submit the quiz. Try again.");
                     }
                   })

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getLearnDashboard, getLearnSession } from "@/lib/lms/learn";
+import { getLearnDashboard, getLearnSession } from "@/lib/lms/learn-data";
 import { LearnDashboardView } from "@/components/lms/learn-dashboard";
 
 export default async function LearnHomePage({ params }: { params: Promise<{ slug: string }> }) {

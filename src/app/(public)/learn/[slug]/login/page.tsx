@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPublicCampaignBySlug } from "@/lib/volunteers/public";
 import { LearnLoginForm } from "@/components/lms/learn-login-form";
-import { getLearnSession } from "@/lib/lms/learn";
+import { getLearnSession } from "@/lib/lms/learn-data";
 
 export default async function LearnLoginPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

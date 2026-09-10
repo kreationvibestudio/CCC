@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getLearnCertificate } from "@/lib/lms/learn";
+import { getLearnCertificate } from "@/lib/lms/learn-data";
 import { PrintButton } from "@/components/lms/print-button";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";

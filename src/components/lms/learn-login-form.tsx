@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginVolunteerLearn } from "@/lib/lms/learn";
+import { recoverStaleServerAction } from "@/lib/stale-server-action";
 
 export function LearnLoginForm({ slug, campaignName }: { slug: string; campaignName: string }) {
   const router = useRouter();
@@ -29,6 +30,7 @@ export function LearnLoginForm({ slug, campaignName }: { slug: string; campaignN
         router.push(`/learn/${slug}`);
         router.refresh();
       } catch (error) {
+        if (recoverStaleServerAction(error)) return;
         toast.error(error instanceof Error ? error.message : "Could not sign in. Try again.");
       }
     });

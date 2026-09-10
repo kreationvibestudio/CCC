@@ -1,4 +1,4 @@
-import { getTrainingOverview } from "@/lib/lms/actions";
+import { getTrainingOverview } from "@/lib/lms/hq-data";
 import { TrainingManagementView } from "@/components/lms/training-management-view";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canWriteRecords } from "@/types/auth";

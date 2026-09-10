@@ -13,7 +13,7 @@ import { canCreateRecords, canDeleteRecords, canWriteRecords } from "@/types/aut
 import { VolunteerTrainingCard } from "@/components/volunteers/volunteer-training-card";
 import { VolunteerLmsPanel } from "@/components/lms/volunteer-lms-panel";
 import { RolePicker } from "@/components/lms/role-picker";
-import { getHqVolunteerLms } from "@/lib/lms/actions";
+import { getHqVolunteerLms } from "@/lib/lms/hq-data";
 
 export default async function VolunteerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

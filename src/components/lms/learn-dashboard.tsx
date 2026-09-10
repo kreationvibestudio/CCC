@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/lms/progress-bar";
 import { logoutVolunteerLearn, rsvpLearnSession } from "@/lib/lms/learn";
+import { recoverStaleServerAction } from "@/lib/stale-server-action";
 import { percentComplete, estimateMinutesLeft, isOverdue, formatDue } from "@/lib/lms/progress";
 import { useRouter } from "next/navigation";
 
@@ -66,8 +67,13 @@ export function LearnDashboardView({
           size="sm"
           onClick={() =>
             start(async () => {
-              await logoutVolunteerLearn();
-              router.push(`/learn/${slug}/login`);
+              try {
+                await logoutVolunteerLearn();
+                router.push(`/learn/${slug}/login`);
+              } catch (error) {
+                if (recoverStaleServerAction(error)) return;
+                toast.error("Could not sign out. Refresh the page.");
+              }
             })
           }
         >
@@ -165,11 +171,16 @@ export function LearnDashboardView({
                     disabled={pending}
                     onClick={() =>
                       start(async () => {
-                        const result = await rsvpLearnSession(session.id);
-                        if (result.error) toast.error(result.error);
-                        else {
-                          toast.success("You are registered");
-                          router.refresh();
+                        try {
+                          const result = await rsvpLearnSession(session.id);
+                          if (result.error) toast.error(result.error);
+                          else {
+                            toast.success("You are registered");
+                            router.refresh();
+                          }
+                        } catch (error) {
+                          if (recoverStaleServerAction(error)) return;
+                          toast.error("Could not register. Refresh the page.");
                         }
                       })
                     }

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getLearnCourse, getLearnDashboard } from "@/lib/lms/learn";
+import { getLearnCourse, getLearnDashboard } from "@/lib/lms/learn-data";
 import { LearnCoursePlayer } from "@/components/lms/learn-course-player";
 
 export default async function LearnCoursePage({

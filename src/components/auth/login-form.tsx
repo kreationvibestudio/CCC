@@ -13,6 +13,7 @@ import { BrandLogo } from "@/components/brand/logo";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { safeInternalPath } from "@/lib/auth/bearer";
+import { recoverStaleServerAction } from "@/lib/stale-server-action";
 
 export function LoginForm() {
   const router = useRouter();
@@ -27,18 +28,24 @@ export function LoginForm() {
       return;
     }
     setLoading(true);
-    const result = await signIn(credentials.email, credentials.password);
-    setLoading(false);
+    try {
+      const result = await signIn(credentials.email, credentials.password);
+      setLoading(false);
 
-    if ("error" in result) {
-      toast.error(result.error);
-      return;
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Welcome to Campaign Command Center");
+      const next =
+        safeInternalPath(searchParams.get("redirect")) || result.next || "/dashboard";
+      router.push(next);
+      router.refresh();
+    } catch (error) {
+      setLoading(false);
+      if (recoverStaleServerAction(error)) return;
+      toast.error(error instanceof Error ? error.message : "Could not sign in. Try again.");
     }
-    toast.success("Welcome to Campaign Command Center");
-    const next =
-      safeInternalPath(searchParams.get("redirect")) || result.next || "/dashboard";
-    router.push(next);
-    router.refresh();
   }
 
   return (

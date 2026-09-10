@@ -76,6 +76,22 @@ TERMII_WHATSAPP_DATA_KEYS=name,code,url
 
 4. Redeploy. Admin → Secrets readiness shows whether the device ID and template ID are present (not the values).
 
-If those WhatsApp values are missing, signup still succeeds and shows the code on screen. HQ **Send codes** returns a clear “WhatsApp is not configured” error.
+If those WhatsApp values are missing, signup still succeeds and shows the code on screen. HQ **Send codes** can still email codes if email is configured.
 
-Public signup and HQ volunteer create send the code automatically after it is generated. Training Management → **Send codes** resends to selected People-tab rows, or to all scoped volunteers when none are selected (capped at 200).
+## 6. Email training codes
+
+Termii Email Product Notification sends templated mail (`POST /api/templates/send-email`). Create an email configuration and a template on the Termii dashboard with `{{name}}`, `{{code}}`, and `{{url}}` (or numbered keys).
+
+Set on **Vercel Production**:
+
+```
+TERMII_API_KEY=your_key
+TERMII_EMAIL_CONFIGURATION_ID=your_email_configuration_id
+TERMII_EMAIL_TEMPLATE_ID=your_email_template_id
+TERMII_EMAIL_SUBJECT=Your volunteer training code
+TERMII_EMAIL_VARIABLE_KEYS=name,code,url
+```
+
+Email is optional on volunteer signup. If the volunteer left email blank, we skip email and still send WhatsApp when that channel is configured.
+
+Public signup and HQ volunteer create send the code automatically after it is generated (WhatsApp and/or email). Training Management → **Send codes** resends to selected People-tab rows, or to all scoped volunteers when none are selected (capped at 200). HQ returns an error only when **neither** WhatsApp nor email is configured.

@@ -21,6 +21,7 @@ export function PublicVolunteerSignupForm({
     trainingCode?: string;
     slug?: string;
     whatsappSent?: boolean;
+    emailSent?: boolean;
   } | null>(null);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -47,6 +48,7 @@ export function PublicVolunteerSignupForm({
         trainingCode: result.trainingCode,
         slug: result.slug ?? slug,
         whatsappSent: result.whatsappSent,
+        emailSent: result.emailSent,
       });
       form.reset();
     });
@@ -68,9 +70,13 @@ export function PublicVolunteerSignupForm({
             <p className="text-xs text-muted-foreground">Your training code</p>
             <p className="font-mono text-lg font-semibold tracking-wide">{done.trainingCode}</p>
             <p className="mt-2 text-xs text-muted-foreground">
-              {done.whatsappSent
-                ? "We also sent this code to your WhatsApp."
-                : "Save this code. You will need it to sign in to training."}
+              {done.whatsappSent && done.emailSent
+                ? "We also sent this code to your WhatsApp and email."
+                : done.whatsappSent
+                  ? "We also sent this code to your WhatsApp."
+                  : done.emailSent
+                    ? "We also sent this code to your email."
+                    : "Save this code. You will need it to sign in to training."}
             </p>
             <Button className="mt-3 w-full" asChild>
               <a href={`/learn/${done.slug ?? slug}/login`}>Start training</a>

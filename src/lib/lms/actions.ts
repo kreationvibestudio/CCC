@@ -6,8 +6,8 @@ import { authorize } from "@/lib/auth/session";
 import { denyWriteIfRestricted } from "@/types/auth";
 import { extraEnrollCourse, ensureTrainingCode, logLmsActivity, removeEnrollment } from "./enroll";
 import { getTrainingOverview } from "./hq-data";
-import { resolveAppHost, sendVolunteerTrainingCodeWhatsApp, volunteerLearnLoginUrl } from "./send-training-code";
-import { termiiWhatsAppConfigured } from "@/lib/integrations/termii/client";
+import { resolveAppHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "./send-training-code";
+import { termiiEmailConfigured, termiiWhatsAppConfigured } from "@/lib/integrations/termii/client";
 
 async function manageGate() {
   const gate = await authorize("training.manage");
@@ -150,10 +150,10 @@ export async function sendTrainingCodesWhatsApp(volunteerIds?: string[]) {
   const gate = await manageGate();
   if ("error" in gate) return { error: gate.error };
   const { user, supabase } = gate;
-  if (!termiiWhatsAppConfigured()) {
+  if (!termiiWhatsAppConfigured() && !termiiEmailConfigured()) {
     return {
       error:
-        "WhatsApp is not configured. Add TERMII_WHATSAPP_DEVICE_ID and TERMII_WHATSAPP_TEMPLATE_ID in Vercel.",
+        "Training-code delivery is not configured. Add Termii WhatsApp and/or email template IDs in Vercel.",
     };
   }
   const overview = await getTrainingOverview();
@@ -174,6 +174,8 @@ export async function sendTrainingCodesWhatsApp(volunteerIds?: string[]) {
   }
 
   let sent = 0;
+  let whatsappSent = 0;
+  let emailSent = 0;
   let failed = 0;
   let lastError = "";
   for (const volunteer of people) {
@@ -187,18 +189,21 @@ export async function sendTrainingCodesWhatsApp(volunteerIds?: string[]) {
         continue;
       }
     }
-    const result = await sendVolunteerTrainingCodeWhatsApp({
+    const result = await sendVolunteerTrainingCodes({
       supabase,
       tenantId: user.profile.tenant_id,
       volunteerId: volunteer.id,
       actorId: user.id,
       phone: volunteer.phone,
+      email: volunteer.email,
       name: volunteer.full_name,
       trainingCode: code,
       learnUrl,
       requireConfigured: true,
     });
-    if (result.sent) sent += 1;
+    if (result.whatsappSent) whatsappSent += 1;
+    if (result.emailSent) emailSent += 1;
+    if (result.whatsappSent || result.emailSent) sent += 1;
     else {
       failed += 1;
       if (result.error) lastError = result.error;
@@ -207,9 +212,9 @@ export async function sendTrainingCodesWhatsApp(volunteerIds?: string[]) {
 
   revalidatePath("/training");
   if (!sent && failed) {
-    return { error: lastError || "Could not send training codes on WhatsApp.", sent, failed };
+    return { error: lastError || "Could not send training codes.", sent, failed, whatsappSent, emailSent };
   }
-  return { success: true as const, sent, failed };
+  return { success: true as const, sent, failed, whatsappSent, emailSent };
 }
 
 export async function sendTrainingReminders() {

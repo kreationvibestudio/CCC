@@ -7,7 +7,7 @@ import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { parseSupportRoles } from "@/lib/lms/roles";
 import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
 import { generateTrainingCode } from "@/lib/lms/codes";
-import { resolveAppHost, sendVolunteerTrainingCodeWhatsApp, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
+import { resolveAppHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
 
 export type PublicCampaign = {
   id: string;
@@ -65,6 +65,7 @@ export async function registerVolunteerPublic(
   trainingCode?: string;
   slug?: string;
   whatsappSent?: boolean;
+  emailSent?: boolean;
 }> {
   const campaign = await getPublicCampaignBySlug(slug);
   if (!campaign) return { error: "This volunteer signup link is invalid." };
@@ -130,20 +131,21 @@ export async function registerVolunteerPublic(
   }
 
   async function sendCode(volunteerId: string, trainingCode: string) {
-    if (!trainingCode) return false;
+    if (!trainingCode) return { whatsappSent: false, emailSent: false };
     try {
-      const result = await sendVolunteerTrainingCodeWhatsApp({
+      const result = await sendVolunteerTrainingCodes({
         supabase: admin,
         tenantId,
         volunteerId,
         phone,
+        email,
         name: fullName,
         trainingCode,
         learnUrl: volunteerLearnLoginUrl(campaignSlug, resolveAppHost()),
       });
-      return Boolean(result.sent);
+      return { whatsappSent: result.whatsappSent, emailSent: result.emailSent };
     } catch {
-      return false;
+      return { whatsappSent: false, emailSent: false };
     }
   }
 
@@ -160,7 +162,7 @@ export async function registerVolunteerPublic(
 
     await admin.from("volunteers").update(patch).eq("id", existing.id).eq("tenant_id", tenantId);
     const trainingCode = await attachTraining(existing.id, existing.training_code);
-    const whatsappSent = await sendCode(existing.id, trainingCode);
+    const delivered = await sendCode(existing.id, trainingCode);
 
     return {
       success: true,
@@ -168,7 +170,7 @@ export async function registerVolunteerPublic(
       campaignName,
       trainingCode,
       slug: campaignSlug,
-      whatsappSent,
+      ...delivered,
     };
   }
 
@@ -202,7 +204,10 @@ export async function registerVolunteerPublic(
     // non-fatal
   }
 
-  const whatsappSent = created?.id && trainingCode ? await sendCode(created.id, trainingCode) : false;
+  const delivered =
+    created?.id && trainingCode
+      ? await sendCode(created.id, trainingCode)
+      : { whatsappSent: false, emailSent: false };
 
-  return { success: true, campaignName, trainingCode, slug: campaignSlug, whatsappSent };
+  return { success: true, campaignName, trainingCode, slug: campaignSlug, ...delivered };
 }

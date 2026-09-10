@@ -13,6 +13,8 @@ import {
   isTrainingStatus,
   type TrainingStatus,
 } from "@/lib/volunteers/training";
+import { parseSupportRoles } from "@/lib/lms/roles";
+import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
 
 export async function createVolunteer(formData: FormData) {
   const gate = await authorize("volunteers.manage");
@@ -27,7 +29,8 @@ export async function createVolunteer(formData: FormData) {
     next: alreadyTrained ? "completed" : "pending",
     notes: alreadyTrained ? (formData.get("training_notes") as string) || null : undefined,
   });
-  const { error } = await supabase.from("volunteers").insert({
+  const supportRoles = parseSupportRoles(formData.getAll("support_roles"));
+  const { data, error } = await supabase.from("volunteers").insert({
     tenant_id: user.profile.tenant_id,
     full_name: formData.get("full_name") as string,
     phone: formData.get("phone") as string,
@@ -36,9 +39,25 @@ export async function createVolunteer(formData: FormData) {
     lga: formData.get("lga") as string || null,
     polling_unit: formData.get("polling_unit") as string || null,
     skills,
+    support_roles: supportRoles,
     ...training,
-  });
+  }).select("id").single();
   if (error) return { error: error.message };
+  if (data?.id) {
+    try {
+      await ensureTrainingCode(supabase, user.profile.tenant_id, data.id, null);
+      if (supportRoles.length) {
+        await enrollVolunteer(supabase, {
+          tenantId: user.profile.tenant_id,
+          volunteerId: data.id,
+          roles: supportRoles,
+          actorId: user.id,
+        });
+      }
+    } catch {
+      // LMS catalog is applied on first Training Management visit
+    }
+  }
   revalidatePath("/volunteers");
   return { success: true };
 }
@@ -77,6 +96,7 @@ export async function updateVolunteer(id: string, formData: FormData) {
   if (blocked) return { error: blocked };
   const supabase = await createClient();
   const skills = (formData.get("skills") as string)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+  const supportRoles = parseSupportRoles(formData.getAll("support_roles"));
   const { error } = await supabase.from("volunteers").update({
     full_name: formData.get("full_name"),
     phone: formData.get("phone"),
@@ -85,8 +105,21 @@ export async function updateVolunteer(id: string, formData: FormData) {
     lga: formData.get("lga") || null,
     polling_unit: formData.get("polling_unit") || null,
     skills,
+    support_roles: supportRoles,
   }).eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
+  if (supportRoles.length) {
+    try {
+      await enrollVolunteer(supabase, {
+        tenantId: user.profile.tenant_id,
+        volunteerId: id,
+        roles: supportRoles,
+        actorId: user.id,
+      });
+    } catch {
+      // catalog may not be migrated yet
+    }
+  }
   revalidatePath("/volunteers");
   revalidatePath(`/volunteers/${id}`);
   return { success: true };
@@ -129,10 +162,10 @@ export async function updateVolunteerTraining(
 export async function getVolunteerTrainingSql() {
   const gate = await authorize("volunteers.manage");
   if (!gate.ok) return { error: gate.error, sql: "" };
-  const sql = await readFile(
-    join(process.cwd(), "supabase/migrations/20260910000000_volunteer_training.sql"),
-    "utf8"
-  );
+  const sql = [
+    await readFile(join(process.cwd(), "supabase/migrations/20260910000000_volunteer_training.sql"), "utf8"),
+    await readFile(join(process.cwd(), "supabase/migrations/20260910120000_volunteer_lms.sql"), "utf8"),
+  ].join("\n\n");
   return { sql };
 }
 

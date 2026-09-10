@@ -10,6 +10,7 @@ import {
   hasPermission,
   homePathForRole,
   isFieldAgentRole,
+  ROLE_PERMISSIONS,
 } from "../../types/auth.ts";
 
 describe("Field Agent role", () => {
@@ -24,6 +25,7 @@ describe("Field Agent role", () => {
     assert.equal(hasPermission("polling_agent", "dashboard.view"), false);
     assert.equal(hasPermission("polling_agent", "situation_room.view"), false);
     assert.equal(hasPermission("polling_agent", "maps.view"), false);
+    assert.equal(hasPermission("polling_agent", "training.view"), false);
     assert.equal(hasPermission("polling_agent", "admin.users"), false);
   });
 
@@ -62,6 +64,8 @@ describe("Director General oversight", () => {
       "admin.audit",
       "polling_units.manage",
       "volunteers.manage",
+      "training.view",
+      "training.manage",
       "crm.manage",
       "events.manage",
       "situation_room.manage",
@@ -93,5 +97,31 @@ describe("Director General oversight", () => {
     assert.equal(denyWriteIfRestricted("super_administrator"), null);
     assert.equal(denyCreateIfRestricted("super_administrator"), null);
     assert.equal(denyDeleteIfRestricted("super_administrator"), null);
+  });
+});
+
+describe("Training Management access", () => {
+  it("lets every HQ dashboard role open Training Management", () => {
+    for (const role of Object.keys(ROLE_PERMISSIONS) as Array<keyof typeof ROLE_PERMISSIONS>) {
+      if (role === "polling_agent") {
+        assert.equal(hasPermission(role, "training.view"), false, role);
+        continue;
+      }
+      assert.equal(hasPermission(role, "training.view"), true, role);
+    }
+  });
+
+  it("limits training edits to volunteer coordinators and campaign leads", () => {
+    for (const role of [
+      "super_administrator",
+      "campaign_director",
+      "director_general",
+      "volunteer_coordinator",
+    ] as const) {
+      assert.equal(hasPermission(role, "training.manage"), true, role);
+    }
+    for (const role of ["media_director", "data_analyst", "ward_coordinator", "candidate"] as const) {
+      assert.equal(hasPermission(role, "training.manage"), false, role);
+    }
   });
 });

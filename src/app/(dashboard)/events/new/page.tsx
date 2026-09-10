@@ -44,6 +44,10 @@ export default async function NewEventPage() {
             <div className="space-y-1"><Label htmlFor="ends_at">Ends at</Label><Input id="ends_at" name="ends_at" type="datetime-local" /></div>
             <div className="space-y-1"><Label htmlFor="max_attendees">Max attendees</Label><Input id="max_attendees" name="max_attendees" type="number" min={1} /></div>
             <div className="space-y-1"><Label htmlFor="description">Description</Label><textarea id="description" name="description" rows={3} className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" /></div>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="requires_trained" defaultChecked className="mt-1 h-4 w-4 rounded border-input" />
+              <span>Only show volunteers who finished required training (ready for assignment)</span>
+            </label>
             <SubmitButton label="Create Event" />
           </form>
         </CardContent>

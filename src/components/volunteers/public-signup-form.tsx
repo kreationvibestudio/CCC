@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { registerVolunteerPublic } from "@/lib/volunteers/public";
+import { RolePicker } from "@/components/lms/role-picker";
 
 export function PublicVolunteerSignupForm({
   slug,
@@ -15,7 +16,7 @@ export function PublicVolunteerSignupForm({
   campaignName: string;
 }) {
   const [pending, startTransition] = useTransition();
-  const [done, setDone] = useState<{ alreadyRegistered: boolean } | null>(null);
+  const [done, setDone] = useState<{ alreadyRegistered: boolean; trainingCode?: string; slug?: string } | null>(null);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -30,12 +31,17 @@ export function PublicVolunteerSignupForm({
         lga: String(data.get("lga") ?? ""),
         pollingUnit: String(data.get("polling_unit") ?? ""),
         skills: String(data.get("skills") ?? ""),
+        roles: data.getAll("support_roles").map(String),
       });
       if (result.error) {
         toast.error(result.error);
         return;
       }
-      setDone({ alreadyRegistered: Boolean(result.alreadyRegistered) });
+      setDone({
+        alreadyRegistered: Boolean(result.alreadyRegistered),
+        trainingCode: result.trainingCode,
+        slug: result.slug ?? slug,
+      });
       form.reset();
     });
   }
@@ -48,9 +54,18 @@ export function PublicVolunteerSignupForm({
         </h2>
         <p className="text-sm text-muted-foreground">
           {done.alreadyRegistered
-            ? `We updated your details for ${campaignName}. The team will be in touch.`
-            : `Welcome to the ${campaignName} volunteer team. A coordinator will contact you soon.`}
+            ? `We updated your details for ${campaignName}. Keep your training code to continue learning.`
+            : `Welcome to the ${campaignName} volunteer team. Save your training code — you need it to open Volunteer Training.`}
         </p>
+        {done.trainingCode ? (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+            <p className="text-xs text-muted-foreground">Your training code</p>
+            <p className="font-mono text-lg font-semibold tracking-wide">{done.trainingCode}</p>
+            <Button className="mt-3 w-full" asChild>
+              <a href={`/learn/${done.slug ?? slug}/login`}>Start training</a>
+            </Button>
+          </div>
+        ) : null}
         <Button type="button" variant="outline" onClick={() => setDone(null)}>
           Register another person
         </Button>
@@ -93,14 +108,15 @@ export function PublicVolunteerSignupForm({
         <Label htmlFor="polling_unit">Polling unit (optional)</Label>
         <Input id="polling_unit" name="polling_unit" placeholder="PU name or code" />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="skills">How can you help? (optional)</Label>
-        <Input
-          id="skills"
-          name="skills"
-          placeholder="canvassing, media, driving, community outreach"
-        />
-      </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="skills">Anything else? (optional)</Label>
+              <Input
+                id="skills"
+                name="skills"
+                placeholder="driving, photography…"
+              />
+            </div>
+            <RolePicker />
       <Button type="submit" className="w-full" size="lg" disabled={pending}>
         {pending ? "Submitting…" : "Join as a volunteer"}
       </Button>

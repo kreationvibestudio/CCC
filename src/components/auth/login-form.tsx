@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "@/lib/auth/actions";
+import { readLoginCredentials } from "@/lib/auth/login-credentials";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,33 +13,39 @@ import { BrandLogo } from "@/components/brand/logo";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { safeInternalPath } from "@/lib/auth/bearer";
+import { recoverStaleServerAction } from "@/lib/stale-server-action";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!email.trim() || !password) {
-      toast.error("Email and password are required");
+    const credentials = readLoginCredentials(new FormData(e.currentTarget));
+    if ("error" in credentials) {
+      toast.error(credentials.error);
       return;
     }
     setLoading(true);
-    const result = await signIn(email.trim(), password);
-    setLoading(false);
+    try {
+      const result = await signIn(credentials.email, credentials.password);
+      setLoading(false);
 
-    if ("error" in result) {
-      toast.error(result.error);
-      return;
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Welcome to Campaign Command Center");
+      const next =
+        safeInternalPath(searchParams.get("redirect")) || result.next || "/dashboard";
+      router.push(next);
+      router.refresh();
+    } catch (error) {
+      setLoading(false);
+      if (recoverStaleServerAction(error)) return;
+      toast.error(error instanceof Error ? error.message : "Could not sign in. Try again.");
     }
-    toast.success("Welcome to Campaign Command Center");
-    const next =
-      safeInternalPath(searchParams.get("redirect")) || result.next || "/dashboard";
-    router.push(next);
-    router.refresh();
   }
 
   return (
@@ -51,17 +58,15 @@ export function LoginForm() {
         <CardDescription>Sign in to your campaign war room</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               name="email"
               type="email"
-              autoComplete="email"
+              autoComplete="username"
               placeholder="you@campaign.ng"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
@@ -73,8 +78,6 @@ export function LoginForm() {
               type="password"
               autoComplete="current-password"
               placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>

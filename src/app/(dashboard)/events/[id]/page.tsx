@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/forms/submit-button";
-import { getEvent, getEventAttendees, updateEvent, deleteEvent } from "@/lib/events/actions";
+import { getEvent, getEventAttendees, updateEvent, deleteEvent, inviteEligibleVolunteers } from "@/lib/events/actions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canDeleteRecords, canWriteRecords } from "@/types/auth";
 
@@ -29,6 +29,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     "use server";
     const r = await updateEvent(id, formData);
     if (r.error) throw new Error(r.error);
+    redirect(`/events/${id}`);
+  }
+
+  async function inviteAction() {
+    "use server";
+    await inviteEligibleVolunteers(id);
     redirect(`/events/${id}`);
   }
 
@@ -68,6 +74,17 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
             <Badge variant="secondary">{a.rsvp_status}</Badge>
           </div>
         ))}
+        {canWrite ? (
+        <form action={inviteAction} className="mt-4">
+          <Button type="submit" size="sm" variant="secondary">
+            Invite eligible trained volunteers
+          </Button>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Defaults to volunteers who are ready for assignment
+            {event.required_role_slug ? ` for ${event.required_role_slug}` : ""}.
+          </p>
+        </form>
+        ) : null}
       </CardContent></Card>
       {canDelete ? (
       <form action={deleteAction}><Button type="submit" variant="destructive" size="sm">Cancel event</Button></form>

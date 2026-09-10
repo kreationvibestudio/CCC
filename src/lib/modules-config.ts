@@ -34,7 +34,7 @@ export const MODULES: Record<string, ModuleConfig> = {
     slug: "volunteers",
     title: "Volunteer Management",
     description: "Complete volunteer database with tasks and GPS check-in.",
-    features: ["Volunteer profiles", "Task assignment", "Attendance tracking", "GPS check-in", "Performance ratings", "Messaging"],
+    features: ["Role-based LMS", "Volunteer profiles", "Task assignment", "Training certificates", "Live briefings", "Deployment readiness"],
   },
   crm: {
     slug: "crm",

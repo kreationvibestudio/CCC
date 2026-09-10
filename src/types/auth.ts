@@ -25,6 +25,8 @@ export type Permission =
   | "sentiment.view"
   | "volunteers.view"
   | "volunteers.manage"
+  | "training.view"
+  | "training.manage"
   | "crm.view"
   | "crm.manage"
   | "events.view"
@@ -65,7 +67,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_administrator: [
     "dashboard.view", "social.view", "social.manage", "comments.view",
     "comments.reply", "comments.assign", "comments.moderate", "ai.use",
-    "sentiment.view", "volunteers.view", "volunteers.manage", "crm.view",
+    "sentiment.view", "volunteers.view", "volunteers.manage", "training.view", "training.manage", "crm.view",
     "crm.manage", "events.view", "events.manage", "polling_units.view",
     "polling_units.manage", "maps.view", "maps.voter_lookup",
     "situation_room.view", "situation_room.manage", "election_results.submit",
@@ -75,14 +77,14 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   candidate: [
     "dashboard.view", "social.view", "comments.view", "ai.use", "sentiment.view",
-    "volunteers.view", "crm.view", "events.view", "polling_units.view", "polling_units.manage",
+    "volunteers.view", "training.view", "crm.view", "events.view", "polling_units.view", "polling_units.manage",
     "maps.view",
     "situation_room.view", "analytics.view", "reports.view", "reports.generate",
   ],
   campaign_director: [
     "dashboard.view", "social.view", "social.manage", "comments.view",
     "comments.reply", "comments.assign", "ai.use", "sentiment.view",
-    "volunteers.view", "volunteers.manage", "crm.view", "crm.manage",
+    "volunteers.view", "volunteers.manage", "training.view", "training.manage", "crm.view", "crm.manage",
     "events.view", "events.manage", "polling_units.view", "polling_units.manage",
     "maps.view", "situation_room.view", "situation_room.manage",
     "communications.view", "communications.send", "analytics.view",
@@ -91,7 +93,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   director_general: [
     "dashboard.view", "social.view", "social.manage", "comments.view",
     "comments.reply", "comments.assign", "comments.moderate", "ai.use",
-    "sentiment.view", "volunteers.view", "volunteers.manage", "crm.view",
+    "sentiment.view", "volunteers.view", "volunteers.manage", "training.view", "training.manage", "crm.view",
     "crm.manage", "events.view", "events.manage", "polling_units.view",
     "polling_units.manage", "maps.view", "maps.voter_lookup",
     "situation_room.view", "situation_room.manage", "election_results.submit",
@@ -102,35 +104,35 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   media_director: [
     "dashboard.view", "social.view", "social.manage", "comments.view",
     "comments.reply", "comments.assign", "comments.moderate", "ai.use",
-    "sentiment.view", "analytics.view", "reports.view", "reports.generate",
+    "sentiment.view", "training.view", "analytics.view", "reports.view", "reports.generate",
   ],
   social_media_team: [
     "dashboard.view", "social.view", "social.manage", "comments.view",
-    "comments.reply", "comments.assign", "ai.use", "sentiment.view",
+    "comments.reply", "comments.assign", "ai.use", "sentiment.view", "training.view",
   ],
   volunteer_coordinator: [
-    "dashboard.view", "volunteers.view", "volunteers.manage", "events.view",
+    "dashboard.view", "volunteers.view", "volunteers.manage", "training.view", "training.manage", "events.view",
     "events.manage", "communications.view", "communications.send",
   ],
   ward_coordinator: [
-    "dashboard.view", "volunteers.view", "events.view", "polling_units.view",
+    "dashboard.view", "volunteers.view", "training.view", "events.view", "polling_units.view",
     "maps.view", "communications.view",
   ],
   polling_unit_supervisor: [
     "dashboard.view", "polling_units.view", "polling_units.manage",
-    "situation_room.view", "situation_room.manage", "maps.view",
+    "situation_room.view", "situation_room.manage", "maps.view", "training.view",
     "election_results.submit",
   ],
   polling_agent: ["agent.portal"],
   data_analyst: [
     "dashboard.view", "social.view", "comments.view", "sentiment.view",
-    "analytics.view", "reports.view", "reports.generate", "polling_units.view",
+    "analytics.view", "reports.view", "reports.generate", "polling_units.view", "training.view",
   ],
   call_center_agent: [
     "dashboard.view", "crm.view", "crm.manage", "communications.view",
-    "communications.send",
+    "communications.send", "training.view",
   ],
-  supporter: ["dashboard.view", "events.view", "maps.view"],
+  supporter: ["dashboard.view", "events.view", "maps.view", "training.view"],
 };
 
 export const SYSTEM_MUTATION_DENIED =

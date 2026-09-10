@@ -4,6 +4,9 @@ import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { CAMPAIGN_TENANT_ID } from "@/lib/campaign";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { parseSupportRoles } from "@/lib/lms/roles";
+import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
+import { generateTrainingCode } from "@/lib/lms/codes";
 
 export type PublicCampaign = {
   id: string;
@@ -51,10 +54,19 @@ export async function registerVolunteerPublic(
     lga?: string;
     pollingUnit?: string;
     skills?: string;
+    roles?: string[];
   }
-): Promise<{ error?: string; success?: true; alreadyRegistered?: boolean; campaignName?: string }> {
+): Promise<{
+  error?: string;
+  success?: true;
+  alreadyRegistered?: boolean;
+  campaignName?: string;
+  trainingCode?: string;
+  slug?: string;
+}> {
   const campaign = await getPublicCampaignBySlug(slug);
   if (!campaign) return { error: "This volunteer signup link is invalid." };
+  const tenantId = campaign.id;
 
   // Unauthenticated service-role write: throttle by source so the volunteer
   // table cannot be filled with junk PII.
@@ -74,6 +86,7 @@ export async function registerVolunteerPublic(
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  const roles = parseSupportRoles(input.roles);
 
   if (fullName.length < 2) return { error: "Enter your full name." };
   if (phone.replace(/\D/g, "").length < 10) {
@@ -87,10 +100,30 @@ export async function registerVolunteerPublic(
 
   const { data: existing } = await admin
     .from("volunteers")
-    .select("id")
-    .eq("tenant_id", campaign.id)
+    .select("id, training_code")
+    .eq("tenant_id", tenantId)
     .eq("phone", phone)
     .maybeSingle();
+
+  async function attachTraining(volunteerId: string, existingCode?: string | null) {
+    let code = existingCode ?? "";
+    try {
+      code = await ensureTrainingCode(admin, tenantId, volunteerId, existingCode);
+      if (roles.length) {
+        await enrollVolunteer(admin, {
+          tenantId,
+          volunteerId,
+          roles,
+        });
+      }
+    } catch {
+      if (!code) {
+        code = generateTrainingCode();
+        await admin.from("volunteers").update({ training_code: code, support_roles: roles }).eq("id", volunteerId);
+      }
+    }
+    return code;
+  }
 
   if (existing?.id) {
     const patch: Record<string, unknown> = {
@@ -101,18 +134,22 @@ export async function registerVolunteerPublic(
       polling_unit: pollingUnit || null,
     };
     if (skills.length) patch.skills = skills;
+    if (roles.length) patch.support_roles = roles;
 
-    await admin.from("volunteers").update(patch).eq("id", existing.id).eq("tenant_id", campaign.id);
+    await admin.from("volunteers").update(patch).eq("id", existing.id).eq("tenant_id", tenantId);
+    const trainingCode = await attachTraining(existing.id, existing.training_code);
 
     return {
       success: true,
       alreadyRegistered: true,
       campaignName: campaign.name,
+      trainingCode,
+      slug: campaign.slug,
     };
   }
 
-  const { error } = await admin.from("volunteers").insert({
-    tenant_id: campaign.id,
+  const { data: created, error } = await admin.from("volunteers").insert({
+    tenant_id: tenantId,
     full_name: fullName,
     phone,
     email: email || null,
@@ -120,14 +157,19 @@ export async function registerVolunteerPublic(
     lga: lga || null,
     polling_unit: pollingUnit || null,
     skills,
+    support_roles: roles,
     training_status: "pending",
-  });
+    training_code: generateTrainingCode(),
+  }).select("id, training_code").single();
 
   if (error) return { error: error.message };
+  const trainingCode = created?.id
+    ? await attachTraining(created.id, created.training_code)
+    : undefined;
 
   try {
     await admin.from("activities").insert({
-      tenant_id: campaign.id,
+      tenant_id: tenantId,
       action: "volunteer.public_signup",
       description: `${fullName} registered as a volunteer`,
       metadata: { phone, lga: lga || null, ward: ward || null, source: "public_form" },
@@ -136,5 +178,5 @@ export async function registerVolunteerPublic(
     // non-fatal
   }
 
-  return { success: true, campaignName: campaign.name };
+  return { success: true, campaignName: campaign.name, trainingCode, slug: campaign.slug };
 }

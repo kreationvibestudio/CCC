@@ -82,7 +82,7 @@ function hasUsableEnvFacebookTokens() {
 }
 
 /**
- * Demo only when Meta tokens are missing.
+ * Demo only when Meta tokens are missing, and never in production unless SOCIAL_DEMO_MODE=true.
  * SOCIAL_DEMO_MODE=true never overrides live tokens — production must keep syncing Graph.
  * SOCIAL_DEMO_MODE=false disables demo even when tokens are empty (errors instead).
  */
@@ -91,7 +91,8 @@ export function isSocialDemoModeEnabled() {
   if (flag === "0" || flag === "false" || flag === "off") return false;
   if (hasUsableEnvFacebookTokens()) return false;
   if (flag === "1" || flag === "true" || flag === "on") return true;
-  return true; // no usable tokens → demo for local/dev
+  // Local/dev only. Production must never invent sample posts or followers.
+  return process.env.NODE_ENV !== "production";
 }
 
 /** Prefer live Graph whenever any usable token is present (env). */

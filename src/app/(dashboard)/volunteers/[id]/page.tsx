@@ -11,6 +11,9 @@ import { getVolunteer, getVolunteerTasks, updateVolunteer, deleteVolunteer, assi
 import { getCurrentUser } from "@/lib/auth/session";
 import { canCreateRecords, canDeleteRecords, canWriteRecords } from "@/types/auth";
 import { VolunteerTrainingCard } from "@/components/volunteers/volunteer-training-card";
+import { VolunteerLmsPanel } from "@/components/lms/volunteer-lms-panel";
+import { RolePicker } from "@/components/lms/role-picker";
+import { getHqVolunteerLms } from "@/lib/lms/hq-data";
 
 export default async function VolunteerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,6 +24,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
   const volunteer = await getVolunteer(id);
   if (!volunteer) redirect("/volunteers");
   const tasks = await getVolunteerTasks(id);
+  const lms = await getHqVolunteerLms(id);
 
   async function saveAction(formData: FormData) {
     "use server";
@@ -58,8 +62,9 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
             <div className="space-y-1"><Label>Email</Label><Input name="email" defaultValue={volunteer.email ?? ""} disabled={!canWrite} /></div>
             <div className="space-y-1"><Label>Ward</Label><Input name="ward" defaultValue={volunteer.ward ?? ""} disabled={!canWrite} /></div>
             <div className="space-y-1"><Label>LGA</Label><Input name="lga" defaultValue={volunteer.lga ?? ""} disabled={!canWrite} /></div>
-            <div className="space-y-1"><Label>Skills (comma-separated)</Label><Input name="skills" defaultValue={volunteer.skills?.join(", ") ?? ""} disabled={!canWrite} /></div>
+            <div className="space-y-1 sm:col-span-2"><Label>Skills (comma-separated)</Label><Input name="skills" defaultValue={volunteer.skills?.join(", ") ?? ""} disabled={!canWrite} /></div>
           </div>
+          <RolePicker selected={volunteer.support_roles ?? []} disabled={!canWrite} />
           {canWrite ? <SubmitButton label="Save" /> : null}
         </form>
         </CardContent>
@@ -69,6 +74,16 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
         volunteer={volunteer}
         canWrite={canWrite}
       />
+      {!("error" in lms) ? (
+        <VolunteerLmsPanel
+          volunteerId={id}
+          trainingCode={volunteer.training_code}
+          deploymentReady={Boolean(volunteer.deployment_ready)}
+          enrollments={lms.enrollments}
+          courses={lms.courses}
+          canWrite={canWrite}
+        />
+      ) : null}
       <Card><CardContent className="pt-6">
         <h2 className="mb-3 font-semibold">Tasks ({tasks.length})</h2>
         {tasks.map((t) => (

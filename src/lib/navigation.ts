@@ -16,6 +16,7 @@ import {
   FileText,
   Shield,
   UserCheck,
+  GraduationCap,
 } from "lucide-react";
 
 export interface NavItem {
@@ -33,6 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "AI Assistant", href: "/ai", icon: Bot, permission: "ai.use" },
   { title: "Sentiment", href: "/sentiment", icon: TrendingUp, permission: "sentiment.view" },
   { title: "Volunteers", href: "/volunteers", icon: Users, permission: "volunteers.view" },
+  { title: "Training Management", href: "/training", icon: GraduationCap, permission: "training.view" },
   { title: "Campaign CRM", href: "/crm", icon: Contact, permission: "crm.view" },
   { title: "Events", href: "/events", icon: Calendar, permission: "events.view" },
   { title: "Polling Units", href: "/polling-units", icon: MapPin, permission: "polling_units.view" },
@@ -51,5 +53,6 @@ export const QUICK_ACTIONS = [
   { title: "New Event", href: "/events/new", permission: "events.manage" as Permission, creates: true },
   { title: "Send Broadcast", href: "/communications/campaigns/new", permission: "communications.send" as Permission, creates: true },
   { title: "Add Volunteer", href: "/volunteers/new", permission: "volunteers.manage" as Permission, creates: true },
+  { title: "Training Management", href: "/training", permission: "training.view" as Permission, creates: false },
   { title: "Generate Report", href: "/reports", permission: "reports.generate" as Permission, creates: false },
 ];

@@ -115,6 +115,9 @@ export interface Volunteer {
   training_status: "pending" | "in_progress" | "completed";
   trained_at?: string | null;
   training_notes?: string | null;
+  support_roles?: string[];
+  training_code?: string | null;
+  deployment_ready?: boolean;
   supervisor_id?: string;
   performance_rating?: number;
   created_at: string;
@@ -159,6 +162,8 @@ export interface CampaignEvent {
   ends_at?: string;
   max_attendees?: number;
   qr_code?: string;
+  requires_trained?: boolean;
+  required_role_slug?: string | null;
   created_at: string;
 }
 

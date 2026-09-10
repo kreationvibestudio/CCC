@@ -61,6 +61,7 @@ export async function updateSession(request: NextRequest) {
   const isCheckInRoute = /^\/events\/[^/]+\/checkin/.test(path);
   const isDonateRoute = path.startsWith("/donate") || path.startsWith("/api/donations");
   const isVolunteerSignupRoute = path === "/volunteer" || path.startsWith("/volunteer/");
+  const isLearnRoute = path === "/learn" || path.startsWith("/learn/");
   const isJoinRoute = path.startsWith("/join");
   const isAgentApi = path.startsWith("/api/agent");
   const isAgentCodeLogin = path === "/agent/login";
@@ -70,6 +71,7 @@ export async function updateSession(request: NextRequest) {
     isCheckInRoute ||
     isDonateRoute ||
     isVolunteerSignupRoute ||
+    isLearnRoute ||
     isJoinRoute ||
     isAgentApi ||
     isAgentCodeLogin;

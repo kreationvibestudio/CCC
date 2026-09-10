@@ -48,7 +48,7 @@ export function VolunteerTrainingCard({
           <div className="space-y-1">
             <CardTitle>Training</CardTitle>
             <CardDescription>
-              One campaign briefing. Coordinators mark people trained after they attend.
+            One campaign briefing plus role courses. Required LMS training must finish before this person is deployment ready.
             </CardDescription>
           </div>
           <TrainingBadge status={volunteer.training_status} />

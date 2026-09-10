@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createVolunteer } from "@/lib/volunteers/actions";
 import { requireCanCreateOrRedirect } from "@/lib/auth/session";
+import { RolePicker } from "@/components/lms/role-picker";
 
 export default async function NewVolunteerPage() {
   await requireCanCreateOrRedirect("/volunteers");
@@ -30,7 +31,8 @@ export default async function NewVolunteerPage() {
               <div className="space-y-1"><Label htmlFor="lga">LGA</Label><Input id="lga" name="lga" /></div>
             </div>
             <div className="space-y-1"><Label htmlFor="polling_unit">Polling unit</Label><Input id="polling_unit" name="polling_unit" /></div>
-            <div className="space-y-1"><Label htmlFor="skills">Skills (comma-separated)</Label><Input id="skills" name="skills" placeholder="canvassing, driving, media" /></div>
+            <div className="space-y-1"><Label htmlFor="skills">Skills (comma-separated)</Label><Input id="skills" name="skills" placeholder="driving, photography" /></div>
+            <RolePicker />
             <label className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"

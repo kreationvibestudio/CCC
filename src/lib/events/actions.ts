@@ -42,6 +42,8 @@ export async function createEvent(formData: FormData) {
     max_attendees: formData.get("max_attendees") ? Number(formData.get("max_attendees")) : null,
     qr_code: qrCode,
     created_by: user.id,
+    requires_trained: formData.get("requires_trained") === "on",
+    required_role_slug: String(formData.get("required_role_slug") ?? "") || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/events");
@@ -103,6 +105,8 @@ export async function updateEvent(id: string, formData: FormData) {
     starts_at: formData.get("starts_at"),
     ends_at: formData.get("ends_at") || null,
     max_attendees: formData.get("max_attendees") ? Number(formData.get("max_attendees")) : null,
+    requires_trained: formData.get("requires_trained") === "on",
+    required_role_slug: String(formData.get("required_role_slug") ?? "") || null,
   }).eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
   revalidatePath("/events");
@@ -173,4 +177,43 @@ export async function getEventAttendees(eventId: string) {
         .range(from, to),
     { max: 20_000 }
   );
+}
+
+export async function inviteEligibleVolunteers(eventId: string) {
+  const gate = await authorize("events.manage");
+  if (!gate.ok) return { error: gate.error };
+  const blocked = denyCreateIfRestricted(gate.user.role);
+  if (blocked) return { error: blocked };
+  const eventError = await assertEventInTenant(gate.user.profile.tenant_id, eventId);
+  if (eventError) return { error: eventError };
+  const supabase = await createClient();
+  const { data: event } = await supabase
+    .from("campaign_events")
+    .select("id, requires_trained, required_role_slug")
+    .eq("id", eventId)
+    .eq("tenant_id", gate.user.profile.tenant_id)
+    .maybeSingle();
+  if (!event) return { error: "Event not found" };
+  const { getEligibleVolunteers } = await import("@/lib/lms/actions");
+  const eligible = await getEligibleVolunteers({
+    roleSlug: event.required_role_slug,
+    requireReady: true,
+  });
+  const { data: existing } = await supabase.from("event_attendees").select("volunteer_id").eq("event_id", eventId);
+  const have = new Set((existing ?? []).map((a) => a.volunteer_id).filter(Boolean));
+  const toAdd = eligible.filter((v) => !have.has(v.id));
+  if (toAdd.length) {
+    const { error } = await supabase.from("event_attendees").insert(
+      toAdd.map((v) => ({
+        event_id: eventId,
+        volunteer_id: v.id,
+        name: v.full_name,
+        phone: v.phone,
+        rsvp_status: "invited",
+      }))
+    );
+    if (error) return { error: error.message };
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { success: true as const, invited: toAdd.length };
 }

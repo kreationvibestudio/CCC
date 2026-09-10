@@ -16,7 +16,12 @@ export function PublicVolunteerSignupForm({
   campaignName: string;
 }) {
   const [pending, startTransition] = useTransition();
-  const [done, setDone] = useState<{ alreadyRegistered: boolean; trainingCode?: string; slug?: string } | null>(null);
+  const [done, setDone] = useState<{
+    alreadyRegistered: boolean;
+    trainingCode?: string;
+    slug?: string;
+    whatsappSent?: boolean;
+  } | null>(null);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -41,6 +46,7 @@ export function PublicVolunteerSignupForm({
         alreadyRegistered: Boolean(result.alreadyRegistered),
         trainingCode: result.trainingCode,
         slug: result.slug ?? slug,
+        whatsappSent: result.whatsappSent,
       });
       form.reset();
     });
@@ -61,6 +67,11 @@ export function PublicVolunteerSignupForm({
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
             <p className="text-xs text-muted-foreground">Your training code</p>
             <p className="font-mono text-lg font-semibold tracking-wide">{done.trainingCode}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {done.whatsappSent
+                ? "We also sent this code to your WhatsApp."
+                : "Save this code. You will need it to sign in to training."}
+            </p>
             <Button className="mt-3 w-full" asChild>
               <a href={`/learn/${done.slug ?? slug}/login`}>Start training</a>
             </Button>

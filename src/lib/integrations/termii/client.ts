@@ -113,7 +113,11 @@ export function parseTermiiSendPayload(
   if (trimmed) {
     try {
       const parsed = JSON.parse(trimmed) as unknown;
-      if (parsed && typeof parsed === "object") payload = parsed as Record<string, unknown>;
+      if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === "object") {
+        payload = parsed[0] as Record<string, unknown>;
+      } else if (parsed && typeof parsed === "object") {
+        payload = parsed as Record<string, unknown>;
+      }
     } catch {
       return { ok: false, error: publicTermiiError(status, null, apiKey) };
     }
@@ -208,6 +212,119 @@ export async function sendTermiiSms(to: string, message: string): Promise<Termii
   }
 
   return parseTermiiSendPayload(res.status, await res.text(), apiKey);
+}
+
+export type TermiiWhatsAppConfig = {
+  apiKey: string;
+  deviceId: string;
+  templateId: string;
+  dataKeys: string[];
+};
+
+export type TermiiWhatsAppValues = {
+  name: string;
+  code: string;
+  url: string;
+};
+
+export function parseTermiiWhatsAppDataKeys(raw = process.env.TERMII_WHATSAPP_DATA_KEYS): string[] {
+  const keys = (raw ?? "name,code,url")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return keys.length ? keys : ["name", "code", "url"];
+}
+
+export function resolveTermiiWhatsAppConfig(): TermiiWhatsAppConfig | { error: string } {
+  const apiKey = resolveTermiiApiKey();
+  const deviceId = (process.env.TERMII_WHATSAPP_DEVICE_ID ?? "").trim();
+  const templateId = (process.env.TERMII_WHATSAPP_TEMPLATE_ID ?? "").trim();
+  if (!apiKey) {
+    return { error: "TERMII_API_KEY is not configured. Add it in Vercel env or .env.local." };
+  }
+  if (!deviceId) {
+    return {
+      error:
+        "WhatsApp is not configured. Add TERMII_WHATSAPP_DEVICE_ID from the Termii manage-device page.",
+    };
+  }
+  if (!templateId) {
+    return {
+      error:
+        "WhatsApp is not configured. Add TERMII_WHATSAPP_TEMPLATE_ID for the approved training-code template.",
+    };
+  }
+  return { apiKey, deviceId, templateId, dataKeys: parseTermiiWhatsAppDataKeys() };
+}
+
+export function termiiWhatsAppConfigured(): boolean {
+  return !("error" in resolveTermiiWhatsAppConfig());
+}
+
+export function buildTermiiWhatsAppTemplateData(
+  keys: string[],
+  values: TermiiWhatsAppValues
+): Record<string, string> {
+  const ordered = [values.name, values.code, values.url];
+  const data: Record<string, string> = {};
+  keys.forEach((key, index) => {
+    data[key] = ordered[index] ?? "";
+  });
+  return data;
+}
+
+export function buildTermiiWhatsAppTemplatePayload(
+  config: TermiiWhatsAppConfig,
+  phone: string,
+  values: TermiiWhatsAppValues
+) {
+  return {
+    phone_number: phone,
+    device_id: config.deviceId,
+    template_id: config.templateId,
+    api_key: config.apiKey,
+    data: buildTermiiWhatsAppTemplateData(config.dataKeys, values),
+  };
+}
+
+export async function sendTermiiWhatsAppTemplate(input: {
+  to: string;
+  name: string;
+  code: string;
+  url: string;
+}): Promise<TermiiSendResult> {
+  const config = resolveTermiiWhatsAppConfig();
+  if ("error" in config) return { ok: false, error: config.error };
+
+  const phone = toTermiiMsisdn(input.to);
+  if (!phone) {
+    return {
+      ok: false,
+      error: `Phone “${input.to.trim() || "(empty)"}” is not a Nigerian mobile number. Use 0803… or 234803….`,
+    };
+  }
+
+  if (!input.code.trim()) return { ok: false, error: "Training code is empty." };
+  if (!input.url.trim()) return { ok: false, error: "Training login URL is empty." };
+
+  const payload = buildTermiiWhatsAppTemplatePayload(config, phone, {
+    name: input.name.trim() || "Volunteer",
+    code: input.code.trim(),
+    url: input.url.trim(),
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${TERMII_BASE}/send/template`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { ok: false, error: "Could not reach Termii. Check outbound network / DNS." };
+  }
+
+  return parseTermiiSendPayload(res.status, await res.text(), config.apiKey);
 }
 
 export function renderTemplate(body: string, vars: Record<string, string>) {

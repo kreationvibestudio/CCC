@@ -6,7 +6,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { authorize } from "@/lib/auth/session";
 import { denyWriteIfRestricted } from "@/types/auth";
 import type { AuthUser } from "@/lib/auth/session";
-import { ensureLmsCatalog, publishedCourses, type CourseRow } from "./ensure-catalog";
+import { ensureLmsCatalog, type CourseRow } from "./ensure-catalog";
 import {
   extraEnrollCourse,
   enrollIfNeeded,
@@ -104,26 +104,26 @@ async function seedDemoProgress(
 
     const finishCore = index % 3 !== 1;
     if (finishCore && modules?.length) {
-      for (const module of modules) {
+      for (const courseModule of modules) {
         await admin.from("lms_module_progress").upsert(
           {
             tenant_id: tenantId,
             volunteer_id: volunteer.id,
-            module_id: module.id,
+            module_id: courseModule.id,
             status: "completed",
-            score: module.kind === "quiz" ? 100 : null,
-            attempts: module.kind === "quiz" ? 1 : 0,
+            score: courseModule.kind === "quiz" ? 100 : null,
+            attempts: courseModule.kind === "quiz" ? 1 : 0,
             completed_at: new Date().toISOString(),
-            acknowledgement: module.kind === "acknowledgement" ? "I agree" : null,
-            assignment_notes: module.kind === "assignment" ? "Ready to apply this in my ward." : null,
+            acknowledgement: courseModule.kind === "acknowledgement" ? "I agree" : null,
+            assignment_notes: courseModule.kind === "assignment" ? "Ready to apply this in my ward." : null,
           },
           { onConflict: "volunteer_id,module_id" }
         );
-        if (module.kind === "quiz") {
+        if (courseModule.kind === "quiz") {
           await admin.from("lms_quiz_attempts").insert({
             tenant_id: tenantId,
             volunteer_id: volunteer.id,
-            module_id: module.id,
+            module_id: courseModule.id,
             score: 100,
             passed: true,
             answers: {},

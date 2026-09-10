@@ -5,7 +5,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { headers } from "next/headers";
 import { LEARN_COOKIE, normalizeTrainingCode, readLearnToken, signLearnToken } from "./codes";
-import { ensureLmsCatalog, modulesForCourse, type CourseRow, type ModuleRow } from "./ensure-catalog";
+import { ensureLmsCatalog, type CourseRow, type ModuleRow } from "./ensure-catalog";
 import {
   completeCourseIfReady,
   markEnrollmentStarted,

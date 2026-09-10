@@ -160,7 +160,7 @@ export async function updateVolunteerTraining(
 }
 
 export async function getVolunteerTrainingSql() {
-  const gate = await authorize("volunteers.manage");
+  const gate = await authorize("training.view", "volunteers.manage");
   if (!gate.ok) return { error: gate.error, sql: "" };
   const sql = [
     await readFile(join(process.cwd(), "supabase/migrations/20260910000000_volunteer_training.sql"), "utf8"),

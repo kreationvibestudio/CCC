@@ -8,7 +8,7 @@ import { extraEnrollCourse, logLmsActivity, removeEnrollment } from "./enroll";
 import { getTrainingOverview } from "./hq-data";
 
 async function manageGate() {
-  const gate = await authorize("volunteers.manage");
+  const gate = await authorize("training.manage");
   if (!gate.ok) return { error: gate.error as string };
   const blocked = denyWriteIfRestricted(gate.user.role);
   if (blocked) return { error: blocked };

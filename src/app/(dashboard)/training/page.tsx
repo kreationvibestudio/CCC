@@ -1,7 +1,7 @@
 import { getTrainingOverview } from "@/lib/lms/hq-data";
 import { TrainingManagementView } from "@/components/lms/training-management-view";
 import { getCurrentUser } from "@/lib/auth/session";
-import { canWriteRecords } from "@/types/auth";
+import { canWriteRecords, hasPermission } from "@/types/auth";
 import { appBaseUrl } from "@/lib/campaign";
 
 export default async function TrainingManagementPage() {
@@ -31,7 +31,7 @@ export default async function TrainingManagementPage() {
       sessions={overview.sessions}
       logs={overview.logs}
       learnBase={learnBase}
-      canWrite={user ? canWriteRecords(user.role) : false}
+      canWrite={user ? canWriteRecords(user.role) && hasPermission(user.role, "training.manage") : false}
     />
   );
 }

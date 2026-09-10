@@ -10,9 +10,7 @@ import {
   enrollVolunteer,
   ensureTrainingCode,
   rolesForVolunteer,
-  syncVolunteerReadiness,
 } from "./enroll";
-import { generateTrainingCode } from "./codes";
 import { isOverdue, percentComplete } from "./progress";
 import { parseSupportRoles, supportRoleLabel, VOLUNTEER_SUPPORT_ROLES } from "./roles";
 import type { EnrollmentRow, ProgressRow } from "./complete";
@@ -26,7 +24,7 @@ function scopeSql(user: AuthUser) {
 }
 
 async function viewGate() {
-  const gate = await authorize("volunteers.view");
+  const gate = await authorize("training.view");
   if (!gate.ok) return { error: gate.error as string };
   return { user: gate.user, supabase: await createClient() };
 }
@@ -46,114 +44,6 @@ export async function bootstrapLms(tenantId: string, actorId?: string | null) {
         actorId,
       });
     }
-  }
-  await seedDemoProgress(admin, tenantId, volunteers ?? []);
-}
-
-async function seedDemoProgress(
-  admin: ReturnType<typeof createServiceClient>,
-  tenantId: string,
-  volunteers: Array<Record<string, unknown>>
-) {
-  const { count } = await admin
-    .from("lms_quiz_attempts")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", tenantId);
-  if ((count ?? 0) > 0 || volunteers.length === 0) return;
-
-  const { data: courses } = await admin.from("lms_courses").select("*").eq("tenant_id", tenantId);
-  const core = (courses as CourseRow[] | null)?.find((c) => c.slug === "core-campaign-briefing");
-  if (!core) return;
-  const { data: modules } = await admin.from("lms_modules").select("*").eq("course_id", core.id);
-  const demoRoles = ["field_canvassing", "phone_banking", "event_support", "polling_day"] as const;
-
-  for (const [index, volunteer] of volunteers.entries()) {
-    const role = demoRoles[index % demoRoles.length];
-    const existing = parseSupportRoles(volunteer.support_roles);
-    if (!existing.length) {
-      await admin
-        .from("volunteers")
-        .update({ support_roles: [role] })
-        .eq("id", volunteer.id);
-      await enrollVolunteer(admin, {
-        tenantId,
-        volunteerId: volunteer.id as string,
-        roles: [role],
-      });
-    }
-    if (!volunteer.training_code) {
-      await admin
-        .from("volunteers")
-        .update({ training_code: generateTrainingCode() })
-        .eq("id", volunteer.id)
-        .is("training_code", null);
-    }
-
-    const finishCore = index % 3 !== 1;
-    if (finishCore && modules?.length) {
-      for (const courseModule of modules) {
-        await admin.from("lms_module_progress").upsert(
-          {
-            tenant_id: tenantId,
-            volunteer_id: volunteer.id,
-            module_id: courseModule.id,
-            status: "completed",
-            score: courseModule.kind === "quiz" ? 100 : null,
-            attempts: courseModule.kind === "quiz" ? 1 : 0,
-            completed_at: new Date().toISOString(),
-            acknowledgement: courseModule.kind === "acknowledgement" ? "I agree" : null,
-            assignment_notes: courseModule.kind === "assignment" ? "Ready to apply this in my ward." : null,
-          },
-          { onConflict: "volunteer_id,module_id" }
-        );
-        if (courseModule.kind === "quiz") {
-          await admin.from("lms_quiz_attempts").insert({
-            tenant_id: tenantId,
-            volunteer_id: volunteer.id,
-            module_id: courseModule.id,
-            score: 100,
-            passed: true,
-            answers: {},
-          });
-        }
-      }
-      await admin
-        .from("lms_enrollments")
-        .update({ status: "completed", completed_at: new Date().toISOString() })
-        .eq("volunteer_id", volunteer.id)
-        .eq("course_id", core.id);
-      await admin.from("lms_certificates").upsert(
-        {
-          tenant_id: tenantId,
-          volunteer_id: volunteer.id,
-          course_id: core.id,
-          code: `DEMO-CORE-${String(volunteer.id).slice(0, 4).toUpperCase()}`,
-          issued_at: new Date().toISOString(),
-        },
-        { onConflict: "volunteer_id,course_id" }
-      );
-    }
-    await syncVolunteerReadiness(admin, tenantId, volunteer.id as string);
-  }
-
-  const { count: sessionCount } = await admin
-    .from("lms_live_sessions")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", tenantId);
-  if ((sessionCount ?? 0) === 0) {
-    const starts = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-    starts.setHours(10, 0, 0, 0);
-    await admin.from("lms_live_sessions").insert({
-      tenant_id: tenantId,
-      course_id: core.id,
-      title: "Ward briefing — core conduct",
-      description: "Live walkthrough of campaign values, safety, and how to log your first shift.",
-      starts_at: starts.toISOString(),
-      location: "Campaign HQ, Uromi",
-      meeting_url: "https://meet.google.com/ccc-ward-briefing",
-      capacity: 40,
-      follow_up: "Bring a notebook. Download the field conduct card before you arrive.",
-    });
   }
 }
 

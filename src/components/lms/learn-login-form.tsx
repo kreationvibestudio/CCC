@@ -23,7 +23,7 @@ export function LearnLoginForm({ slug, campaignName }: { slug: string; campaignN
           phone: String(data.get("phone") ?? ""),
           code: String(data.get("code") ?? ""),
         });
-        if (result.error) {
+        if ("error" in result && result.error) {
           toast.error(result.error);
           return;
         }

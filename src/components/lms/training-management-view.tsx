@@ -131,7 +131,7 @@ export function TrainingManagementView({
           onClick={() =>
             start(async () => {
               const result = await exportTrainingCsv();
-              if (result.error) {
+              if ("error" in result && result.error) {
                 toast.error(result.error);
                 return;
               }
@@ -255,7 +255,7 @@ export function TrainingManagementView({
                       const data = new FormData(e.currentTarget);
                       start(async () => {
                         const result = await saveCourseMeta(course.id, data);
-                        if (result.error) toast.error(result.error);
+                        if ("error" in result) toast.error(result.error);
                         else toast.success("Course saved");
                         router.refresh();
                       });
@@ -312,7 +312,7 @@ export function TrainingManagementView({
                     const data = new FormData(e.currentTarget);
                     start(async () => {
                       const result = await createLiveSession(data);
-                      if (result.error) toast.error(result.error);
+                      if ("error" in result) toast.error(result.error);
                       else {
                         toast.success("Session created");
                         e.currentTarget.reset();

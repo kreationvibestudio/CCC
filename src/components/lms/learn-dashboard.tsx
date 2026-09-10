@@ -173,7 +173,7 @@ export function LearnDashboardView({
                       start(async () => {
                         try {
                           const result = await rsvpLearnSession(session.id);
-                          if (result.error) toast.error(result.error);
+                          if ("error" in result) toast.error(result.error);
                           else {
                             toast.success("You are registered");
                             router.refresh();

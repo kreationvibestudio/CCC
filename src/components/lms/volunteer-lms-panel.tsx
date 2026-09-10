@@ -60,7 +60,7 @@ export function VolunteerLmsPanel({
                     onClick={() =>
                       start(async () => {
                         const result = await removeHqCourse(volunteerId, row.course_id);
-                        if (result.error) toast.error(result.error);
+                        if ("error" in result) toast.error(result.error);
                         router.refresh();
                       })
                     }
@@ -81,7 +81,7 @@ export function VolunteerLmsPanel({
               if (!courseId) return;
               start(async () => {
                 const result = await assignHqCourse(volunteerId, courseId, false);
-                if (result.error) toast.error(result.error);
+                if ("error" in result) toast.error(result.error);
                 else toast.success("Course added");
                 router.refresh();
               });

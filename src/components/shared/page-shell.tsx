@@ -30,6 +30,8 @@ export function StatCard({
   icon: Icon,
   className,
   href,
+  onClick,
+  active,
 }: {
   title: string;
   value: string | number;
@@ -37,6 +39,8 @@ export function StatCard({
   icon?: React.ComponentType<{ className?: string }>;
   className?: string;
   href?: string;
+  onClick?: () => void;
+  active?: boolean;
 }) {
   const body = (
     <>
@@ -51,11 +55,27 @@ export function StatCard({
     </>
   );
 
+  const clickable = Boolean(href || onClick);
   const styles = cn(
     "block rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
-    href && "cursor-pointer hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    clickable && "cursor-pointer hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    active && "border-primary ring-1 ring-primary/30",
     className
   );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(styles, "w-full appearance-none text-left")}
+        aria-pressed={active}
+        aria-label={`${title}: ${value}`}
+      >
+        {body}
+      </button>
+    );
+  }
 
   if (href) {
     return (

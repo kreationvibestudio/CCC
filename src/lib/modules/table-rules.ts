@@ -50,6 +50,8 @@ export const TABLE_RULES = {
       "polling_unit",
       "skills",
       "training_status",
+      "trained_at",
+      "training_notes",
       "availability",
       "notes",
     ],

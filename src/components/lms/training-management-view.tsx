@@ -139,10 +139,12 @@ export function TrainingManagementView({
                 }
                 const sent = "sent" in result ? result.sent : 0;
                 const failed = "failed" in result ? result.failed : 0;
+                const whatsappSent = "whatsappSent" in result ? result.whatsappSent : 0;
+                const emailSent = "emailSent" in result ? result.emailSent : 0;
                 toast.success(
                   failed
-                    ? `WhatsApp codes sent to ${sent}. ${failed} failed.`
-                    : `WhatsApp codes sent to ${sent} volunteer${sent === 1 ? "" : "s"}.`
+                    ? `Codes sent to ${sent} (WhatsApp ${whatsappSent}, email ${emailSent}). ${failed} failed.`
+                    : `Codes sent to ${sent} volunteer${sent === 1 ? "" : "s"} (WhatsApp ${whatsappSent}, email ${emailSent}).`
                 );
                 router.refresh();
               })
@@ -223,7 +225,7 @@ export function TrainingManagementView({
           <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search volunteers…" className="max-w-sm" />
           {canWrite ? (
             <p className="text-xs text-muted-foreground">
-              Select rows and use Send codes to WhatsApp training logins. With none selected, every listed volunteer is sent (up to 200).
+              Select rows and use Send codes to WhatsApp and/or email training logins. With none selected, every listed volunteer is sent (up to 200). Email goes only to people who have an address.
             </p>
           ) : null}
           {overdue.length > 0 ? (

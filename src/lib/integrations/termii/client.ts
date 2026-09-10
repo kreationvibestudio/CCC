@@ -327,6 +327,107 @@ export async function sendTermiiWhatsAppTemplate(input: {
   return parseTermiiSendPayload(res.status, await res.text(), config.apiKey);
 }
 
+export type TermiiEmailConfig = {
+  apiKey: string;
+  configurationId: string;
+  templateId: string;
+  subject: string;
+  variableKeys: string[];
+};
+
+export function parseTermiiEmailVariableKeys(raw = process.env.TERMII_EMAIL_VARIABLE_KEYS): string[] {
+  return parseTermiiWhatsAppDataKeys(raw);
+}
+
+export function resolveTermiiEmailConfig(): TermiiEmailConfig | { error: string } {
+  const apiKey = resolveTermiiApiKey();
+  const configurationId = (process.env.TERMII_EMAIL_CONFIGURATION_ID ?? "").trim();
+  const templateId = (process.env.TERMII_EMAIL_TEMPLATE_ID ?? "").trim();
+  const subject = (process.env.TERMII_EMAIL_SUBJECT ?? "Your volunteer training code").trim();
+  if (!apiKey) {
+    return { error: "TERMII_API_KEY is not configured. Add it in Vercel env or .env.local." };
+  }
+  if (!configurationId) {
+    return {
+      error:
+        "Email is not configured. Add TERMII_EMAIL_CONFIGURATION_ID from the Termii email settings page.",
+    };
+  }
+  if (!templateId) {
+    return {
+      error: "Email is not configured. Add TERMII_EMAIL_TEMPLATE_ID for the training-code email template.",
+    };
+  }
+  return {
+    apiKey,
+    configurationId,
+    templateId,
+    subject: subject || "Your volunteer training code",
+    variableKeys: parseTermiiEmailVariableKeys(),
+  };
+}
+
+export function termiiEmailConfigured(): boolean {
+  return !("error" in resolveTermiiEmailConfig());
+}
+
+export function normalizeTermiiEmail(raw: string): string | null {
+  const email = raw.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}
+
+export function buildTermiiEmailTemplatePayload(
+  config: TermiiEmailConfig,
+  email: string,
+  values: TermiiWhatsAppValues
+) {
+  return {
+    api_key: config.apiKey,
+    email,
+    subject: config.subject,
+    email_configuration_id: config.configurationId,
+    template_id: config.templateId,
+    variables: buildTermiiWhatsAppTemplateData(config.variableKeys, values),
+  };
+}
+
+export async function sendTermiiEmailTemplate(input: {
+  to: string;
+  name: string;
+  code: string;
+  url: string;
+}): Promise<TermiiSendResult> {
+  const config = resolveTermiiEmailConfig();
+  if ("error" in config) return { ok: false, error: config.error };
+
+  const email = normalizeTermiiEmail(input.to);
+  if (!email) {
+    return { ok: false, error: `Email “${input.to.trim() || "(empty)"}” is not a valid address.` };
+  }
+  if (!input.code.trim()) return { ok: false, error: "Training code is empty." };
+  if (!input.url.trim()) return { ok: false, error: "Training login URL is empty." };
+
+  const payload = buildTermiiEmailTemplatePayload(config, email, {
+    name: input.name.trim() || "Volunteer",
+    code: input.code.trim(),
+    url: input.url.trim(),
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${TERMII_BASE}/templates/send-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { ok: false, error: "Could not reach Termii. Check outbound network / DNS." };
+  }
+
+  return parseTermiiSendPayload(res.status, await res.text(), config.apiKey);
+}
+
 export function renderTemplate(body: string, vars: Record<string, string>) {
   let out = body;
   for (const [k, v] of Object.entries(vars)) {

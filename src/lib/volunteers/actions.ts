@@ -15,7 +15,7 @@ import {
 } from "@/lib/volunteers/training";
 import { parseSupportRoles } from "@/lib/lms/roles";
 import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
-import { resolveAppHost, sendVolunteerTrainingCodeWhatsApp, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
+import { resolveAppHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
 
 export async function createVolunteer(formData: FormData) {
   const gate = await authorize("volunteers.manage");
@@ -57,12 +57,13 @@ export async function createVolunteer(formData: FormData) {
       }
       const { data: tenant } = await supabase.from("tenants").select("slug").eq("id", user.profile.tenant_id).maybeSingle();
       const slug = tenant?.slug || user.workspace?.slug || "";
-      await sendVolunteerTrainingCodeWhatsApp({
+      await sendVolunteerTrainingCodes({
         supabase,
         tenantId: user.profile.tenant_id,
         volunteerId: data.id,
         actorId: user.id,
         phone: String(formData.get("phone") ?? ""),
+        email: String(formData.get("email") ?? ""),
         name: String(formData.get("full_name") ?? ""),
         trainingCode: code,
         learnUrl: volunteerLearnLoginUrl(slug, resolveAppHost()),

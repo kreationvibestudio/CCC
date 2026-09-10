@@ -15,13 +15,14 @@ import { LMS_CATALOG } from "./catalog";
 type OverviewEnrollment = Pick<EnrollmentRow, "volunteer_id" | "course_id" | "status" | "due_at" | "required">;
 
 const VOLUNTEER_OVERVIEW_COLUMNS =
-  "id, full_name, phone, lga, ward, support_roles, training_status, deployment_ready, training_code, trained_at";
+  "id, full_name, phone, email, lga, ward, support_roles, training_status, deployment_ready, training_code, trained_at";
 const ENROLLMENT_OVERVIEW_COLUMNS = "volunteer_id, course_id, status, due_at, required";
 
 export type TrainingVolunteer = {
   id: string;
   full_name: string;
   phone: string;
+  email?: string | null;
   lga?: string | null;
   ward?: string | null;
   support_roles?: string[];

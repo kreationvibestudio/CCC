@@ -195,6 +195,8 @@ const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boole
   { key: "termiiSenderId", label: "Termii sender ID", critical: true },
   { key: "termiiWhatsAppDeviceId", label: "Termii WhatsApp device ID" },
   { key: "termiiWhatsAppTemplateId", label: "Termii WhatsApp template ID" },
+  { key: "termiiEmailConfigurationId", label: "Termii email configuration ID" },
+  { key: "termiiEmailTemplateId", label: "Termii email template ID" },
   { key: "facebookPageId", label: "Facebook page ID", critical: true },
   { key: "facebookUserToken", label: "Facebook user token" },
   { key: "facebookPageToken", label: "Facebook page token", critical: true },

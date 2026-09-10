@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "@/lib/auth/actions";
+import { readLoginCredentials } from "@/lib/auth/login-credentials";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,17 +18,16 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!email.trim() || !password) {
-      toast.error("Email and password are required");
+    const credentials = readLoginCredentials(new FormData(e.currentTarget));
+    if ("error" in credentials) {
+      toast.error(credentials.error);
       return;
     }
     setLoading(true);
-    const result = await signIn(email.trim(), password);
+    const result = await signIn(credentials.email, credentials.password);
     setLoading(false);
 
     if ("error" in result) {
@@ -51,17 +51,15 @@ export function LoginForm() {
         <CardDescription>Sign in to your campaign war room</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               name="email"
               type="email"
-              autoComplete="email"
+              autoComplete="username"
               placeholder="you@campaign.ng"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
@@ -73,8 +71,6 @@ export function LoginForm() {
               type="password"
               autoComplete="current-password"
               placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>

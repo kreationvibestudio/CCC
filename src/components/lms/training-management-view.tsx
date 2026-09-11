@@ -225,7 +225,7 @@ export function TrainingManagementView({
           <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search volunteers…" className="max-w-sm" />
           {canWrite ? (
             <p className="text-xs text-muted-foreground">
-              Select rows and use Send codes to WhatsApp and/or email training logins. With none selected, every listed volunteer is sent (up to 200). Email goes only to people who have an address.
+              Select rows and use Send codes to WhatsApp and/or email training logins. With none selected, every listed volunteer is sent (up to 200). Email goes only to people who have an address. Email needs Termii TOKEN → Email Setup (configuration ID); WhatsApp numbers are attached by Termii, not Meta Cloud.
             </p>
           ) : null}
           {overdue.length > 0 ? (

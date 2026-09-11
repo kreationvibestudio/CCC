@@ -15,6 +15,7 @@ import {
   termiiWhatsAppConfigured,
   toTermiiMsisdn,
   buildTermiiEmailTemplatePayload,
+  buildTermiiEmailTokenPayload,
   normalizeTermiiEmail,
   resolveTermiiEmailConfig,
 } from "./client.ts";
@@ -268,16 +269,46 @@ describe("Termii email templates", () => {
     });
   });
 
-  it("reports email as unconfigured when configuration or template is missing", () => {
+  it("reports email as unconfigured when the configuration ID is missing", () => {
     const prevKey = process.env.TERMII_API_KEY;
     const prevConfig = process.env.TERMII_EMAIL_CONFIGURATION_ID;
     const prevTemplate = process.env.TERMII_EMAIL_TEMPLATE_ID;
     process.env.TERMII_API_KEY = "not-a-real-key";
     delete process.env.TERMII_EMAIL_CONFIGURATION_ID;
-    delete process.env.TERMII_EMAIL_TEMPLATE_ID;
+    process.env.TERMII_EMAIL_TEMPLATE_ID = "tpl-mail";
     try {
       assert.equal(termiiEmailConfigured(), false);
       assert.equal("error" in resolveTermiiEmailConfig(), true);
+    } finally {
+      if (prevKey === undefined) delete process.env.TERMII_API_KEY;
+      else process.env.TERMII_API_KEY = prevKey;
+      if (prevConfig === undefined) delete process.env.TERMII_EMAIL_CONFIGURATION_ID;
+      else process.env.TERMII_EMAIL_CONFIGURATION_ID = prevConfig;
+      if (prevTemplate === undefined) delete process.env.TERMII_EMAIL_TEMPLATE_ID;
+      else process.env.TERMII_EMAIL_TEMPLATE_ID = prevTemplate;
+    }
+  });
+
+  it("treats Email Token as configured with only the configuration ID", () => {
+    const prevKey = process.env.TERMII_API_KEY;
+    const prevConfig = process.env.TERMII_EMAIL_CONFIGURATION_ID;
+    const prevTemplate = process.env.TERMII_EMAIL_TEMPLATE_ID;
+    process.env.TERMII_API_KEY = "not-a-real-key";
+    process.env.TERMII_EMAIL_CONFIGURATION_ID = "cfg-1";
+    delete process.env.TERMII_EMAIL_TEMPLATE_ID;
+    try {
+      assert.equal(termiiEmailConfigured(), true);
+      const config = resolveTermiiEmailConfig();
+      assert.equal("error" in config, false);
+      if (!("error" in config)) {
+        assert.equal(config.templateId, null);
+        assert.deepEqual(buildTermiiEmailTokenPayload(config, "ada@example.com", "ABCD-EFGH"), {
+          api_key: "not-a-real-key",
+          email_address: "ada@example.com",
+          code: "ABCD-EFGH",
+          email_configuration_id: "cfg-1",
+        });
+      }
     } finally {
       if (prevKey === undefined) delete process.env.TERMII_API_KEY;
       else process.env.TERMII_API_KEY = prevKey;
@@ -314,6 +345,45 @@ describe("Termii email templates", () => {
       });
       assert.equal(result.ok, true);
       assert.equal(result.messageId, "mail-1");
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (prev.key === undefined) delete process.env.TERMII_API_KEY;
+      else process.env.TERMII_API_KEY = prev.key;
+      if (prev.config === undefined) delete process.env.TERMII_EMAIL_CONFIGURATION_ID;
+      else process.env.TERMII_EMAIL_CONFIGURATION_ID = prev.config;
+      if (prev.template === undefined) delete process.env.TERMII_EMAIL_TEMPLATE_ID;
+      else process.env.TERMII_EMAIL_TEMPLATE_ID = prev.template;
+    }
+  });
+
+  it("posts to the Termii Email Token endpoint when no product template is set", async () => {
+    const prev = {
+      key: process.env.TERMII_API_KEY,
+      config: process.env.TERMII_EMAIL_CONFIGURATION_ID,
+      template: process.env.TERMII_EMAIL_TEMPLATE_ID,
+    };
+    process.env.TERMII_API_KEY = "not-a-real-key";
+    process.env.TERMII_EMAIL_CONFIGURATION_ID = "cfg-1";
+    delete process.env.TERMII_EMAIL_TEMPLATE_ID;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+      assert.equal(String(input), "https://api.ng.termii.com/api/email/otp/send");
+      assert.equal(body.email_address, "ada@example.com");
+      assert.equal(body.code, "ABCD-EFGH");
+      assert.equal(body.email_configuration_id, "cfg-1");
+      assert.equal(body.template_id, undefined);
+      return new Response(JSON.stringify({ code: "ok", message_id: "otp-1" }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const result = await sendTermiiEmailTemplate({
+        to: "Ada@Example.com",
+        name: "Ada",
+        code: "ABCD-EFGH",
+        url: "https://example.test/learn/x/login",
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.messageId, "otp-1");
     } finally {
       globalThis.fetch = originalFetch;
       if (prev.key === undefined) delete process.env.TERMII_API_KEY;

@@ -153,7 +153,7 @@ export async function sendTrainingCodesWhatsApp(volunteerIds?: string[]) {
   if (!termiiWhatsAppConfigured() && !termiiEmailConfigured()) {
     return {
       error:
-        "Training-code delivery is not configured. Add Termii WhatsApp and/or email template IDs in Vercel.",
+        "Training-code delivery is not configured. Add Termii WhatsApp device/template IDs and/or TERMII_EMAIL_CONFIGURATION_ID in Vercel.",
     };
   }
   const overview = await getTrainingOverview();

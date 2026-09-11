@@ -18,6 +18,7 @@ import { parseSupportRoles } from "@/lib/lms/roles";
 import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
 import { effectiveTrainingStatus } from "@/lib/lms/progress";
 import { resolveAppHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
+import { upsertPublicCrmContact } from "@/lib/crm/public-upsert";
 
 export async function createVolunteer(formData: FormData) {
   const gate = await authorize("volunteers.manage");
@@ -74,6 +75,19 @@ export async function createVolunteer(formData: FormData) {
       });
     } catch {
       // LMS catalog is applied on first Training Management visit
+    }
+    try {
+      await upsertPublicCrmContact(createServiceClient(), {
+        tenantId: user.profile.tenant_id,
+        fullName: String(formData.get("full_name") ?? ""),
+        phone: String(formData.get("phone") ?? ""),
+        email: String(formData.get("email") ?? "") || null,
+        ward: String(formData.get("ward") ?? "") || null,
+        lga: String(formData.get("lga") ?? "") || null,
+        kind: "supporter",
+      });
+    } catch {
+      // Volunteer create still succeeds if CRM is unavailable.
     }
   }
   revalidatePath("/volunteers");

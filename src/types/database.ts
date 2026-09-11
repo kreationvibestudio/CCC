@@ -29,7 +29,8 @@ export type ContactType =
   | "traditional_ruler"
   | "donor"
   | "influencer"
-  | "party_official";
+  | "party_official"
+  | "supporter";
 
 export type EventType =
   | "town_hall"
@@ -144,6 +145,8 @@ export interface Contact {
   ward?: string;
   lga?: string;
   support_level: SupportLevel;
+  interests?: string[];
+  notes?: string;
   assigned_staff_id?: string;
   total_donations: number;
   created_at: string;

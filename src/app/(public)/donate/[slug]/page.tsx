@@ -1,10 +1,10 @@
 import { HeartHandshake } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { paystackPaymentLinkFromSetting } from "@/lib/campaign";
 import { formatCurrency } from "@/lib/utils";
 import { notFound } from "next/navigation";
+import { PublicDonateForm } from "@/components/donations/public-donate-form";
 
 export const dynamic = "force-dynamic";
 
@@ -49,18 +49,12 @@ export default async function DonateSlugPage({ params }: { params: Promise<{ slu
           </div>
           <CardTitle className="text-2xl">Support {campaignName}</CardTitle>
           <CardDescription>
-            Checkout is on Paystack. Enter your name, email, and amount, then pay by card, bank
-            transfer, or USSD.
+            Enter your details, then complete payment on Paystack by card, bank transfer, or USSD.
             {goal > 0 ? ` ${formatCurrency(raised)} of ${formatCurrency(goal)} raised.` : ""}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button asChild className="w-full" size="lg">
-            <a href={checkoutUrl}>Donate with Paystack</a>
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            You will complete payment on Paystack. A receipt is emailed after a successful gift.
-          </p>
+          <PublicDonateForm slug={slug} fallbackCheckoutUrl={checkoutUrl} />
         </CardContent>
       </Card>
     </div>

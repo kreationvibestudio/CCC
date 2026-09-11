@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { CAMPAIGN_TENANT_ID } from "@/lib/campaign";
+import { upsertPublicCrmContact } from "@/lib/crm/public-upsert";
 
 export type RecordedCharge = {
   alreadyRecorded: boolean;
@@ -38,54 +39,22 @@ export async function recordSuccessfulPaystackCharge(input: {
   const phone = input.phone?.trim() || null;
   const fullName = (input.fullName?.trim() || email.split("@")[0]).slice(0, 120);
 
-  let contactId: string | null = null;
-  let previousTotal = 0;
+  const upserted = await upsertPublicCrmContact(admin, {
+    tenantId,
+    fullName,
+    phone,
+    email,
+    kind: "donor",
+  });
+  if ("error" in upserted) return { error: upserted.error };
+  const contactId = upserted.id;
 
-  const { data: byEmail } = await admin
+  const { data: contact } = await admin
     .from("contacts")
-    .select("id, total_donations, phone")
-    .eq("tenant_id", tenantId)
-    .ilike("email", email.replace(/[%_]/g, ""))
+    .select("total_donations")
+    .eq("id", contactId)
     .maybeSingle();
-
-  if (byEmail) {
-    contactId = byEmail.id;
-    previousTotal = Number(byEmail.total_donations ?? 0);
-    if (phone && !byEmail.phone) {
-      await admin.from("contacts").update({ phone }).eq("id", contactId);
-    }
-  } else if (phone) {
-    const { data: byPhone } = await admin
-      .from("contacts")
-      .select("id, total_donations")
-      .eq("tenant_id", tenantId)
-      .eq("phone", phone)
-      .maybeSingle();
-    if (byPhone) {
-      contactId = byPhone.id;
-      previousTotal = Number(byPhone.total_donations ?? 0);
-      await admin.from("contacts").update({ email, full_name: fullName }).eq("id", contactId);
-    }
-  }
-
-  if (!contactId) {
-    const { data: created, error: createError } = await admin
-      .from("contacts")
-      .insert({
-        tenant_id: tenantId,
-        full_name: fullName,
-        contact_type: "donor",
-        email,
-        phone,
-        support_level: "strong",
-        total_donations: 0,
-      })
-      .select("id")
-      .single();
-    if (createError || !created) return { error: createError?.message ?? "Could not save donor" };
-    contactId = created.id;
-    previousTotal = 0;
-  }
+  const previousTotal = Number(contact?.total_donations ?? 0);
 
   const method = input.channel ? `paystack_${input.channel}` : "paystack";
   const { data: donation, error: donationError } = await admin

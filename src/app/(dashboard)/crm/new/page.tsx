@@ -28,6 +28,7 @@ export default async function NewContactPage() {
               <Label htmlFor="contact_type">Contact type</Label>
               <NativeSelect id="contact_type" name="contact_type">
                 <option value="individual">Individual</option>
+                <option value="supporter">Support</option>
                 <option value="community_leader">Community leader</option>
                 <option value="religious_leader">Religious leader</option>
                 <option value="youth_leader">Youth leader</option>

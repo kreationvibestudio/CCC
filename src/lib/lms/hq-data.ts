@@ -11,26 +11,13 @@ import { isOverdue, percentComplete } from "./progress";
 import { parseSupportRoles, supportRoleLabel, VOLUNTEER_SUPPORT_ROLES } from "./roles";
 import type { EnrollmentRow, ProgressRow } from "./complete";
 import { LMS_CATALOG } from "./catalog";
+import { toTrainingVolunteer, type TrainingVolunteer } from "./training-volunteers";
+
+export type { TrainingVolunteer };
 
 type OverviewEnrollment = Pick<EnrollmentRow, "volunteer_id" | "course_id" | "status" | "due_at" | "required">;
 
-const VOLUNTEER_OVERVIEW_COLUMNS =
-  "id, full_name, phone, email, lga, ward, support_roles, training_status, deployment_ready, training_code, trained_at";
 const ENROLLMENT_OVERVIEW_COLUMNS = "volunteer_id, course_id, status, due_at, required";
-
-export type TrainingVolunteer = {
-  id: string;
-  full_name: string;
-  phone: string;
-  email?: string | null;
-  lga?: string | null;
-  ward?: string | null;
-  support_roles?: string[];
-  training_status: string;
-  deployment_ready?: boolean;
-  training_code?: string | null;
-  trained_at?: string | null;
-};
 
 function scopeSql(user: AuthUser) {
   return {
@@ -48,11 +35,14 @@ async function viewGate() {
 async function loadScopedVolunteers(supabase: Awaited<ReturnType<typeof createClient>>, user: AuthUser) {
   const tenantId = user.profile.tenant_id;
   const scope = scopeSql(user);
-  return fetchAllRows<TrainingVolunteer>(
+  // Same shape as Volunteers (`select("*")`). A named LMS column that is not in
+  // production yet (trained_at, training_code, …) makes PostgREST fail, and the
+  // paginator used to swallow that into an empty People list.
+  const rows = await fetchAllRows<Record<string, unknown>>(
     (from, to) => {
       let query = supabase
         .from("volunteers")
-        .select(VOLUNTEER_OVERVIEW_COLUMNS)
+        .select("*")
         .eq("tenant_id", tenantId)
         .order("full_name")
         .range(from, to);
@@ -60,8 +50,9 @@ async function loadScopedVolunteers(supabase: Awaited<ReturnType<typeof createCl
       else if (scope.lga) query = query.eq("lga", scope.lga);
       return query;
     },
-    { max: 10000 }
+    { max: 10000, throwOnError: true }
   );
+  return rows.map((row) => toTrainingVolunteer(row)).filter((row): row is TrainingVolunteer => Boolean(row));
 }
 
 /** Seed missing catalog rows only. Volunteers enroll on signup, save, and when they open Learn. */
@@ -82,113 +73,120 @@ export async function getTrainingOverview() {
     return { error: error instanceof Error ? error.message : "Could not load training catalog. Apply the LMS SQL in Supabase." };
   }
 
-  const [
-    people,
-    enrollmentRows,
-    { data: courses, error: courseError },
-    { data: modules, error: moduleError },
-    { data: sessions },
-    { data: logs },
-  ] = await Promise.all([
-    loadScopedVolunteers(supabase, user),
-    fetchAllRows<OverviewEnrollment>(
-      (from, to) =>
-        admin
-          .from("lms_enrollments")
-          .select(ENROLLMENT_OVERVIEW_COLUMNS)
-          .eq("tenant_id", tenantId)
-          .range(from, to),
-      { max: 50000 }
-    ),
-    admin
-      .from("lms_courses")
-      .select(
-        "id, tenant_id, slug, title, description, role_slug, estimated_minutes, status, pass_mark, max_attempts, is_required, sort_order"
-      )
-      .eq("tenant_id", tenantId)
-      .order("sort_order"),
-    admin
-      .from("lms_modules")
-      .select("id, course_id, slug, title, kind, body, estimated_minutes, sort_order, quiz")
-      .eq("tenant_id", tenantId)
-      .order("sort_order"),
-    admin
-      .from("lms_live_sessions")
-      .select("id, title, starts_at, location, meeting_url, capacity")
-      .eq("tenant_id", tenantId)
-      .order("starts_at", { ascending: false })
-      .limit(20),
-    admin
-      .from("lms_activity_logs")
-      .select("id, action, detail, created_at, volunteer_id")
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: false })
-      .limit(25),
-  ]);
-  if (courseError) return { error: courseError.message };
-  if (moduleError) return { error: moduleError.message };
-  if (!(courses ?? []).length) {
-    return { error: "Training catalog is empty. Copy the training SQL and run it in Supabase, then refresh." };
+  try {
+    const [
+      people,
+      enrollmentRows,
+      { data: courses, error: courseError },
+      { data: modules, error: moduleError },
+      { data: sessions },
+      { data: logs },
+    ] = await Promise.all([
+      loadScopedVolunteers(supabase, user),
+      fetchAllRows<OverviewEnrollment>(
+        (from, to) =>
+          admin
+            .from("lms_enrollments")
+            .select(ENROLLMENT_OVERVIEW_COLUMNS)
+            .eq("tenant_id", tenantId)
+            .range(from, to),
+        { max: 50000, throwOnError: true }
+      ),
+      admin
+        .from("lms_courses")
+        .select(
+          "id, tenant_id, slug, title, description, role_slug, estimated_minutes, status, pass_mark, max_attempts, is_required, sort_order"
+        )
+        .eq("tenant_id", tenantId)
+        .order("sort_order"),
+      admin
+        .from("lms_modules")
+        .select("id, course_id, slug, title, kind, body, estimated_minutes, sort_order, quiz")
+        .eq("tenant_id", tenantId)
+        .order("sort_order"),
+      admin
+        .from("lms_live_sessions")
+        .select("id, title, starts_at, location, meeting_url, capacity")
+        .eq("tenant_id", tenantId)
+        .order("starts_at", { ascending: false })
+        .limit(20),
+      admin
+        .from("lms_activity_logs")
+        .select("id, action, detail, created_at, volunteer_id")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .limit(25),
+    ]);
+    if (courseError) return { error: courseError.message };
+    if (moduleError) return { error: moduleError.message };
+    if (!(courses ?? []).length) {
+      return { error: "Training catalog is empty. Copy the training SQL and run it in Supabase, then refresh." };
+    }
+
+    const byVolunteer = new Map<string, OverviewEnrollment[]>();
+    for (const row of enrollmentRows) {
+      const list = byVolunteer.get(row.volunteer_id) ?? [];
+      list.push(row);
+      byVolunteer.set(row.volunteer_id, list);
+    }
+
+    const trained = people.filter((v) => v.deployment_ready || v.training_status === "completed").length;
+    const ready = people.filter((v) => v.deployment_ready).length;
+    const overdue = people.filter((v) => {
+      const rows = byVolunteer.get(v.id) ?? [];
+      return rows.some((e) => isOverdue(e.due_at, e.status));
+    });
+
+    const byRole = VOLUNTEER_SUPPORT_ROLES.map((role) => {
+      const members = people.filter((v) => (v.support_roles ?? []).includes(role.slug));
+      const completed = members.filter((v) => v.deployment_ready).length;
+      return { ...role, total: members.length, ready: completed, pct: percentComplete(completed, members.length) };
+    });
+
+    const byLga = new Map<string, { total: number; ready: number }>();
+    for (const person of people) {
+      const key = person.lga?.trim() || "Unspecified";
+      const bucket = byLga.get(key) ?? { total: 0, ready: 0 };
+      bucket.total += 1;
+      if (person.deployment_ready) bucket.ready += 1;
+      byLga.set(key, bucket);
+    }
+
+    return {
+      volunteers: people,
+      enrollments: enrollmentRows,
+      courses: (courses ?? []) as CourseRow[],
+      modules: (modules ?? []) as Array<{
+        id: string;
+        course_id: string;
+        slug: string;
+        title: string;
+        kind: string;
+        body: string | null;
+        estimated_minutes: number | null;
+        sort_order: number;
+        quiz: { questions?: Array<{ id: string; prompt: string; choices: string[] }> } | null;
+      }>,
+      sessions: sessions ?? [],
+      logs: logs ?? [],
+      stats: {
+        total: people.length,
+        trained,
+        ready,
+        overdue: overdue.length,
+        inProgress: people.filter((v) => v.training_status === "in_progress").length,
+      },
+      overdue,
+      byRole,
+      byLga: [...byLga.entries()].map(([lga, n]) => ({ lga, ...n, pct: percentComplete(n.ready, n.total) })),
+      catalogSize: LMS_CATALOG.length,
+    };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Could not load volunteers for Training Management.",
+    };
   }
-
-  const byVolunteer = new Map<string, OverviewEnrollment[]>();
-  for (const row of enrollmentRows) {
-    const list = byVolunteer.get(row.volunteer_id) ?? [];
-    list.push(row);
-    byVolunteer.set(row.volunteer_id, list);
-  }
-
-  const trained = people.filter((v) => v.deployment_ready || v.training_status === "completed").length;
-  const ready = people.filter((v) => v.deployment_ready).length;
-  const overdue = people.filter((v) => {
-    const rows = byVolunteer.get(v.id) ?? [];
-    return rows.some((e) => isOverdue(e.due_at, e.status));
-  });
-
-  const byRole = VOLUNTEER_SUPPORT_ROLES.map((role) => {
-    const members = people.filter((v) => (v.support_roles ?? []).includes(role.slug));
-    const completed = members.filter((v) => v.deployment_ready).length;
-    return { ...role, total: members.length, ready: completed, pct: percentComplete(completed, members.length) };
-  });
-
-  const byLga = new Map<string, { total: number; ready: number }>();
-  for (const person of people) {
-    const key = person.lga?.trim() || "Unspecified";
-    const bucket = byLga.get(key) ?? { total: 0, ready: 0 };
-    bucket.total += 1;
-    if (person.deployment_ready) bucket.ready += 1;
-    byLga.set(key, bucket);
-  }
-
-  return {
-    volunteers: people,
-    enrollments: enrollmentRows,
-    courses: (courses ?? []) as CourseRow[],
-    modules: (modules ?? []) as Array<{
-      id: string;
-      course_id: string;
-      slug: string;
-      title: string;
-      kind: string;
-      body: string | null;
-      estimated_minutes: number | null;
-      sort_order: number;
-      quiz: { questions?: Array<{ id: string; prompt: string; choices: string[] }> } | null;
-    }>,
-    sessions: sessions ?? [],
-    logs: logs ?? [],
-    stats: {
-      total: people.length,
-      trained,
-      ready,
-      overdue: overdue.length,
-      inProgress: people.filter((v) => v.training_status === "in_progress").length,
-    },
-    overdue,
-    byRole,
-    byLga: [...byLga.entries()].map(([lga, n]) => ({ lga, ...n, pct: percentComplete(n.ready, n.total) })),
-    catalogSize: LMS_CATALOG.length,
-  };
 }
 
 export async function getHqVolunteerLms(volunteerId: string) {

@@ -14,7 +14,7 @@ export type PageFetcher<T> = (from: number, to: number) => PromiseLike<PageResul
  */
 export async function fetchAllRows<T>(
   page: PageFetcher<T>,
-  options: { max?: number; pageSize?: number } = {}
+  options: { max?: number; pageSize?: number; throwOnError?: boolean } = {}
 ): Promise<T[]> {
   const pageSize = Math.max(1, Math.min(options.pageSize ?? POSTGREST_MAX_ROWS, POSTGREST_MAX_ROWS));
   const max = options.max ?? Number.POSITIVE_INFINITY;
@@ -23,7 +23,11 @@ export async function fetchAllRows<T>(
   for (let from = 0; from < max; from += pageSize) {
     const to = Math.min(from + pageSize, max) - 1;
     const { data, error } = await page(from, to);
-    if (error || !data) break;
+    if (error) {
+      if (options.throwOnError) throw new Error(error.message);
+      break;
+    }
+    if (!data) break;
     rows.push(...data);
     if (data.length < to - from + 1) break;
   }

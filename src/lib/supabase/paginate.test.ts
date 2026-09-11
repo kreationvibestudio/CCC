@@ -66,6 +66,16 @@ describe("fetchAllRows", () => {
     });
     assert.equal(rows.length, POSTGREST_MAX_ROWS);
   });
+
+  it("throws when throwOnError is set", async () => {
+    await assert.rejects(
+      () =>
+        fetchAllRows<{ id: number }>(async () => ({ data: null, error: { message: "column volunteers.trained_at does not exist" } }), {
+          throwOnError: true,
+        }),
+      /trained_at does not exist/
+    );
+  });
 });
 
 describe("isLikelyTruncated", () => {

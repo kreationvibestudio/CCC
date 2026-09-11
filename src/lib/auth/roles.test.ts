@@ -67,6 +67,8 @@ describe("Director General oversight", () => {
       "training.view",
       "training.manage",
       "crm.manage",
+      "donations.view",
+      "donations.manage",
       "events.manage",
       "situation_room.manage",
       "communications.send",
@@ -122,6 +124,31 @@ describe("Training Management access", () => {
     }
     for (const role of ["media_director", "data_analyst", "ward_coordinator", "candidate"] as const) {
       assert.equal(hasPermission(role, "training.manage"), false, role);
+    }
+  });
+});
+
+describe("Donations financials access", () => {
+  it("limits gift totals to Super Administrator and Director General", () => {
+    for (const role of ["super_administrator", "director_general"] as const) {
+      assert.equal(hasPermission(role, "donations.view"), true, role);
+      assert.equal(hasPermission(role, "donations.manage"), true, role);
+    }
+  });
+
+  it("keeps fundraising off other HQ roles", () => {
+    for (const role of [
+      "candidate",
+      "campaign_director",
+      "media_director",
+      "volunteer_coordinator",
+      "data_analyst",
+      "call_center_agent",
+      "supporter",
+      "polling_agent",
+    ] as const) {
+      assert.equal(hasPermission(role, "donations.view"), false, role);
+      assert.equal(hasPermission(role, "donations.manage"), false, role);
     }
   });
 });

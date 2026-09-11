@@ -13,11 +13,17 @@ import { contactTypeLabel } from "@/lib/crm/labels";
 
 export function CrmView({ contacts }: { contacts: ContactRow[] }) {
   const router = useRouter();
-  const { canCreate } = usePermissions();
+  const { canCreate, can } = usePermissions();
+  const canSeeDonations = can("donations.view");
   const supporters = contacts.filter((c) => c.support_level === "strong" || c.support_level === "leaning").length;
   return (
     <div className="space-y-6">
       <PageHeader title="Campaign CRM" description="Contacts, leaders, donors and supporters">
+        {canSeeDonations ? (
+          <Button variant="outline" asChild>
+            <Link href="/donations">Donations</Link>
+          </Button>
+        ) : null}
         {canCreate ? (
         <Button asChild><Link href="/crm/new"><Plus className="mr-2 h-4 w-4" />Add Contact</Link></Button>
         ) : null}
@@ -37,11 +43,15 @@ export function CrmView({ contacts }: { contacts: ContactRow[] }) {
           { key: "contact_type", header: "Type", render: (c) => contactTypeLabel(c.contact_type, c.interests) },
           { key: "phone", header: "Phone" },
           { key: "ward", header: "Ward" },
-          {
-            key: "total_donations",
-            header: "Donations",
-            render: (c) => `₦${Number(c.total_donations ?? 0).toLocaleString()}`,
-          },
+          ...(canSeeDonations
+            ? [
+                {
+                  key: "total_donations" as const,
+                  header: "Donations",
+                  render: (c: ContactRow) => `₦${Number(c.total_donations ?? 0).toLocaleString()}`,
+                },
+              ]
+            : []),
           { key: "support_level", header: "Support", render: (c) => <Badge>{c.support_level}</Badge> },
         ]}
       />

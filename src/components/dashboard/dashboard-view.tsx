@@ -127,7 +127,7 @@ function CampaignProgress({ startDate, endDate, href }: { startDate: string | nu
   return card;
 }
 
-export function DashboardView({ data }: { data: DashboardData }) {
+export function DashboardView({ data, canSeeDonations = false }: { data: DashboardData; canSeeDonations?: boolean }) {
   const { stats, briefing, activities, engagementTrend, issueBreakdown } = data;
   const fundraisingPct = stats.fundraisingGoal
     ? Math.min(100, Math.round((stats.donations / stats.fundraisingGoal) * 100))
@@ -166,7 +166,9 @@ export function DashboardView({ data }: { data: DashboardData }) {
         <StatCard title="Total Likes" value={formatNumber(stats.totalLikes)} icon={ThumbsUp} href="/social" />
         <StatCard title="Comments" value={formatNumber(stats.totalComments)} icon={MessageSquare} href="/comments" />
         <StatCard title="Shares" value={formatNumber(stats.totalShares)} icon={Share2} href="/social" />
-        <StatCard title="Donations" value={formatCurrency(stats.donations)} icon={DollarSign} change={`${fundraisingPct}% of goal`} href="/analytics" />
+        {canSeeDonations ? (
+          <StatCard title="Donations" value={formatCurrency(stats.donations)} icon={DollarSign} change={`${fundraisingPct}% of goal`} href="/donations" />
+        ) : null}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

@@ -172,7 +172,7 @@ export async function logInteraction(contactId: string, formData: FormData) {
 }
 
 export async function recordDonation(contactId: string, formData: FormData) {
-  const gate = await authorize("crm.manage");
+  const gate = await authorize("donations.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
@@ -201,6 +201,8 @@ export async function recordDonation(contactId: string, formData: FormData) {
     .eq("id", contactId)
     .eq("tenant_id", user.profile.tenant_id);
   revalidatePath(`/crm/${contactId}`);
+  revalidatePath("/donations");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
@@ -216,7 +218,7 @@ export async function getContactInteractions(contactId: string) {
 }
 
 export async function getContactDonations(contactId: string) {
-  const gate = await authorize("crm.view");
+  const gate = await authorize("donations.view");
   if (!gate.ok) return [];
   const user = gate.user;
   const contactError = await assertContactInTenant(user.profile.tenant_id, contactId);

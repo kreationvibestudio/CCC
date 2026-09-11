@@ -86,8 +86,8 @@ export async function upsertPublicCrmContact(
     support_level: "strong",
     interests,
   };
-  if (phone) patch.phone = existing?.phone || phone;
-  if (email) patch.email = existing?.email || email;
+  if (phone) patch.phone = phone;
+  if (email) patch.email = email;
   if (input.ward?.trim()) patch.ward = input.ward.trim();
   if (input.lga?.trim()) patch.lga = input.lga.trim();
 

@@ -8,8 +8,8 @@ export function isInvalidContactTypeError(message: string | null | undefined) {
 }
 
 export function contactTypeLabel(type?: string | null, interests?: string[] | null) {
-  if (type === "supporter" || interests?.includes(SUPPORT_INTEREST)) return "Support";
   if (type === "donor") return "Donor";
+  if (type === "supporter" || interests?.includes(SUPPORT_INTEREST)) return "Support";
   return (type ?? "individual").replace(/_/g, " ");
 }
 

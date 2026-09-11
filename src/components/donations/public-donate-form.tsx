@@ -69,7 +69,7 @@ export function PublicDonateForm({
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="0813 374 7224"
-          autoComplete="tel"
+          autoComplete="off"
         />
       </div>
       <div className="space-y-1.5">

@@ -12,6 +12,7 @@ describe("contactTypeLabel", () => {
     assert.equal(contactTypeLabel("supporter"), "Support");
     assert.equal(contactTypeLabel("individual", ["support"]), "Support");
     assert.equal(contactTypeLabel("donor"), "Donor");
+    assert.equal(contactTypeLabel("donor", ["support"]), "Donor");
     assert.equal(contactTypeLabel("community_leader"), "community leader");
   });
 });

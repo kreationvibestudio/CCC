@@ -4,6 +4,7 @@ import { generateTrainingCode } from "./codes";
 import type { CourseRow } from "./ensure-catalog";
 import { ensureLmsCatalog, publishedCourses } from "./ensure-catalog";
 import { deploymentReadyFromEnrollments } from "./progress";
+import { isMissingColumnError } from "./training-volunteers";
 import { inferSupportRoles, parseSupportRoles, type SupportRoleSlug } from "./roles";
 
 export async function ensureTrainingCode(
@@ -208,19 +209,34 @@ export async function syncVolunteerReadiness(
     .eq("id", volunteerId)
     .maybeSingle();
 
-  const nextStatus = ready ? "completed" : started ? "in_progress" : "pending";
+  let nextStatus: "pending" | "in_progress" | "completed" = ready
+    ? "completed"
+    : started
+      ? "in_progress"
+      : "pending";
+  if (volunteer?.training_status === "completed" && !ready) nextStatus = "completed";
   const training = applyTrainingTransition({
     next: nextStatus,
     existingTrainedAt: volunteer?.trained_at ?? null,
   });
-  await supabase
+  const patch: Record<string, unknown> = {
+    training_status: training.training_status,
+    deployment_ready: ready,
+  };
+  if (nextStatus === "completed") patch.trained_at = training.trained_at;
+
+  const { error } = await supabase
     .from("volunteers")
-    .update({
-      ...training,
-      deployment_ready: ready,
-    })
+    .update(patch)
     .eq("id", volunteerId)
     .eq("tenant_id", tenantId);
+  if (error && isMissingColumnError(error.message)) {
+    await supabase
+      .from("volunteers")
+      .update({ training_status: training.training_status, deployment_ready: ready })
+      .eq("id", volunteerId)
+      .eq("tenant_id", tenantId);
+  }
   return { ready, status: nextStatus };
 }
 

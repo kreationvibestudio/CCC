@@ -8,6 +8,7 @@ import {
   isOverdue,
   nextIncompleteModule,
   overallPathStatus,
+  effectiveTrainingStatus,
   percentComplete,
   quizPassed,
 } from "./progress.ts";
@@ -75,6 +76,25 @@ describe("LMS progress", () => {
     assert.equal(percentComplete(1, 4), 25);
     assert.equal(isOverdue("2000-01-01T00:00:00.000Z", "assigned", new Date("2026-09-10")), true);
     assert.equal(isOverdue("2000-01-01T00:00:00.000Z", "completed", new Date("2026-09-10")), false);
+  });
+
+  it("marks HQ status in progress once an LMS course is started or completed", () => {
+    assert.equal(
+      effectiveTrainingStatus("pending", [
+        { required: true, status: "completed" },
+        { required: true, status: "assigned" },
+      ]),
+      "in_progress"
+    );
+    assert.equal(
+      effectiveTrainingStatus("pending", [{ required: true, status: "in_progress" }]),
+      "in_progress"
+    );
+    assert.equal(effectiveTrainingStatus("pending", [{ required: true, status: "assigned" }]), "pending");
+    assert.equal(
+      effectiveTrainingStatus("completed", [{ required: true, status: "assigned" }]),
+      "completed"
+    );
   });
 
   it("builds a stable certificate code", () => {

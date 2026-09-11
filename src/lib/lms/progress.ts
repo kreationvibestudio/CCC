@@ -36,6 +36,19 @@ export function overallPathStatus(
   return "assigned";
 }
 
+/** HQ briefing flag plus LMS enrollments. Completing a course is In progress, not still Pending. */
+export function effectiveTrainingStatus(
+  stored: string | null | undefined,
+  enrollments: Array<{ required: boolean; status: string }>
+): "pending" | "in_progress" | "completed" {
+  if (stored === "completed") return "completed";
+  const path = overallPathStatus(enrollments);
+  if (path === "completed") return "completed";
+  if (path === "in_progress") return "in_progress";
+  if (stored === "in_progress") return "in_progress";
+  return "pending";
+}
+
 export function deploymentReadyFromEnrollments(
   enrollments: Array<{ required: boolean; status: string }>
 ) {

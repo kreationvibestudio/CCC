@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/session";
 import { denyCreateIfRestricted, denyDeleteIfRestricted, denyWriteIfRestricted } from "@/types/auth";
 import { fetchAllRows } from "@/lib/supabase/paginate";
+import { createServiceClient } from "@/lib/supabase/admin";
 import type { Volunteer } from "@/types/database";
 import {
   applyTrainingTransition,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/volunteers/training";
 import { parseSupportRoles } from "@/lib/lms/roles";
 import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
+import { effectiveTrainingStatus } from "@/lib/lms/progress";
 import { resolveAppHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
 
 export async function createVolunteer(formData: FormData) {
@@ -81,16 +83,41 @@ export async function getVolunteers() {
   const gate = await authorize("volunteers.view");
   if (!gate.ok) return [];
   const supabase = await createClient();
-  return fetchAllRows<Volunteer>(
+  const tenantId = gate.user.profile.tenant_id;
+  const volunteers = await fetchAllRows<Volunteer>(
     (from, to) =>
       supabase
         .from("volunteers")
         .select("*")
-        .eq("tenant_id", gate.user.profile.tenant_id)
+        .eq("tenant_id", tenantId)
         .order("full_name")
         .range(from, to),
     { max: 10000 }
   );
+  try {
+    const admin = createServiceClient();
+    const enrollments = await fetchAllRows<{ volunteer_id: string; status: string; required: boolean }>(
+      (from, to) =>
+        admin
+          .from("lms_enrollments")
+          .select("volunteer_id, status, required")
+          .eq("tenant_id", tenantId)
+          .range(from, to),
+      { max: 50000 }
+    );
+    const byVolunteer = new Map<string, Array<{ required: boolean; status: string }>>();
+    for (const row of enrollments) {
+      const list = byVolunteer.get(row.volunteer_id) ?? [];
+      list.push({ required: row.required, status: row.status });
+      byVolunteer.set(row.volunteer_id, list);
+    }
+    return volunteers.map((person) => ({
+      ...person,
+      training_status: effectiveTrainingStatus(person.training_status, byVolunteer.get(person.id) ?? []),
+    }));
+  } catch {
+    return volunteers;
+  }
 }
 
 export async function getVolunteer(id: string) {

@@ -14,6 +14,7 @@ import { VolunteerTrainingCard } from "@/components/volunteers/volunteer-trainin
 import { VolunteerLmsPanel } from "@/components/lms/volunteer-lms-panel";
 import { RolePicker } from "@/components/lms/role-picker";
 import { getHqVolunteerLms } from "@/lib/lms/hq-data";
+import { effectiveTrainingStatus } from "@/lib/lms/progress";
 
 export default async function VolunteerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,6 +26,10 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
   if (!volunteer) redirect("/volunteers");
   const tasks = await getVolunteerTasks(id);
   const lms = await getHqVolunteerLms(id);
+  const trainingStatus =
+    "error" in lms
+      ? volunteer.training_status
+      : effectiveTrainingStatus(volunteer.training_status, lms.enrollments);
 
   async function saveAction(formData: FormData) {
     "use server";
@@ -70,8 +75,8 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
         </CardContent>
       </Card>
       <VolunteerTrainingCard
-        key={`${volunteer.id}-${volunteer.training_status}-${volunteer.trained_at ?? ""}`}
-        volunteer={volunteer}
+        key={`${volunteer.id}-${trainingStatus}-${volunteer.trained_at ?? ""}`}
+        volunteer={{ ...volunteer, training_status: trainingStatus }}
         canWrite={canWrite}
       />
       {!("error" in lms) ? (

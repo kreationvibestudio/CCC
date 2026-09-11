@@ -11,6 +11,7 @@ import { SubmitButton } from "@/components/forms/submit-button";
 import { getContact, getContactInteractions, getContactDonations, updateContact, deleteContact, logInteraction, recordDonation } from "@/lib/crm/actions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canCreateRecords, canDeleteRecords, canWriteRecords } from "@/types/auth";
+import { contactTypeLabel } from "@/lib/crm/labels";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -49,7 +50,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader title={contact.full_name} description={contact.contact_type.replace(/_/g, " ")}>
+      <PageHeader title={contact.full_name} description={contactTypeLabel(contact.contact_type, contact.interests)}>
         <Badge>{contact.support_level}</Badge>
         <Button variant="outline" asChild><Link href="/crm">Back</Link></Button>
       </PageHeader>

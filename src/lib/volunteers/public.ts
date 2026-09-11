@@ -8,6 +8,7 @@ import { parseSupportRoles } from "@/lib/lms/roles";
 import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
 import { generateTrainingCode } from "@/lib/lms/codes";
 import { resolveAppHost, resolveRequestHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
+import { upsertPublicCrmContact } from "@/lib/crm/public-upsert";
 
 export type PublicCampaign = {
   id: string;
@@ -141,6 +142,22 @@ export async function registerVolunteerPublic(
     return code;
   }
 
+  async function syncCrm() {
+    try {
+      await upsertPublicCrmContact(admin, {
+        tenantId,
+        fullName,
+        phone,
+        email: email || null,
+        ward: ward || null,
+        lga: lga || null,
+        kind: "supporter",
+      });
+    } catch {
+      // Volunteer signup still succeeds if CRM is unavailable.
+    }
+  }
+
   async function sendCode(volunteerId: string, trainingCode: string) {
     if (!trainingCode) return { whatsappSent: false, emailSent: false };
     try {
@@ -174,6 +191,7 @@ export async function registerVolunteerPublic(
     await admin.from("volunteers").update(patch).eq("id", existing.id).eq("tenant_id", tenantId);
     const trainingCode = await attachTraining(existing.id, existing.training_code);
     const delivered = await sendCode(existing.id, trainingCode);
+    await syncCrm();
 
     return {
       success: true,
@@ -215,6 +233,8 @@ export async function registerVolunteerPublic(
   } catch {
     // non-fatal
   }
+
+  await syncCrm();
 
   const delivered =
     created?.id && trainingCode

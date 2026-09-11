@@ -7,6 +7,8 @@ import { denyCreateIfRestricted, denyDeleteIfRestricted } from "@/types/auth";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import type { Contact, Donation } from "@/types/database";
 import { assertContactInTenant } from "@/lib/tenancy";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { isInvalidContactTypeError, upsertPublicCrmContact } from "@/lib/crm/public-upsert";
 
 /**
  * CRM writes go through the caller's own session so tenant RLS applies on top of
@@ -26,16 +28,23 @@ export async function createContact(formData: FormData) {
   const fullName = String(formData.get("full_name") ?? "").trim();
   if (!fullName) return { error: "Name is required" };
   const supabase = await crmDb();
-  const { error } = await supabase.from("contacts").insert({
+  const contactType = String(formData.get("contact_type") ?? "individual");
+  const payload: Record<string, unknown> = {
     tenant_id: user.profile.tenant_id,
     full_name: fullName,
-    contact_type: formData.get("contact_type") as string,
+    contact_type: contactType,
     phone: formData.get("phone") as string || null,
     email: formData.get("email") as string || null,
     ward: formData.get("ward") as string || null,
     lga: formData.get("lga") as string || null,
     support_level: formData.get("support_level") as string || "undecided",
-  });
+  };
+  if (contactType === "supporter") payload.interests = ["support"];
+  let { error } = await supabase.from("contacts").insert(payload);
+  if (error && contactType === "supporter" && isInvalidContactTypeError(error.message)) {
+    const retry = await supabase.from("contacts").insert({ ...payload, contact_type: "individual" });
+    error = retry.error;
+  }
   if (error) return { error: error.message };
   revalidatePath("/crm");
   return { success: true };
@@ -46,16 +55,55 @@ export async function getContacts() {
   const gate = await authorize("crm.view");
   if (!gate.ok) return [];
   const supabase = await createClient();
+  const tenantId = gate.user.profile.tenant_id;
+  try {
+    await backfillVolunteersIntoCrm(tenantId);
+  } catch {
+    // Listing still works if volunteer sync is unavailable.
+  }
   return fetchAllRows<Contact>(
     (from, to) =>
       supabase
         .from("contacts")
         .select("*")
-        .eq("tenant_id", gate.user.profile.tenant_id)
+        .eq("tenant_id", tenantId)
         .order("full_name")
         .range(from, to),
     { max: 5000 }
   );
+}
+
+async function backfillVolunteersIntoCrm(tenantId: string) {
+  const admin = createServiceClient();
+  const [{ data: volunteers }, { data: contacts }] = await Promise.all([
+    admin.from("volunteers").select("full_name, phone, email, ward, lga").eq("tenant_id", tenantId).limit(200),
+    admin.from("contacts").select("phone, email").eq("tenant_id", tenantId).limit(5000),
+  ]);
+  const phones = new Set(
+    (contacts ?? []).flatMap((row) => (row.phone ? [String(row.phone).replace(/[^\d+]/g, "")] : []))
+  );
+  const emails = new Set(
+    (contacts ?? []).flatMap((row) => (row.email ? [String(row.email).trim().toLowerCase()] : []))
+  );
+  for (const volunteer of volunteers ?? []) {
+    const phone = (volunteer.phone ?? "").replace(/[^\d+]/g, "");
+    const email = (volunteer.email ?? "").trim().toLowerCase();
+    if ((phone && phones.has(phone)) || (email && emails.has(email))) continue;
+    if (!phone && !email) continue;
+    const result = await upsertPublicCrmContact(admin, {
+      tenantId,
+      fullName: volunteer.full_name,
+      phone: volunteer.phone,
+      email: volunteer.email,
+      ward: volunteer.ward,
+      lga: volunteer.lga,
+      kind: "supporter",
+    });
+    if ("id" in result) {
+      if (phone) phones.add(phone);
+      if (email) emails.add(email);
+    }
+  }
 }
 
 export async function getContact(id: string) {

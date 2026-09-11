@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Contact as ContactRow } from "@/types/database";
 import { usePermissions } from "@/components/providers/auth-provider";
+import { contactTypeLabel } from "@/lib/crm/labels";
 
 export function CrmView({ contacts }: { contacts: ContactRow[] }) {
   const router = useRouter();
@@ -33,7 +34,7 @@ export function CrmView({ contacts }: { contacts: ContactRow[] }) {
         onRowClick={(c) => router.push(`/crm/${c.id}`)}
         columns={[
           { key: "full_name", header: "Name" },
-          { key: "contact_type", header: "Type", render: (c) => (c.contact_type ?? "individual").replace(/_/g, " ") },
+          { key: "contact_type", header: "Type", render: (c) => contactTypeLabel(c.contact_type, c.interests) },
           { key: "phone", header: "Phone" },
           { key: "ward", header: "Ward" },
           {

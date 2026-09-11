@@ -6,7 +6,13 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { LEARN_COOKIE, normalizeTrainingCode, signLearnToken } from "./codes";
 import { ensureLmsCatalog, type CourseRow, type ModuleRow } from "./ensure-catalog";
-import { completeCourseIfReady, markEnrollmentStarted, upsertProgress } from "./complete";
+import {
+  completeCourseIfReady,
+  markAssignedTrainingStarted,
+  markEnrollmentStarted,
+  resetCourseProgressForRetake,
+  upsertProgress,
+} from "./complete";
 import { enrollIfNeeded, logLmsActivity, syncVolunteerReadiness } from "./enroll";
 import { canRetryQuiz, gradeQuiz, quizPassed } from "./progress";
 import { phoneLookupValues } from "./phone";
@@ -73,6 +79,17 @@ export async function loginVolunteerLearn(input: {
 
     await ensureLmsCatalog(admin, campaign.id);
     await enrollIfNeeded(admin, volunteer as LearnVolunteer);
+    try {
+      await markAssignedTrainingStarted(admin, campaign.id, volunteer.id);
+      await logLmsActivity(admin, {
+        tenantId: campaign.id,
+        volunteerId: volunteer.id,
+        action: "training.login",
+        detail: "Signed in to Volunteer Training",
+      });
+    } catch {
+      // Login still succeeds if HQ status sync is unavailable.
+    }
     const token = signLearnToken(volunteer.id, campaign.id);
     (await cookies()).set(LEARN_COOKIE, token, {
       httpOnly: true,
@@ -229,6 +246,22 @@ export async function submitLearnQuiz(input: { moduleId: string; answers: Record
     };
   } catch (error) {
     return failed(error, "Could not submit the quiz. Try again.");
+  }
+}
+
+export async function retakeLearnCourse(courseId: string): Promise<{ error?: string; success?: true }> {
+  try {
+    const gate = await requireLearner();
+    if (!gate.ok) return { error: gate.error };
+    const { volunteer, admin } = gate;
+    if (!courseId.trim()) return { error: "Choose a course to retake." };
+    return resetCourseProgressForRetake(admin, {
+      tenantId: volunteer.tenant_id,
+      volunteerId: volunteer.id,
+      courseId,
+    });
+  } catch (error) {
+    return failed(error, "Could not reset this course. Try again.");
   }
 }
 

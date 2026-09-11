@@ -5,7 +5,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { LEARN_COOKIE, readLearnToken } from "./codes";
 import { ensureLmsCatalog, type CourseRow, type ModuleRow } from "./ensure-catalog";
 import type { EnrollmentRow, ProgressRow } from "./complete";
-import { enrollIfNeeded, ensureTrainingCode } from "./enroll";
+import { enrollIfNeeded, ensureTrainingCode, syncVolunteerReadiness } from "./enroll";
 import { supportRoleLabel } from "./roles";
 
 export type LearnVolunteer = {
@@ -62,23 +62,34 @@ export async function getLearnDashboard() {
   await ensureLmsCatalog(admin, volunteer.tenant_id);
   await enrollIfNeeded(admin, volunteer);
   await ensureTrainingCode(admin, volunteer.tenant_id, volunteer.id, volunteer.training_code);
+  try {
+    await syncVolunteerReadiness(admin, volunteer.tenant_id, volunteer.id);
+  } catch {
+    // Dashboard still loads if HQ status sync is unavailable.
+  }
+  const { data: refreshed } = await admin
+    .from("volunteers")
+    .select("*")
+    .eq("id", volunteer.id)
+    .maybeSingle();
+  const current = (refreshed as LearnVolunteer | null) ?? volunteer;
 
   const [{ data: enrollments }, { data: courses }, { data: certs }, { data: sessions }, { data: reminders }] =
     await Promise.all([
-      admin.from("lms_enrollments").select("*").eq("volunteer_id", volunteer.id).neq("status", "removed"),
-      admin.from("lms_courses").select("*").eq("tenant_id", volunteer.tenant_id).eq("status", "published"),
-      admin.from("lms_certificates").select("*").eq("volunteer_id", volunteer.id),
+      admin.from("lms_enrollments").select("*").eq("volunteer_id", current.id).neq("status", "removed"),
+      admin.from("lms_courses").select("*").eq("tenant_id", current.tenant_id).eq("status", "published"),
+      admin.from("lms_certificates").select("*").eq("volunteer_id", current.id),
       admin
         .from("lms_live_sessions")
         .select("*")
-        .eq("tenant_id", volunteer.tenant_id)
+        .eq("tenant_id", current.tenant_id)
         .gte("starts_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
         .order("starts_at")
         .limit(8),
       admin
         .from("lms_activity_logs")
         .select("*")
-        .eq("volunteer_id", volunteer.id)
+        .eq("volunteer_id", current.id)
         .eq("action", "training.reminder")
         .order("created_at", { ascending: false })
         .limit(5),
@@ -90,7 +101,7 @@ export async function getLearnDashboard() {
   const { data: modules } = courseIds.length
     ? await admin.from("lms_modules").select("*").in("course_id", courseIds).order("sort_order")
     : { data: [] };
-  const { data: progress } = await admin.from("lms_module_progress").select("*").eq("volunteer_id", volunteer.id);
+  const { data: progress } = await admin.from("lms_module_progress").select("*").eq("volunteer_id", current.id);
   const progressRows = (progress ?? []) as ProgressRow[];
   const done = new Set(progressRows.filter((p) => p.status === "completed").map((p) => p.module_id));
 
@@ -110,12 +121,12 @@ export async function getLearnDashboard() {
   const { data: rsvps } = await admin
     .from("lms_session_attendees")
     .select("session_id, status")
-    .eq("volunteer_id", volunteer.id);
+    .eq("volunteer_id", current.id);
 
   return {
-    volunteer,
+    volunteer: current,
     campaign,
-    roles: (volunteer.support_roles ?? []).map((slug) => ({ slug, label: supportRoleLabel(slug) })),
+    roles: (current.support_roles ?? []).map((slug) => ({ slug, label: supportRoleLabel(slug) })),
     paths,
     certificates: certs ?? [],
     sessions: sessions ?? [],

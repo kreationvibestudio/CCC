@@ -7,7 +7,7 @@ import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { parseSupportRoles } from "@/lib/lms/roles";
 import { enrollVolunteer, ensureTrainingCode } from "@/lib/lms/enroll";
 import { generateTrainingCode } from "@/lib/lms/codes";
-import { resolveAppHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
+import { resolveAppHost, resolveRequestHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "@/lib/lms/send-training-code";
 
 export type PublicCampaign = {
   id: string;
@@ -64,6 +64,7 @@ export async function registerVolunteerPublic(
   campaignName?: string;
   trainingCode?: string;
   slug?: string;
+  learnUrl?: string;
   whatsappSent?: boolean;
   emailSent?: boolean;
 }> {
@@ -75,11 +76,23 @@ export async function registerVolunteerPublic(
 
   // Unauthenticated service-role write: throttle by source so the volunteer
   // table cannot be filled with junk PII.
-  const ip = clientIp(await headers());
+  const requestHeaders = await headers();
+  const ip = clientIp(requestHeaders);
   const verdict = await checkRateLimit("volunteerSignup", `${campaign.slug}:${ip}`);
   if (!verdict.allowed) {
     return { error: "Too many signups from this connection. Try again later." };
   }
+  const learnUrl = volunteerLearnLoginUrl(
+    campaignSlug,
+    resolveAppHost(
+      process.env.NEXT_PUBLIC_APP_URL ?? "",
+      resolveRequestHost({
+        forwardedProto: requestHeaders.get("x-forwarded-proto"),
+        forwardedHost: requestHeaders.get("x-forwarded-host"),
+        host: requestHeaders.get("host"),
+      })
+    )
+  );
 
   const fullName = input.fullName.trim();
   const phone = cleanPhone(input.phone);
@@ -114,13 +127,11 @@ export async function registerVolunteerPublic(
     let code = existingCode ?? "";
     try {
       code = await ensureTrainingCode(admin, tenantId, volunteerId, existingCode);
-      if (roles.length) {
-        await enrollVolunteer(admin, {
-          tenantId,
-          volunteerId,
-          roles,
-        });
-      }
+      await enrollVolunteer(admin, {
+        tenantId,
+        volunteerId,
+        roles,
+      });
     } catch {
       if (!code) {
         code = generateTrainingCode();
@@ -141,7 +152,7 @@ export async function registerVolunteerPublic(
         email,
         name: fullName,
         trainingCode,
-        learnUrl: volunteerLearnLoginUrl(campaignSlug, resolveAppHost()),
+        learnUrl,
       });
       return { whatsappSent: result.whatsappSent, emailSent: result.emailSent };
     } catch {
@@ -170,6 +181,7 @@ export async function registerVolunteerPublic(
       campaignName,
       trainingCode,
       slug: campaignSlug,
+      learnUrl,
       ...delivered,
     };
   }
@@ -209,5 +221,5 @@ export async function registerVolunteerPublic(
       ? await sendCode(created.id, trainingCode)
       : { whatsappSent: false, emailSent: false };
 
-  return { success: true, campaignName, trainingCode, slug: campaignSlug, ...delivered };
+  return { success: true, campaignName, trainingCode, slug: campaignSlug, learnUrl, ...delivered };
 }

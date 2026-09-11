@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { completeLearnModule, submitLearnQuiz } from "@/lib/lms/learn";
+import { completeLearnModule, retakeLearnCourse, submitLearnQuiz } from "@/lib/lms/learn";
 import { recoverStaleServerAction } from "@/lib/stale-server-action";
 
 type Module = {
@@ -90,6 +90,30 @@ export function LearnCoursePlayer({
             <Badge variant="success">Course complete</Badge>
             <Button size="sm" asChild>
               <Link href={`/learn/${slug}/certificate/${course.id}`}>View certificate</Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                if (!window.confirm("Retake this course from the start? Your certificate stays available.")) return;
+                start(async () => {
+                  try {
+                    const result = await retakeLearnCourse(course.id);
+                    if ("error" in result && result.error) {
+                      toast.error(result.error);
+                      return;
+                    }
+                    toast.success("Course reset. Start from the first module.");
+                    router.refresh();
+                  } catch (error) {
+                    if (recoverStaleServerAction(error)) return;
+                    toast.error("Could not reset this course. Refresh the page.");
+                  }
+                });
+              }}
+            >
+              Retake
             </Button>
           </div>
         ) : null}

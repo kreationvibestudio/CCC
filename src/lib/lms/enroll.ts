@@ -3,7 +3,7 @@ import { applyTrainingTransition } from "@/lib/volunteers/training";
 import { generateTrainingCode } from "./codes";
 import type { CourseRow } from "./ensure-catalog";
 import { ensureLmsCatalog, publishedCourses } from "./ensure-catalog";
-import { deploymentReadyFromEnrollments } from "./progress";
+import { deploymentReadyFromEnrollments, nextTrainingStatusFromLms, publishedCoursesForRoles } from "./progress";
 import { isMissingColumnError } from "./training-volunteers";
 import { inferSupportRoles, parseSupportRoles, type SupportRoleSlug } from "./roles";
 
@@ -80,9 +80,7 @@ export async function enrollVolunteer(
     await ensureLmsCatalog(supabase, input.tenantId);
     courses = await publishedCourses(supabase, input.tenantId);
   }
-  const wanted = courses.filter(
-    (c) => c.status === "published" && (c.role_slug == null || input.roles.includes(c.role_slug as SupportRoleSlug))
-  );
+  const wanted = publishedCoursesForRoles(courses, input.roles);
   if (!wanted.length) return wanted;
 
   const { data: existing } = await supabase
@@ -202,19 +200,16 @@ export async function syncVolunteerReadiness(
   const rows = (enrollments ?? []) as Array<{ required: boolean; status: string }>;
   const active = rows.filter((e) => e.status !== "removed");
   const ready = deploymentReadyFromEnrollments(active);
-  const started = active.some((e) => e.status === "in_progress" || e.status === "completed");
   const { data: volunteer } = await supabase
     .from("volunteers")
     .select("training_status, trained_at")
     .eq("id", volunteerId)
     .maybeSingle();
 
-  let nextStatus: "pending" | "in_progress" | "completed" = ready
-    ? "completed"
-    : started
-      ? "in_progress"
-      : "pending";
-  if (volunteer?.training_status === "completed" && !ready) nextStatus = "completed";
+  const nextStatus = nextTrainingStatusFromLms({
+    stored: volunteer?.training_status,
+    enrollments: rows,
+  });
   const training = applyTrainingTransition({
     next: nextStatus,
     existingTrainedAt: volunteer?.trained_at ?? null,
@@ -259,12 +254,11 @@ export async function enrollIfNeeded(
   },
   actorId?: string | null
 ) {
-  const roles = rolesForVolunteer(volunteer);
-  if (!roles.length) return [];
+  // Empty roles still get the core briefing (role_slug null).
   return enrollVolunteer(supabase, {
     tenantId: volunteer.tenant_id,
     volunteerId: volunteer.id,
-    roles,
+    roles: rolesForVolunteer(volunteer),
     actorId,
   });
 }

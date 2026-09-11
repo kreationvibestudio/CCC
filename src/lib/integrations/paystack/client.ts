@@ -12,6 +12,8 @@ function headers(secret: string) {
   return {
     Authorization: `Bearer ${secret}`,
     "Content-Type": "application/json",
+    Accept: "application/json",
+    "User-Agent": "CCC-HQ/1.0",
   };
 }
 

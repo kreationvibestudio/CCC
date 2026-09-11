@@ -4,18 +4,21 @@ Supporters pay on the hosted Paystack page:
 
 **https://paystack.shop/pay/816txayv39**
 
-The campaign wrapper is **https://ccc-three-kappa.vercel.app/donate** (sends people to the same Paystack checkout). Copy either link from **Admin → Public donate page**.
+The campaign wrapper is **https://ccc-three-kappa.vercel.app/donate** (sends people to the same Paystack checkout). Copy either link from **Admin → Public donate page** or **Donations**.
 
 Paystack collects name, email, phone, and amount. Receipts come from Paystack.
 
-## Optional: record gifts in Campaign CRM
+## Record gifts in HQ Donations
 
-If you also set `PAYSTACK_SECRET_KEY` and the webhook URL, confirmed charges can be written into CRM automatically:
+1. In Vercel → CCC → Settings → Environment Variables, set **Production** `PAYSTACK_SECRET_KEY` to the live secret (never commit it). Redeploy.
+2. In Paystack Dashboard → Settings → API Keys & Webhooks, set the **Live Webhook URL** to one of:
 
-- Webhook: `https://ccc-three-kappa.vercel.app/api/donations/webhook`
-- SQL once: `supabase/migrations/20260820000002_donations_paystack.sql`
+   - `https://ccc-three-kappa.vercel.app/api/donations/webhook`
+   - `https://ccc-three-kappa.vercel.app/api/paystack/webhook` (same handler)
 
-Without that key, money still arrives in the Paystack/bank account; staff can log gifts manually on a CRM contact.
+   Do **not** leave the webhook on the old Render fundraising app (`fund-raising-platform-bxhe.onrender.com`). Paystack sends each charge to a single URL; HQ only sees gifts that hit CCC.
+
+Without that key, money still arrives in the Paystack/bank account; staff can log gifts manually on **Donations**.
 
 ## Change the checkout URL
 

@@ -149,32 +149,44 @@ export function DonationsView({
               </Button>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant={overview.paystackConfigured ? "success" : "warning"}>
-              {overview.paystackConfigured ? "Paystack secret configured" : "Paystack secret missing"}
-            </Badge>
-            {overview.webhookUrl ? (
+          <div className="space-y-1">
+            <Label>Paystack webhook (HQ)</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input readOnly value={overview.webhookUrl} className="font-mono text-xs" />
               <Button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="h-auto px-2 py-1 text-xs"
+                variant="outline"
                 onClick={() => copyText(overview.webhookUrl, "Webhook URL copied", "Webhook URL is not available")}
               >
-                Copy webhook URL
+                Copy
               </Button>
-            ) : null}
+            </div>
           </div>
-          {!overview.paystackConfigured ? (
-            <p className="text-xs text-muted-foreground">
-              Add PAYSTACK_SECRET_KEY and point Paystack’s webhook at the copied URL so card and
-              transfer gifts appear automatically. Until then, record cash or bank gifts below.
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              In Paystack, set the webhook to the copied URL so successful charges update this ledger.
-            </p>
-          )}
+          <div className="space-y-1">
+            <Label>Same webhook (Paystack path)</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input readOnly value={overview.webhookAliasUrl} className="font-mono text-xs" />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  copyText(overview.webhookAliasUrl, "Paystack webhook path copied", "Webhook URL is not available")
+                }
+              >
+                Copy
+              </Button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Badge variant={overview.paystackConfigured ? "success" : "warning"}>
+              {overview.paystackConfigured ? "Paystack secret configured" : "Paystack secret missing on this server"}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            In Paystack Dashboard → Settings → API Keys & Webhooks, set the Live Webhook URL to one of the
+            copied CCC URLs (not the old Render fundraising app). Then set PAYSTACK_SECRET_KEY on Vercel
+            Production so charges can be verified.
+          </p>
         </CardContent>
       </Card>
 

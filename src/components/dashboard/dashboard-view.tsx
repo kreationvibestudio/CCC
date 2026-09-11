@@ -167,7 +167,17 @@ export function DashboardView({ data, canSeeDonations = false }: { data: Dashboa
         <StatCard title="Comments" value={formatNumber(stats.totalComments)} icon={MessageSquare} href="/comments" />
         <StatCard title="Shares" value={formatNumber(stats.totalShares)} icon={Share2} href="/social" />
         {canSeeDonations ? (
-          <StatCard title="Donations" value={formatCurrency(stats.donations)} icon={DollarSign} change={`${fundraisingPct}% of goal`} href="/donations" />
+          <StatCard
+            title="Donations"
+            value={formatCurrency(stats.donations)}
+            icon={DollarSign}
+            change={
+              stats.fundraisingGoal
+                ? `${fundraisingPct}% of ${formatCurrency(stats.fundraisingGoal)} goal`
+                : "Set a fundraising goal"
+            }
+            href="/donations"
+          />
         ) : null}
       </div>
 

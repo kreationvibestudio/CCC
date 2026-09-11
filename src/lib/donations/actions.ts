@@ -12,6 +12,7 @@ function revalidateDonationSurfaces(contactId?: string) {
   revalidatePath("/dashboard");
   revalidatePath("/crm");
   revalidatePath("/analytics");
+  revalidatePath("/", "layout");
   if (contactId) revalidatePath(`/crm/${contactId}`);
 }
 

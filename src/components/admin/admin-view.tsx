@@ -320,8 +320,6 @@ export function AdminView({
     });
   }
 
-  const webhookUrl = donateUrl ? `${donateUrl.replace(/\/donate$/, "")}/api/donations/webhook` : "";
-
   function handleCampaignWebsite(formData: FormData) {
     startTransition(async () => {
       const result = await updateCampaignWebsite(formData);
@@ -537,16 +535,10 @@ export function AdminView({
           <Button type="button" variant="outline" asChild>
             <Link href="/donations">Open Donations</Link>
           </Button>
-          {secrets.paystackSecret && webhookUrl ? (
-            <p className="text-xs text-muted-foreground">
-              Optional auto-record webhook: {webhookUrl}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Gifts are collected on Paystack. Add PAYSTACK_SECRET_KEY and the webhook later if
-              you want gifts to appear automatically on Donations.
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            Copy the live Paystack webhook URL from Donations (not the old Render fundraising app).
+            Production also needs PAYSTACK_SECRET_KEY on Vercel.
+          </p>
         </CardContent>
       </Card>
 

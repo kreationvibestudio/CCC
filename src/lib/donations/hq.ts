@@ -4,6 +4,7 @@ import { fetchAllRows } from "@/lib/supabase/paginate";
 import { appBaseUrl, paystackPaymentLinkFromSetting } from "@/lib/campaign";
 import { paystackSecretKey } from "@/lib/integrations/paystack/client";
 import { fundraisingProgress, summarizeDonations } from "@/lib/donations/summary";
+import { paystackWebhookUrls } from "@/lib/donations/webhooks";
 
 export type DonationGift = {
   id: string;
@@ -38,6 +39,7 @@ export type DonationsOverview = {
   donateUrl: string;
   checkoutUrl: string;
   webhookUrl: string;
+  webhookAliasUrl: string;
   paystackConfigured: boolean;
 };
 
@@ -130,7 +132,7 @@ export async function getDonationsOverview(): Promise<DonationsOverview | { erro
   const base = appBaseUrl();
   const slug = gate.user.workspace?.slug ?? "";
   const donateUrl = base && slug ? `${base}/donate/${slug}` : "";
-  const webhookUrl = donateUrl ? `${base}/api/donations/webhook` : "";
+  const webhooks = paystackWebhookUrls(base);
 
   return {
     ...totals,
@@ -146,7 +148,8 @@ export async function getDonationsOverview(): Promise<DonationsOverview | { erro
     })),
     donateUrl,
     checkoutUrl: paystackPaymentLinkFromSetting(settingText(linkSetting.data?.value)),
-    webhookUrl,
+    webhookUrl: webhooks.webhookUrl,
+    webhookAliasUrl: webhooks.webhookAliasUrl,
     paystackConfigured: Boolean(paystackSecretKey()),
   };
 }

@@ -40,7 +40,7 @@ async function sendVolunteerTrainingCodeEmail(input: {
       return {
         sent: false,
         error:
-          "Email is not configured. Add TERMII_EMAIL_CONFIGURATION_ID and TERMII_EMAIL_TEMPLATE_ID in Vercel.",
+          "Email is not configured. Add TERMII_EMAIL_CONFIGURATION_ID from Termii → TOKEN → Email Setup.",
       };
     }
     return { sent: false, skipped: true };
@@ -137,7 +137,7 @@ export async function sendVolunteerTrainingCodes(input: {
       whatsappSent: false,
       emailSent: false,
       error:
-        "Training-code delivery is not configured. Add Termii WhatsApp and/or email template IDs in Vercel.",
+        "Training-code delivery is not configured. Add Termii WhatsApp device/template IDs and/or TERMII_EMAIL_CONFIGURATION_ID in Vercel.",
     };
   }
 

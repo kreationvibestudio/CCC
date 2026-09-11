@@ -330,7 +330,7 @@ export async function sendTermiiWhatsAppTemplate(input: {
 export type TermiiEmailConfig = {
   apiKey: string;
   configurationId: string;
-  templateId: string;
+  templateId: string | null;
   subject: string;
   variableKeys: string[];
 };
@@ -342,7 +342,7 @@ export function parseTermiiEmailVariableKeys(raw = process.env.TERMII_EMAIL_VARI
 export function resolveTermiiEmailConfig(): TermiiEmailConfig | { error: string } {
   const apiKey = resolveTermiiApiKey();
   const configurationId = (process.env.TERMII_EMAIL_CONFIGURATION_ID ?? "").trim();
-  const templateId = (process.env.TERMII_EMAIL_TEMPLATE_ID ?? "").trim();
+  const templateId = (process.env.TERMII_EMAIL_TEMPLATE_ID ?? "").trim() || null;
   const subject = (process.env.TERMII_EMAIL_SUBJECT ?? "Your volunteer training code").trim();
   if (!apiKey) {
     return { error: "TERMII_API_KEY is not configured. Add it in Vercel env or .env.local." };
@@ -350,12 +350,7 @@ export function resolveTermiiEmailConfig(): TermiiEmailConfig | { error: string 
   if (!configurationId) {
     return {
       error:
-        "Email is not configured. Add TERMII_EMAIL_CONFIGURATION_ID from the Termii email settings page.",
-    };
-  }
-  if (!templateId) {
-    return {
-      error: "Email is not configured. Add TERMII_EMAIL_TEMPLATE_ID for the training-code email template.",
+        "Email is not configured. Add TERMII_EMAIL_CONFIGURATION_ID from Termii → TOKEN → Email Setup.",
     };
   }
   return {
@@ -387,8 +382,17 @@ export function buildTermiiEmailTemplatePayload(
     email,
     subject: config.subject,
     email_configuration_id: config.configurationId,
-    template_id: config.templateId,
+    template_id: config.templateId ?? "",
     variables: buildTermiiWhatsAppTemplateData(config.variableKeys, values),
+  };
+}
+
+export function buildTermiiEmailTokenPayload(config: TermiiEmailConfig, email: string, code: string) {
+  return {
+    api_key: config.apiKey,
+    email_address: email,
+    code,
+    email_configuration_id: config.configurationId,
   };
 }
 
@@ -408,15 +412,19 @@ export async function sendTermiiEmailTemplate(input: {
   if (!input.code.trim()) return { ok: false, error: "Training code is empty." };
   if (!input.url.trim()) return { ok: false, error: "Training login URL is empty." };
 
-  const payload = buildTermiiEmailTemplatePayload(config, email, {
-    name: input.name.trim() || "Volunteer",
-    code: input.code.trim(),
-    url: input.url.trim(),
-  });
+  const useProductTemplate = Boolean(config.templateId);
+  const payload = useProductTemplate
+    ? buildTermiiEmailTemplatePayload(config, email, {
+        name: input.name.trim() || "Volunteer",
+        code: input.code.trim(),
+        url: input.url.trim(),
+      })
+    : buildTermiiEmailTokenPayload(config, email, input.code.trim());
+  const endpoint = useProductTemplate ? `${TERMII_BASE}/templates/send-email` : `${TERMII_BASE}/email/otp/send`;
 
   let res: Response;
   try {
-    res = await fetch(`${TERMII_BASE}/templates/send-email`, {
+    res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

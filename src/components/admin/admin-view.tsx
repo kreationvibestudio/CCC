@@ -195,8 +195,8 @@ const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boole
   { key: "termiiSenderId", label: "Termii sender ID", critical: true },
   { key: "termiiWhatsAppDeviceId", label: "Termii WhatsApp device ID" },
   { key: "termiiWhatsAppTemplateId", label: "Termii WhatsApp template ID" },
-  { key: "termiiEmailConfigurationId", label: "Termii email configuration ID" },
-  { key: "termiiEmailTemplateId", label: "Termii email template ID" },
+  { key: "termiiEmailConfigurationId", label: "Termii email configuration ID (Email Setup)" },
+  { key: "termiiEmailTemplateId", label: "Termii email template ID (optional product template)" },
   { key: "facebookPageId", label: "Facebook page ID", critical: true },
   { key: "facebookUserToken", label: "Facebook user token" },
   { key: "facebookPageToken", label: "Facebook page token", critical: true },
@@ -822,6 +822,9 @@ export function AdminView({
               Values are never shown here. Set missing keys in `.env.local`, then
               `npm run secrets:backup` + Vercel/GitHub. See docs/SECRETS.md and docs/TERMII-SETUP.md.
               Sender IDs must be 3–11 letters or numbers with no spaces (`HoR2027`, not `HoR 2027`).
+              Email training codes need only the Email Setup configuration ID — leave the
+              optional product template blank unless Termii gave you one. WhatsApp numbers
+              are attached by Termii, not by adding a number in Meta WhatsApp Manager.
             </p>
           </div>
         </CardContent>

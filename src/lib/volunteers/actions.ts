@@ -49,13 +49,15 @@ export async function createVolunteer(formData: FormData) {
   if (data?.id) {
     try {
       const code = await ensureTrainingCode(supabase, user.profile.tenant_id, data.id, null);
-      if (supportRoles.length) {
+      try {
         await enrollVolunteer(supabase, {
           tenantId: user.profile.tenant_id,
           volunteerId: data.id,
           roles: supportRoles,
           actorId: user.id,
         });
+      } catch {
+        // LMS catalog is applied on first Training Management visit
       }
       const { data: tenant } = await supabase.from("tenants").select("slug").eq("id", user.profile.tenant_id).maybeSingle();
       const slug = tenant?.slug || user.workspace?.slug || "";
@@ -149,17 +151,15 @@ export async function updateVolunteer(id: string, formData: FormData) {
     support_roles: supportRoles,
   }).eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
-  if (supportRoles.length) {
-    try {
-      await enrollVolunteer(supabase, {
-        tenantId: user.profile.tenant_id,
-        volunteerId: id,
-        roles: supportRoles,
-        actorId: user.id,
-      });
-    } catch {
-      // catalog may not be migrated yet
-    }
+  try {
+    await enrollVolunteer(supabase, {
+      tenantId: user.profile.tenant_id,
+      volunteerId: id,
+      roles: supportRoles,
+      actorId: user.id,
+    });
+  } catch {
+    // catalog may not be migrated yet
   }
   revalidatePath("/volunteers");
   revalidatePath(`/volunteers/${id}`);

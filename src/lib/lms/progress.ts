@@ -36,17 +36,40 @@ export function overallPathStatus(
   return "assigned";
 }
 
+/**
+ * Persistable HQ status from LMS enrollments.
+ * Keep a manual HQ "completed" mark unless the volunteer is actively retaking a course.
+ */
+export function nextTrainingStatusFromLms(input: {
+  stored: string | null | undefined;
+  enrollments: Array<{ required: boolean; status: string }>;
+}): "pending" | "in_progress" | "completed" {
+  const active = input.enrollments.filter((e) => e.status !== "removed");
+  const ready = requiredCoursesComplete(active);
+  const started = active.some((e) => e.status === "in_progress" || e.status === "completed");
+  if (ready) return "completed";
+  if (started) return "in_progress";
+  if (input.stored === "completed") return "completed";
+  if (input.stored === "in_progress") return "in_progress";
+  return "pending";
+}
+
 /** HQ briefing flag plus LMS enrollments. Completing a course is In progress, not still Pending. */
 export function effectiveTrainingStatus(
   stored: string | null | undefined,
   enrollments: Array<{ required: boolean; status: string }>
 ): "pending" | "in_progress" | "completed" {
-  if (stored === "completed") return "completed";
-  const path = overallPathStatus(enrollments);
-  if (path === "completed") return "completed";
-  if (path === "in_progress") return "in_progress";
-  if (stored === "in_progress") return "in_progress";
-  return "pending";
+  return nextTrainingStatusFromLms({ stored, enrollments });
+}
+
+/** First assigned course to mark in progress when a volunteer opens the training portal. */
+export function firstAssignedCourseId(
+  enrollments: Array<{ course_id: string; status: string; required?: boolean }>
+): string | null {
+  const active = enrollments.filter((e) => e.status !== "removed");
+  if (active.some((e) => e.status === "in_progress" || e.status === "completed")) return null;
+  const assigned = active.filter((e) => e.status === "assigned");
+  return assigned.find((e) => e.required)?.course_id ?? assigned[0]?.course_id ?? null;
 }
 
 export function deploymentReadyFromEnrollments(
@@ -105,4 +128,16 @@ export function isOverdue(dueAt: string | null | undefined, status: string, now 
   if (!dueAt || status === "completed" || status === "removed") return false;
   const due = new Date(dueAt);
   return !Number.isNaN(due.getTime()) && due.getTime() < now.getTime();
+}
+
+/** Core briefing (null role) is assigned to everyone, including people who picked no support roles. */
+export function publishedCoursesForRoles<T extends { status: string; role_slug: string | null }>(
+  courses: T[],
+  roles: string[]
+) {
+  return courses.filter(
+    (course) =>
+      course.status === "published" &&
+      (course.role_slug == null || roles.includes(course.role_slug))
+  );
 }

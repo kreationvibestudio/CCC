@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/lms/progress-bar";
-import { logoutVolunteerLearn, rsvpLearnSession } from "@/lib/lms/learn";
+import { logoutVolunteerLearn, retakeLearnCourse, rsvpLearnSession } from "@/lib/lms/learn";
 import { recoverStaleServerAction } from "@/lib/stale-server-action";
 import { percentComplete, estimateMinutesLeft, isOverdue, formatDue } from "@/lib/lms/progress";
 import { useRouter } from "next/navigation";
@@ -51,6 +51,24 @@ export function LearnDashboardView({
   const first = [...paths].sort((a, b) => (a.enrollment.status === "completed" ? 1 : 0) - (b.enrollment.status === "completed" ? 1 : 0))[0];
   const nextHref = first?.course ? `/learn/${slug}/courses/${first.course.id}` : null;
   const rsvpSet = new Set(rsvps.map((r) => r.session_id));
+  const hasCertificates = certificates.length > 0;
+
+  function retake(courseId: string) {
+    if (!window.confirm("Retake this course from the start? Your certificate stays available.")) return;
+    start(async () => {
+      try {
+        const result = await retakeLearnCourse(courseId);
+        if ("error" in result && result.error) toast.error(result.error);
+        else {
+          toast.success("Course reset. Start from the first module.");
+          router.refresh();
+        }
+      } catch (error) {
+        if (recoverStaleServerAction(error)) return;
+        toast.error("Could not reset this course. Refresh the page.");
+      }
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -97,7 +115,7 @@ export function LearnDashboardView({
           <CardTitle className="text-base">Next step</CardTitle>
           <CardDescription>
             {volunteer.deployment_ready
-              ? "Required training is complete. HQ can assign you in the field."
+              ? "Required training is complete. You can view your certificates below, or retake a course anytime."
               : first?.course
                 ? `Continue ${first.course.title}`
                 : "Your coordinator will assign a learning path shortly."}
@@ -109,39 +127,75 @@ export function LearnDashboardView({
               <Link href={nextHref}>Continue training</Link>
             </Button>
           </CardContent>
+        ) : volunteer.deployment_ready && hasCertificates ? (
+          <CardContent>
+            <Button asChild>
+              <a href="#certificates">View certificates</a>
+            </Button>
+          </CardContent>
         ) : null}
       </Card>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Your learning paths</h2>
+        <h2 className="text-lg font-semibold">Your courses</h2>
+        <p className="text-sm text-muted-foreground">
+          Courses you have been assigned. Open a finished course to review it, or retake it from the start.
+        </p>
         <div className="grid gap-3">
           {paths.map((path) => {
             if (!path.course) return null;
             const pct = percentComplete(path.completed, path.total);
             const remaining = estimateMinutesLeft(path.modules, new Set());
             const overdue = isOverdue(path.enrollment.due_at, path.enrollment.status);
+            const done = path.enrollment.status === "completed";
+            const cert = certificates.find((item) => item.course_id === path.course?.id);
             return (
-              <Link key={path.enrollment.id} href={`/learn/${slug}/courses/${path.course.id}`}>
-                <Card className="transition-shadow hover:shadow-md">
-                  <CardContent className="space-y-3 pt-6">
+              <Card key={path.enrollment.id} className={done ? "" : "transition-shadow hover:shadow-md"}>
+                <CardContent className="space-y-3 pt-6">
+                  {done ? (
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-medium">{path.course.title}</p>
                         <p className="text-xs text-muted-foreground">{path.course.description}</p>
                       </div>
-                      <Badge variant={path.enrollment.status === "completed" ? "success" : overdue ? "warning" : "secondary"}>
-                        {path.enrollment.status === "completed" ? "Done" : overdue ? "Overdue" : "In progress"}
-                      </Badge>
+                      <Badge variant="success">Done</Badge>
                     </div>
-                    <ProgressBar value={pct} label={`${path.completed}/${path.total} modules`} />
-                    <p className="text-xs text-muted-foreground">
-                      {path.course.estimated_minutes ?? remaining} min · due {formatDue(path.enrollment.due_at) ?? "open"}
-                      {path.enrollment.required ? " · required" : ""}
-                      {path.enrollment.status === "completed" ? " · certificate ready" : ""}
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
+                  ) : (
+                    <Link href={`/learn/${slug}/courses/${path.course.id}`} className="block">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium">{path.course.title}</p>
+                          <p className="text-xs text-muted-foreground">{path.course.description}</p>
+                        </div>
+                        <Badge variant={overdue ? "warning" : "secondary"}>
+                          {overdue ? "Overdue" : "In progress"}
+                        </Badge>
+                      </div>
+                    </Link>
+                  )}
+                  <ProgressBar value={pct} label={`${path.completed}/${path.total} modules`} />
+                  <p className="text-xs text-muted-foreground">
+                    {path.course.estimated_minutes ?? remaining} min · due {formatDue(path.enrollment.due_at) ?? "open"}
+                    {path.enrollment.required ? " · required" : ""}
+                    {done ? " · certificate ready" : ""}
+                  </p>
+                  {done ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/learn/${slug}/courses/${path.course.id}`}>Review course</Link>
+                      </Button>
+                      {cert ? (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/learn/${slug}/certificate/${path.course.id}`}>View certificate</Link>
+                        </Button>
+                      ) : null}
+                      <Button size="sm" disabled={pending} onClick={() => retake(path.course!.id)}>
+                        Retake
+                      </Button>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
             );
           })}
         </div>
@@ -194,23 +248,31 @@ export function LearnDashboardView({
         )}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Certificates</h2>
+      <section id="certificates" className="space-y-3">
+        <h2 className="text-lg font-semibold">Your certificates</h2>
         {certificates.length === 0 ? (
           <p className="text-sm text-muted-foreground">Certificates appear here when you pass a course.</p>
         ) : (
           certificates.map((cert) => {
             const title = paths.find((p) => p.course?.id === cert.course_id)?.course?.title ?? "Course";
+            const enrollment = paths.find((p) => p.course?.id === cert.course_id)?.enrollment;
             return (
               <Card key={cert.id}>
-                <CardContent className="flex items-center justify-between gap-3 pt-6">
+                <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-medium">{title}</p>
                     <p className="font-mono text-xs text-muted-foreground">{cert.code}</p>
                   </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/learn/${slug}/certificate/${cert.course_id}`}>View</Link>
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/learn/${slug}/certificate/${cert.course_id}`}>View</Link>
+                    </Button>
+                    {enrollment?.status === "completed" ? (
+                      <Button size="sm" disabled={pending} onClick={() => retake(cert.course_id)}>
+                        Retake course
+                      </Button>
+                    ) : null}
+                  </div>
                 </CardContent>
               </Card>
             );

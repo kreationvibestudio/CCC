@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { certificateCode } from "./progress";
+import { certificateCode, firstAssignedCourseId } from "./progress";
 import { syncVolunteerReadiness, logLmsActivity } from "./enroll";
 import type { CourseRow, ModuleRow } from "./ensure-catalog";
 import { modulesForCourse } from "./ensure-catalog";
@@ -112,6 +112,80 @@ export async function markEnrollmentStarted(
     .eq("volunteer_id", volunteerId)
     .eq("course_id", courseId)
     .in("status", ["assigned"]);
+}
+
+/** Opening the training portal counts as starting, without touching courses already in progress. */
+export async function markAssignedTrainingStarted(
+  supabase: SupabaseClient,
+  tenantId: string,
+  volunteerId: string
+) {
+  const { data } = await supabase
+    .from("lms_enrollments")
+    .select("course_id, status, required")
+    .eq("tenant_id", tenantId)
+    .eq("volunteer_id", volunteerId);
+  const courseId = firstAssignedCourseId(
+    (data ?? []) as Array<{ course_id: string; status: string; required?: boolean }>
+  );
+  if (courseId) {
+    await markEnrollmentStarted(supabase, tenantId, volunteerId, courseId);
+  }
+  await syncVolunteerReadiness(supabase, tenantId, volunteerId);
+}
+
+export async function resetCourseProgressForRetake(
+  supabase: SupabaseClient,
+  input: { tenantId: string; volunteerId: string; courseId: string }
+) {
+  const { data: enrollment } = await supabase
+    .from("lms_enrollments")
+    .select("id, status")
+    .eq("tenant_id", input.tenantId)
+    .eq("volunteer_id", input.volunteerId)
+    .eq("course_id", input.courseId)
+    .maybeSingle();
+  if (!enrollment || enrollment.status === "removed") {
+    return { error: "This course is not on your learning path." };
+  }
+  if (enrollment.status !== "completed") {
+    return { error: "Finish this course before retaking it. Your certificate stays available." };
+  }
+
+  const modules = await modulesForCourse(supabase, input.courseId);
+  const moduleIds = modules.map((module) => module.id);
+  if (moduleIds.length) {
+    const { error: progressError } = await supabase
+      .from("lms_module_progress")
+      .delete()
+      .eq("tenant_id", input.tenantId)
+      .eq("volunteer_id", input.volunteerId)
+      .in("module_id", moduleIds);
+    if (progressError) return { error: progressError.message };
+  }
+
+  const { error } = await supabase
+    .from("lms_enrollments")
+    .update({
+      status: "in_progress",
+      started_at: new Date().toISOString(),
+      completed_at: null,
+    })
+    .eq("tenant_id", input.tenantId)
+    .eq("volunteer_id", input.volunteerId)
+    .eq("course_id", input.courseId)
+    .eq("status", "completed");
+  if (error) return { error: error.message };
+
+  await logLmsActivity(supabase, {
+    tenantId: input.tenantId,
+    volunteerId: input.volunteerId,
+    action: "training.course_retake",
+    detail: "Volunteer started a course retake",
+    metadata: { course_id: input.courseId },
+  });
+  await syncVolunteerReadiness(supabase, input.tenantId, input.volunteerId);
+  return { success: true as const };
 }
 
 export async function upsertProgress(

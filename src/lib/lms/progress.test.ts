@@ -9,7 +9,10 @@ import {
   nextIncompleteModule,
   overallPathStatus,
   effectiveTrainingStatus,
+  firstAssignedCourseId,
+  nextTrainingStatusFromLms,
   percentComplete,
+  publishedCoursesForRoles,
   quizPassed,
 } from "./progress.ts";
 import { inferSupportRoles, parseSupportRoles } from "./roles.ts";
@@ -95,6 +98,39 @@ describe("LMS progress", () => {
       effectiveTrainingStatus("completed", [{ required: true, status: "assigned" }]),
       "completed"
     );
+    assert.equal(
+      effectiveTrainingStatus("completed", [{ required: true, status: "in_progress" }]),
+      "in_progress"
+    );
+    assert.equal(effectiveTrainingStatus("in_progress", []), "in_progress");
+    assert.equal(
+      nextTrainingStatusFromLms({
+        stored: "pending",
+        enrollments: [
+          { required: true, status: "completed" },
+          { required: true, status: "completed" },
+        ],
+      }),
+      "completed"
+    );
+  });
+
+  it("picks the first assigned required course only before training has started", () => {
+    assert.equal(
+      firstAssignedCourseId([
+        { course_id: "optional", status: "assigned", required: false },
+        { course_id: "core", status: "assigned", required: true },
+      ]),
+      "core"
+    );
+    assert.equal(
+      firstAssignedCourseId([
+        { course_id: "core", status: "in_progress", required: true },
+        { course_id: "next", status: "assigned", required: true },
+      ]),
+      null
+    );
+    assert.equal(firstAssignedCourseId([{ course_id: "gone", status: "removed", required: true }]), null);
   });
 
   it("builds a stable certificate code", () => {
@@ -109,6 +145,22 @@ describe("support roles", () => {
   it("parses selected roles and infers from skills", () => {
     assert.deepEqual(parseSupportRoles(["field_canvassing", "nope"]), ["field_canvassing"]);
     assert.deepEqual(inferSupportRoles(["canvassing", "media"]), ["field_canvassing", "digital_outreach"]);
+  });
+
+  it("assigns the core briefing even when no support roles are selected", () => {
+    const courses = [
+      { id: "core", status: "published", role_slug: null },
+      { id: "field", status: "published", role_slug: "field_canvassing" },
+      { id: "draft", status: "draft", role_slug: null },
+    ];
+    assert.deepEqual(
+      publishedCoursesForRoles(courses, []).map((c) => c.id),
+      ["core"]
+    );
+    assert.deepEqual(
+      publishedCoursesForRoles(courses, ["field_canvassing"]).map((c) => c.id),
+      ["core", "field"]
+    );
   });
 });
 

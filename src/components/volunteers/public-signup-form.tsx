@@ -2,11 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { registerVolunteerPublic } from "@/lib/volunteers/public";
 import { RolePicker } from "@/components/lms/role-picker";
+
+function copyText(value: string, label: string) {
+  void navigator.clipboard.writeText(value).then(
+    () => toast.success(`${label} copied`),
+    () => toast.error(`Could not copy ${label.toLowerCase()}`)
+  );
+}
 
 export function PublicVolunteerSignupForm({
   slug,
@@ -20,6 +28,7 @@ export function PublicVolunteerSignupForm({
     alreadyRegistered: boolean;
     trainingCode?: string;
     slug?: string;
+    learnUrl?: string;
     whatsappSent?: boolean;
     emailSent?: boolean;
   } | null>(null);
@@ -47,6 +56,7 @@ export function PublicVolunteerSignupForm({
         alreadyRegistered: Boolean(result.alreadyRegistered),
         trainingCode: result.trainingCode,
         slug: result.slug ?? slug,
+        learnUrl: result.learnUrl,
         whatsappSent: result.whatsappSent,
         emailSent: result.emailSent,
       });
@@ -55,6 +65,8 @@ export function PublicVolunteerSignupForm({
   }
 
   if (done) {
+    const portalPath = `/learn/${done.slug ?? slug}/login`;
+    const portalUrl = done.learnUrl?.trim() || portalPath;
     return (
       <div className="space-y-3 text-center">
         <h2 className="text-xl font-semibold tracking-tight">
@@ -63,23 +75,49 @@ export function PublicVolunteerSignupForm({
         <p className="text-sm text-muted-foreground">
           {done.alreadyRegistered
             ? `We updated your details for ${campaignName}. Keep your training code to continue learning.`
-            : `Welcome to the ${campaignName} volunteer team. Save your training code — you need it to open Volunteer Training.`}
+            : `Welcome to the ${campaignName} volunteer team. Save your training code and the training portal link — you need both to sign in.`}
         </p>
         {done.trainingCode ? (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-            <p className="text-xs text-muted-foreground">Your training code</p>
-            <p className="font-mono text-lg font-semibold tracking-wide">{done.trainingCode}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
+          <div className="space-y-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-left">
+            <div>
+              <p className="text-xs text-muted-foreground">Your training code</p>
+              <p className="font-mono text-lg font-semibold tracking-wide">{done.trainingCode}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => copyText(done.trainingCode!, "Training code")}
+              >
+                <Copy className="mr-2 h-3.5 w-3.5" />
+                Copy code
+              </Button>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Training portal</p>
+              <p className="break-all font-mono text-sm">{portalUrl}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => copyText(portalUrl, "Training portal link")}
+              >
+                <Copy className="mr-2 h-3.5 w-3.5" />
+                Copy link
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
               {done.whatsappSent && done.emailSent
-                ? "We also sent this code to your WhatsApp and email."
+                ? "We also sent this code and the training portal link to your WhatsApp and email."
                 : done.whatsappSent
-                  ? "We also sent this code to your WhatsApp."
+                  ? "We also sent this code and the training portal link to your WhatsApp."
                   : done.emailSent
-                    ? "We also sent this code to your email."
-                    : "Save this code. You will need it to sign in to training."}
+                    ? "We also sent this code and the training portal link to your email."
+                    : "Save this code and link. You will need them to sign in to training."}
             </p>
-            <Button className="mt-3 w-full" asChild>
-              <a href={`/learn/${done.slug ?? slug}/login`}>Start training</a>
+            <Button className="w-full" asChild>
+              <a href={portalPath}>Start training</a>
             </Button>
           </div>
         ) : null}

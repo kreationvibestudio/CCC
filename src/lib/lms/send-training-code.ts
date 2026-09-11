@@ -6,9 +6,9 @@ import {
   termiiWhatsAppConfigured,
 } from "@/lib/integrations/termii/client";
 import { logLmsActivity } from "./enroll";
-import { resolveAppHost, volunteerLearnLoginUrl } from "./learn-url";
+import { resolveAppHost, resolveRequestHost, volunteerLearnLoginUrl } from "./learn-url";
 
-export { resolveAppHost, volunteerLearnLoginUrl };
+export { resolveAppHost, resolveRequestHost, volunteerLearnLoginUrl };
 
 export type TrainingCodeSendResult = {
   whatsappSent: boolean;

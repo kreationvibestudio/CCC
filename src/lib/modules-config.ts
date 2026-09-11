@@ -40,7 +40,20 @@ export const MODULES: Record<string, ModuleConfig> = {
     slug: "crm",
     title: "Campaign CRM",
     description: "Manage supporters, leaders, donors, and influencers.",
-    features: ["Contact types", "Support levels", "Donation history", "Public Paystack donate page", "Meeting notes", "Staff assignment"],
+    features: ["Contact types", "Support levels", "Meeting notes", "Staff assignment"],
+  },
+  donations: {
+    slug: "donations",
+    title: "Donations",
+    description: "Admin-only fundraising totals, Paystack gifts, and donor records.",
+    features: [
+      "Raised vs goal",
+      "Paystack donate page",
+      "Gift ledger",
+      "Donor CRM link",
+      "Webhook status",
+      "Manual gift recording",
+    ],
   },
   events: {
     slug: "events",

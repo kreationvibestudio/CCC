@@ -10,7 +10,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { getContact, getContactInteractions, getContactDonations, updateContact, deleteContact, logInteraction, recordDonation } from "@/lib/crm/actions";
 import { getCurrentUser } from "@/lib/auth/session";
-import { canCreateRecords, canDeleteRecords, canWriteRecords } from "@/types/auth";
+import { canCreateRecords, canDeleteRecords, canWriteRecords, hasPermission } from "@/types/auth";
 import { contactTypeLabel } from "@/lib/crm/labels";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,9 +19,16 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const canWrite = user ? canWriteRecords(user.role) : false;
   const canCreate = user ? canCreateRecords(user.role) : false;
   const canDelete = user ? canDeleteRecords(user.role) : false;
+  const canSeeDonations = user ? hasPermission(user.role, "donations.view") : false;
+  const canRecordDonations = user
+    ? canWriteRecords(user.role) && hasPermission(user.role, "donations.manage")
+    : false;
   const contact = await getContact(id);
   if (!contact) redirect("/crm");
-  const [interactions, donations] = await Promise.all([getContactInteractions(id), getContactDonations(id)]);
+  const [interactions, donations] = await Promise.all([
+    getContactInteractions(id),
+    canSeeDonations ? getContactDonations(id) : Promise.resolve([]),
+  ]);
 
   async function saveAction(formData: FormData) {
     "use server";
@@ -85,6 +92,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         </form>
         ) : null}
       </CardContent></Card>
+      {canSeeDonations ? (
       <Card><CardContent className="pt-6">
         <h2 className="mb-2 font-semibold">Donations (₦{Number(contact.total_donations).toLocaleString()})</h2>
         {donations.map((d) => (
@@ -93,7 +101,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             {d.payment_reference ? ` · ${d.payment_reference}` : ""}
           </p>
         ))}
-        {canCreate ? (
+        {canRecordDonations ? (
         <form action={donationAction} className="mt-3 flex gap-2">
           <Input name="amount" type="number" placeholder="Amount" required />
           <Input name="payment_method" placeholder="Method" defaultValue="bank_transfer" />
@@ -101,6 +109,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         </form>
         ) : null}
       </CardContent></Card>
+      ) : null}
       {canDelete ? (
       <form action={deleteAction}><Button type="submit" variant="destructive" size="sm">Delete contact</Button></form>
       ) : null}

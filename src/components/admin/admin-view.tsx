@@ -509,7 +509,7 @@ export function AdminView({
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Share the Paystack checkout link. Supporters enter amount and pay on Paystack. The
-            campaign page at /donate sends people to the same checkout.
+            campaign page at /donate sends people to the same checkout. Totals live under Donations.
           </p>
           <div className="space-y-1">
             <Label>Paystack checkout</Label>
@@ -534,14 +534,17 @@ export function AdminView({
               </Button>
             </div>
           </div>
+          <Button type="button" variant="outline" asChild>
+            <Link href="/donations">Open Donations</Link>
+          </Button>
           {secrets.paystackSecret && webhookUrl ? (
             <p className="text-xs text-muted-foreground">
-              Optional CRM auto-record webhook: {webhookUrl}
+              Optional auto-record webhook: {webhookUrl}
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
               Gifts are collected on Paystack. Add PAYSTACK_SECRET_KEY and the webhook later if
-              you want gifts to appear automatically in Campaign CRM.
+              you want gifts to appear automatically on Donations.
             </p>
           )}
         </CardContent>

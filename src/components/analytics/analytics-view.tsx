@@ -41,7 +41,8 @@ function severityLabel(s: CallSeverity) {
 
 export function AnalyticsView({ summary }: { summary: AnalyticsSummary }) {
   const { kpis, groundGame } = summary;
-  const { canCreate } = usePermissions();
+  const { canCreate, can } = usePermissions();
+  const canSeeDonations = can("donations.view");
 
   return (
     <div className="space-y-6">
@@ -344,12 +345,16 @@ export function AnalyticsView({ summary }: { summary: AnalyticsSummary }) {
         )}
       </div>
 
-      {summary.donationTrend.length > 0 ? (
+      {canSeeDonations && summary.donationTrend.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Donation capacity (monthly)</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Funding runway for airtime, logistics, and rapid response — not a vanity chart.
+              Funding runway for airtime, logistics, and rapid response — open{" "}
+              <Link href="/donations" className="underline underline-offset-2">
+                Donations
+              </Link>{" "}
+              for the gift ledger.
             </p>
           </CardHeader>
           <CardContent className="h-56">

@@ -29,6 +29,8 @@ export type Permission =
   | "training.manage"
   | "crm.view"
   | "crm.manage"
+  | "donations.view"
+  | "donations.manage"
   | "events.view"
   | "events.manage"
   | "polling_units.view"
@@ -68,7 +70,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "dashboard.view", "social.view", "social.manage", "comments.view",
     "comments.reply", "comments.assign", "comments.moderate", "ai.use",
     "sentiment.view", "volunteers.view", "volunteers.manage", "training.view", "training.manage", "crm.view",
-    "crm.manage", "events.view", "events.manage", "polling_units.view",
+    "crm.manage", "donations.view", "donations.manage", "events.view", "events.manage", "polling_units.view",
     "polling_units.manage", "maps.view", "maps.voter_lookup",
     "situation_room.view", "situation_room.manage", "election_results.submit",
     "agent.portal",
@@ -94,7 +96,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "dashboard.view", "social.view", "social.manage", "comments.view",
     "comments.reply", "comments.assign", "comments.moderate", "ai.use",
     "sentiment.view", "volunteers.view", "volunteers.manage", "training.view", "training.manage", "crm.view",
-    "crm.manage", "events.view", "events.manage", "polling_units.view",
+    "crm.manage", "donations.view", "donations.manage", "events.view", "events.manage", "polling_units.view",
     "polling_units.manage", "maps.view", "maps.voter_lookup",
     "situation_room.view", "situation_room.manage", "election_results.submit",
     "agent.portal",

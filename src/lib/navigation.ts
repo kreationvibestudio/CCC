@@ -7,6 +7,7 @@ import {
   TrendingUp,
   Users,
   Contact,
+  CircleDollarSign,
   Calendar,
   MapPin,
   Map,
@@ -36,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Volunteers", href: "/volunteers", icon: Users, permission: "volunteers.view" },
   { title: "Training Management", href: "/training", icon: GraduationCap, permission: "training.view" },
   { title: "Campaign CRM", href: "/crm", icon: Contact, permission: "crm.view" },
+  { title: "Donations", href: "/donations", icon: CircleDollarSign, permission: "donations.view" },
   { title: "Events", href: "/events", icon: Calendar, permission: "events.view" },
   { title: "Polling Units", href: "/polling-units", icon: MapPin, permission: "polling_units.view" },
   { title: "PU Agents", href: "/polling-units/agents", icon: UserCheck, permission: "polling_units.manage" },
@@ -53,6 +55,7 @@ export const QUICK_ACTIONS = [
   { title: "New Event", href: "/events/new", permission: "events.manage" as Permission, creates: true },
   { title: "Send Broadcast", href: "/communications/campaigns/new", permission: "communications.send" as Permission, creates: true },
   { title: "Add Volunteer", href: "/volunteers/new", permission: "volunteers.manage" as Permission, creates: true },
+  { title: "Donations", href: "/donations", permission: "donations.view" as Permission, creates: false },
   { title: "Training Management", href: "/training", permission: "training.view" as Permission, creates: false },
   { title: "Generate Report", href: "/reports", permission: "reports.generate" as Permission, creates: false },
 ];

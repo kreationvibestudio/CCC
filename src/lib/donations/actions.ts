@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { authorize, logAudit } from "@/lib/auth/session";
 import { denyCreateIfRestricted } from "@/types/auth";
 import { upsertPublicCrmContact } from "@/lib/crm/public-upsert";
@@ -24,14 +25,18 @@ export async function updateFundraisingGoal(formData: FormData) {
   const goal = Number(raw);
   if (!Number.isFinite(goal) || goal < 0) return { error: "Enter a valid fundraising goal" };
 
-  const supabase = await createClient();
-  const { error } = await supabase
+  const admin = createServiceClient();
+  const rounded = Math.round(goal);
+  const { data, error } = await admin
     .from("tenants")
-    .update({ fundraising_goal: Math.round(goal) })
-    .eq("id", gate.user.profile.tenant_id);
+    .update({ fundraising_goal: rounded })
+    .eq("id", gate.user.profile.tenant_id)
+    .select("id")
+    .maybeSingle();
   if (error) return { error: error.message };
+  if (!data?.id) return { error: "Could not save the fundraising goal" };
 
-  await logAudit("donations.goal_update", "tenant", gate.user.profile.tenant_id, { fundraising_goal: Math.round(goal) });
+  await logAudit("donations.goal_update", "tenant", gate.user.profile.tenant_id, { fundraising_goal: rounded });
   revalidateDonationSurfaces();
   return { success: true as const };
 }

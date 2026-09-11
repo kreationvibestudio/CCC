@@ -6,8 +6,8 @@ import { authorize } from "@/lib/auth/session";
 import type { AuthUser } from "@/lib/auth/session";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import { ensureLmsCatalog, type CourseRow } from "./ensure-catalog";
-import { enrollIfNeeded } from "./enroll";
-import { isOverdue, percentComplete } from "./progress";
+import { enrollIfNeeded, syncVolunteerReadiness } from "./enroll";
+import { effectiveTrainingStatus, isOverdue, percentComplete } from "./progress";
 import { parseSupportRoles, supportRoleLabel, VOLUNTEER_SUPPORT_ROLES } from "./roles";
 import type { EnrollmentRow, ProgressRow } from "./complete";
 import { LMS_CATALOG } from "./catalog";
@@ -130,21 +130,35 @@ export async function getTrainingOverview() {
       byVolunteer.set(row.volunteer_id, list);
     }
 
-    const trained = people.filter((v) => v.deployment_ready || v.training_status === "completed").length;
-    const ready = people.filter((v) => v.deployment_ready).length;
-    const overdue = people.filter((v) => {
+    const peopleWithStatus = people.map((person) => ({
+      ...person,
+      training_status: effectiveTrainingStatus(person.training_status, byVolunteer.get(person.id) ?? []),
+    }));
+
+    const stale = peopleWithStatus.filter((person, index) => person.training_status !== people[index]?.training_status);
+    if (stale.length) {
+      await Promise.all(
+        stale.slice(0, 200).map((person) =>
+          syncVolunteerReadiness(admin, tenantId, person.id).catch(() => null)
+        )
+      );
+    }
+
+    const trained = peopleWithStatus.filter((v) => v.deployment_ready || v.training_status === "completed").length;
+    const ready = peopleWithStatus.filter((v) => v.deployment_ready).length;
+    const overdue = peopleWithStatus.filter((v) => {
       const rows = byVolunteer.get(v.id) ?? [];
       return rows.some((e) => isOverdue(e.due_at, e.status));
     });
 
     const byRole = VOLUNTEER_SUPPORT_ROLES.map((role) => {
-      const members = people.filter((v) => (v.support_roles ?? []).includes(role.slug));
+      const members = peopleWithStatus.filter((v) => (v.support_roles ?? []).includes(role.slug));
       const completed = members.filter((v) => v.deployment_ready).length;
       return { ...role, total: members.length, ready: completed, pct: percentComplete(completed, members.length) };
     });
 
     const byLga = new Map<string, { total: number; ready: number }>();
-    for (const person of people) {
+    for (const person of peopleWithStatus) {
       const key = person.lga?.trim() || "Unspecified";
       const bucket = byLga.get(key) ?? { total: 0, ready: 0 };
       bucket.total += 1;
@@ -153,7 +167,7 @@ export async function getTrainingOverview() {
     }
 
     return {
-      volunteers: people,
+      volunteers: peopleWithStatus,
       enrollments: enrollmentRows,
       courses: (courses ?? []) as CourseRow[],
       modules: (modules ?? []) as Array<{
@@ -170,11 +184,11 @@ export async function getTrainingOverview() {
       sessions: sessions ?? [],
       logs: logs ?? [],
       stats: {
-        total: people.length,
+        total: peopleWithStatus.length,
         trained,
         ready,
         overdue: overdue.length,
-        inProgress: people.filter((v) => v.training_status === "in_progress").length,
+        inProgress: peopleWithStatus.filter((v) => v.training_status === "in_progress").length,
       },
       overdue,
       byRole,
@@ -208,6 +222,7 @@ export async function getHqVolunteerLms(volunteerId: string) {
     .maybeSingle();
   if (!volunteer) return { error: "Volunteer not found." };
   await enrollIfNeeded(admin, volunteer, user.id);
+  await syncVolunteerReadiness(admin, tenantId, volunteerId).catch(() => null);
   const [{ data: enrollments }, { data: courses }, { data: progress }, { data: certs }, { data: attempts }] =
     await Promise.all([
       admin.from("lms_enrollments").select("*").eq("volunteer_id", volunteerId).neq("status", "removed"),

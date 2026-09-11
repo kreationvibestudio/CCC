@@ -26,6 +26,7 @@ import {
 import { supportRoleShort } from "@/lib/lms/roles";
 import { isOverdue, percentComplete } from "@/lib/lms/progress";
 import { usePermissions } from "@/components/providers/auth-provider";
+import { TrainingBadge } from "@/components/volunteers/training-badge";
 
 type Course = {
   id: string;
@@ -282,6 +283,7 @@ export function TrainingManagementView({
                       <td className="p-3">
                         <Link href={`/volunteers/${person.id}`} className="font-medium hover:underline">{person.full_name}</Link>
                         <p className="text-xs text-muted-foreground">{person.lga} · {person.ward}</p>
+                        <div className="mt-1"><TrainingBadge status={person.training_status} /></div>
                       </td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">

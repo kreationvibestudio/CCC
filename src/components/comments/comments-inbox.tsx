@@ -17,6 +17,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { cn, formatDate } from "@/lib/utils";
+import {
+  fillQuickAnswer,
+  orderedQuickAnswers,
+  recommendedQuickAnswerIds,
+} from "@/lib/comments/quick-answers";
 import type { Comment } from "@/types/database";
 import type { TeamMember } from "@/lib/comments/data";
 import {
@@ -50,6 +55,7 @@ export function CommentsInbox({
   const [sentiment, setSentiment] = useState("all");
   const [replyOpen, setReplyOpen] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [selectedQuickAnswer, setSelectedQuickAnswer] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -86,6 +92,7 @@ export function CommentsInbox({
     if (result.error) { toast.error(result.error); return; }
     if (action === "suggest" && result.suggestion) {
       setReplyText(result.suggestion);
+      setSelectedQuickAnswer(null);
       setReplyOpen(commentId);
       return;
     }
@@ -115,8 +122,15 @@ export function CommentsInbox({
     toast.success("Reply posted");
     setReplyOpen(null);
     setReplyText("");
+    setSelectedQuickAnswer(null);
     router.refresh();
   }
+
+  const replyComment = comments.find((comment) => comment.id === replyOpen) ?? null;
+  const quickAnswers = replyComment ? orderedQuickAnswers(replyComment) : [];
+  const recommendedIds = replyComment
+    ? new Set(recommendedQuickAnswerIds(replyComment))
+    : new Set<string>();
 
   const selectClass = cn(nativeSelectClassName, "w-auto");
 
@@ -188,7 +202,11 @@ export function CommentsInbox({
                   </div>
                   {canWrite ? (
                   <div className="flex flex-wrap gap-1 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => { setReplyOpen(comment.id); setReplyText(""); }}>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setReplyOpen(comment.id);
+                      setReplyText("");
+                      setSelectedQuickAnswer(null);
+                    }}>
                       <Reply className="h-3 w-3 mr-1" /> Reply
                     </Button>
                     <Button size="sm" variant="outline" disabled={loading === comment.id}
@@ -221,24 +239,81 @@ export function CommentsInbox({
         </div>
       )}
 
-      <Dialog open={!!replyOpen} onOpenChange={(o) => !o && setReplyOpen(null)}>
-        <DialogContent>
+      <Dialog open={!!replyOpen} onOpenChange={(o) => {
+        if (!o) {
+          setReplyOpen(null);
+          setSelectedQuickAnswer(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4" /> Reply to comment
             </DialogTitle>
           </DialogHeader>
+          {replyComment ? (
+            <blockquote className="rounded-md border bg-muted/50 p-3 text-sm">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">
+                {replyComment.author_name}
+              </p>
+              <p className="whitespace-pre-wrap">{replyComment.content}</p>
+            </blockquote>
+          ) : null}
+          {replyComment ? (
+            <div className="space-y-2">
+              <div>
+                <p className="text-sm font-medium">Quick answers</p>
+                <p className="text-xs text-muted-foreground">
+                  Pick one that fits, then edit if you need to. If none of these work, use AI — it reads this comment and drafts a matching reply.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {quickAnswers.map((answer) => {
+                  const selected = selectedQuickAnswer === answer.id;
+                  const suggested = recommendedIds.has(answer.id);
+                  return (
+                    <Button
+                      key={answer.id}
+                      type="button"
+                      size="sm"
+                      variant={selected ? "default" : "outline"}
+                      className="h-auto max-w-full whitespace-normal px-3 py-1.5 text-left"
+                      onClick={() => {
+                        setReplyText(fillQuickAnswer(answer.body, replyComment.author_name));
+                        setSelectedQuickAnswer(answer.id);
+                      }}
+                    >
+                      {answer.label}
+                      {suggested && !selected ? (
+                        <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Suggested
+                        </span>
+                      ) : null}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           <textarea
             className="min-h-[120px] w-full rounded-md border border-border bg-background p-3 text-sm"
             value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            placeholder="Write your reply..."
+            onChange={(e) => {
+              setReplyText(e.target.value);
+              setSelectedQuickAnswer(null);
+            }}
+            placeholder="Write your reply, or pick a quick answer above..."
           />
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => replyOpen && handleAction("suggest", replyOpen)}>
-              <Bot className="mr-1 h-4 w-4" /> Suggest with AI
+            <Button
+              variant="outline"
+              disabled={!!loading || !replyOpen}
+              onClick={() => replyOpen && handleAction("suggest", replyOpen)}
+            >
+              {loading === replyOpen ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Bot className="mr-1 h-4 w-4" />}
+              Suggest with AI
             </Button>
-            <Button onClick={handleReply} disabled={!!loading}>
+            <Button onClick={handleReply} disabled={!!loading || !replyText.trim()}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Post Reply
             </Button>

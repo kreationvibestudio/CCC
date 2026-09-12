@@ -1,34 +1,49 @@
 import type { Comment } from "@/types/database";
 import { openAiChatCompletion } from "@/lib/ai/openai";
+import { fallbackSuggestedReply } from "@/lib/comments/quick-answers";
 
-const TEMPLATES: Record<string, string> = {
-  roads: "Thank you for raising the road infrastructure concern. Our campaign has a concrete plan to fix key roads across the constituency. We hear you and we are committed to delivering results.",
-  employment: "Youth employment is a top priority for our campaign. We are proposing job creation programmes and skills training across Esan North East and Esan South East. Thank you for holding us accountable.",
-  healthcare: "Access to quality healthcare matters deeply to us. Our manifesto includes plans to improve rural health centres and ensure every ward has adequate medical support.",
-  security: "Security is fundamental. We are committed to working with community leaders and security agencies to keep our people safe.",
-  default: "Thank you for your comment and for engaging with our campaign. We value every voice in our constituency and we remain committed to serving you with integrity.",
+type SuggestableComment = Pick<
+  Comment,
+  "content" | "issue_topic" | "sentiment" | "author_name"
+> & {
+  is_misinformation?: boolean | null;
 };
 
-export async function suggestReply(comment: Pick<Comment, "content" | "issue_topic" | "sentiment" | "author_name">): Promise<string> {
-  const firstName = comment.author_name.split(" ")[0];
+const SYSTEM_PROMPT = `You write short Facebook replies for Hon Akhakon Anenih's campaign HQ in Edo State, Nigeria.
+
+Rules:
+- Read the comment carefully. Answer the actual question, complaint, praise, or request. Do not send a generic thank-you when a specific reply is possible.
+- Stay warm, respectful, and professional. Write in English. Keep the reply under 280 characters.
+- Do not invent policies, budgets, dates, project names, or promises the campaign has not stated.
+- If they asked for a location, contact, or next step, acknowledge that and ask for the ward or community if you need it.
+- Do not attack opponents or sound overly partisan.
+- Address the person by first name when you have it.
+- Return only the reply text.`;
+
+export async function suggestReply(comment: SuggestableComment): Promise<string> {
+  const firstName = comment.author_name.trim().split(/\s+/)[0] || "friend";
 
   const ai = await openAiChatCompletion({
-    temperature: 0.7,
+    temperature: 0.4,
     messages: [
-      {
-        role: "system",
-        content:
-          "You write professional, warm replies for Hon Akhakon Anenih's Nigerian political campaign Facebook page. Keep replies under 280 characters, respectful, and in English. Do not be overly political.",
-      },
+      { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Reply to ${comment.author_name} who wrote: "${comment.content}"\nSentiment: ${comment.sentiment}\nTopic: ${comment.issue_topic}`,
+        content: `Write a reply that matches this specific comment.
+
+Author: ${comment.author_name}
+First name: ${firstName}
+Comment:
+"""
+${comment.content}
+"""
+Sentiment: ${comment.sentiment ?? "unknown"}
+Topic: ${comment.issue_topic ?? "unknown"}
+Flagged as rumour/misinformation: ${comment.is_misinformation ? "yes" : "no"}`,
       },
     ],
   });
-  if (ai.ok) return ai.text;
+  if (ai.ok && ai.text.trim()) return ai.text.trim();
 
-  const topic = comment.issue_topic ?? "other";
-  const base = TEMPLATES[topic] ?? TEMPLATES.default;
-  return `${firstName}, ${base}`;
+  return fallbackSuggestedReply(comment);
 }

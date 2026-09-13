@@ -20,6 +20,13 @@ export type IssueTopic =
 
 export type CommentStatus = "pending" | "assigned" | "replied" | "resolved" | "flagged";
 
+export type MediaContentStatus =
+  | "draft"
+  | "approved"
+  | "scheduled"
+  | "posted"
+  | "killed";
+
 export type ContactType =
   | "individual"
   | "community_leader"
@@ -98,6 +105,23 @@ export interface Comment {
   is_misinformation: boolean;
   is_abusive: boolean;
   created_at: string;
+}
+
+export interface MediaContent {
+  id: string;
+  tenant_id: string;
+  title: string;
+  body: string;
+  issue_topic: IssueTopic | null;
+  platform: SocialPlatform;
+  status: MediaContentStatus;
+  scheduled_at: string | null;
+  posted_at: string | null;
+  social_post_id: string | null;
+  talking_points: string[];
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Volunteer {

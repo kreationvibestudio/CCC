@@ -21,6 +21,7 @@ export async function updateCommentStatus(
   const { error } = await supabase.from("comments").update({ status }).eq("id", commentId);
   if (error) return { error: error.message };
   revalidatePath("/comments");
+  revalidatePath("/media");
   return { success: true };
 }
 
@@ -35,6 +36,7 @@ export async function assignComment(commentId: string, userId: string | null) {
     .eq("id", commentId);
   if (error) return { error: error.message };
   revalidatePath("/comments");
+  revalidatePath("/media");
   return { success: true };
 }
 
@@ -49,6 +51,7 @@ export async function flagMisinformation(commentId: string) {
     .eq("id", commentId);
   if (error) return { error: error.message };
   revalidatePath("/comments");
+  revalidatePath("/media");
   return { success: true };
 }
 
@@ -113,6 +116,7 @@ export async function replyToComment(commentId: string, replyText: string) {
   });
 
   revalidatePath("/comments");
+  revalidatePath("/media");
   return { success: true };
 }
 

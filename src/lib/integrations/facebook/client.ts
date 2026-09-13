@@ -1,3 +1,10 @@
+import {
+  UNKNOWN_FACEBOOK_AUTHOR,
+  mergeFacebookCommentFrom,
+  resolveFacebookCommentAuthor,
+  type FacebookCommentFrom,
+} from "./comment-author";
+
 const GRAPH_VERSION = "v21.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
@@ -19,12 +26,14 @@ export interface FacebookPost {
   shares?: { count?: number };
 }
 
-export interface FacebookComment {
+export type { FacebookCommentFrom };
+export type FacebookComment = {
   id: string;
   message: string;
   created_time: string;
-  from?: { name?: string; id?: string; picture?: { data?: { url?: string } } };
-}
+  from?: FacebookCommentFrom;
+  username?: string;
+};
 
 export interface FacebookSyncResult {
   page: FacebookPageInfo;
@@ -163,6 +172,7 @@ async function graphGet<T>(
         if (
           !isFacebookAuthError(err) &&
           err.code !== 10 &&
+          err.code !== 100 &&
           err.code !== 210 &&
           attempt < retries - 1
         ) {
@@ -363,13 +373,91 @@ export async function fetchPosts(pageId: string, pageToken: string, limit = 25):
   throw new FacebookApiError(`Could not fetch posts. ${FACEBOOK_PERMISSION_HELP}`);
 }
 
-export async function fetchPostComments(postId: string, pageToken: string): Promise<FacebookComment[]> {
-  const result = await graphGet<{ data: FacebookComment[] }>(`/${postId}/comments`, pageToken, {
-    fields: "id,message,created_time,from",
-    limit: "100",
-  });
+const COMMENT_AUTHOR_FIELDS = "id,name,first_name,last_name,username,picture";
+const COMMENT_FIELD_SETS = [
+  `id,message,created_time,from{${COMMENT_AUTHOR_FIELDS}}`,
+  "id,message,created_time,from{id,name,username,picture}",
+  "id,message,created_time,from{id,name,picture}",
+  "id,message,created_time,from",
+] as const;
 
-  return result.data ?? [];
+function graphRecordHasError(value: unknown) {
+  return Boolean(value && typeof value === "object" && "error" in value);
+}
+
+/** Fill in `from` when the comments list omitted name/username but Graph has them on the node or user. */
+async function enrichCommentAuthors(comments: FacebookComment[], pageToken: string) {
+  const missing = comments.filter((comment) => {
+    const resolved = resolveFacebookCommentAuthor(comment);
+    return resolved.authorName === UNKNOWN_FACEBOOK_AUTHOR;
+  });
+  if (missing.length === 0) return;
+
+  try {
+    const ids = missing.map((comment) => comment.id).slice(0, 50);
+    const details = await graphGet<Record<string, FacebookComment>>("/", pageToken, {
+      ids: ids.join(","),
+      fields: `from{${COMMENT_AUTHOR_FIELDS}}`,
+    });
+    for (const comment of comments) {
+      const extra = details[comment.id];
+      if (!extra || graphRecordHasError(extra)) continue;
+      mergeFacebookCommentFrom(comment, extra.from);
+    }
+  } catch {
+    // List data is still usable even if author enrichment fails.
+  }
+
+  const stillMissingIds = [
+    ...new Set(
+      comments
+        .filter((comment) => {
+          const resolved = resolveFacebookCommentAuthor(comment);
+          return resolved.authorName === UNKNOWN_FACEBOOK_AUTHOR && comment.from?.id;
+        })
+        .map((comment) => comment.from?.id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ].slice(0, 50);
+
+  if (stillMissingIds.length === 0) return;
+
+  try {
+    const users = await graphGet<Record<string, FacebookCommentFrom>>("/", pageToken, {
+      ids: stillMissingIds.join(","),
+      fields: COMMENT_AUTHOR_FIELDS,
+    });
+    for (const comment of comments) {
+      const user = comment.from?.id ? users[comment.from.id] : undefined;
+      if (!user || graphRecordHasError(user)) continue;
+      mergeFacebookCommentFrom(comment, user);
+    }
+  } catch {
+    // Keep whatever author fields we already have.
+  }
+}
+
+export async function fetchPostComments(postId: string, pageToken: string): Promise<FacebookComment[]> {
+  let lastError: unknown;
+
+  for (const fields of COMMENT_FIELD_SETS) {
+    try {
+      const result = await graphGet<{ data: FacebookComment[] }>(`/${postId}/comments`, pageToken, {
+        fields,
+        limit: "100",
+      });
+      const comments = result.data ?? [];
+      await enrichCommentAuthors(comments, pageToken);
+      return comments;
+    } catch (err) {
+      lastError = err;
+      if (err instanceof FacebookApiError && (err.code === 10 || err.code === 210 || err.code === 190)) {
+        throw err;
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new FacebookApiError("Could not fetch comments.");
 }
 
 export async function testFacebookConnection(

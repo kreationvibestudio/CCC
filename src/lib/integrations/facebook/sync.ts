@@ -12,6 +12,7 @@ import {
   FacebookApiError,
 } from "./client";
 import { isSocialDemoModeEnabled, seedDemoSocialData, shouldAttemptLiveFacebookSync } from "./demo";
+import { resolveFacebookCommentAuthor } from "./comment-author";
 
 const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
@@ -246,21 +247,22 @@ async function syncFacebookLive(
       for (const comment of comments) {
         const { data: existingComment } = await supabase
           .from("comments")
-          .select("id")
+          .select("id, author_name, author_avatar")
           .eq("tenant_id", tenantId)
           .eq("platform_comment_id", comment.id)
           .maybeSingle();
 
         // Fast local analysis during sync (avoid OpenAI timeouts in serverless)
         const analysis = analyzeCommentText(comment.message);
-        const commentPayload = {
+        const author = resolveFacebookCommentAuthor(comment, existingComment?.author_name);
+        const commentFields = {
           tenant_id: tenantId,
           platform: "facebook" as const,
           platform_comment_id: comment.id,
           post_id: postDbId,
-          author_name: comment.from?.name ?? "Facebook User",
+          author_name: author.authorName,
+          author_avatar: author.authorAvatar ?? existingComment?.author_avatar ?? null,
           content: comment.message,
-          status: "pending" as const,
           created_at: comment.created_time,
           ...analysis,
         };
@@ -268,11 +270,14 @@ async function syncFacebookLive(
         if (existingComment) {
           const { error } = await supabase
             .from("comments")
-            .update(commentPayload)
+            .update(commentFields)
             .eq("id", existingComment.id);
           if (error) throw new FacebookApiError(error.message);
         } else {
-          const { error } = await supabase.from("comments").insert(commentPayload);
+          const { error } = await supabase.from("comments").insert({
+            ...commentFields,
+            status: "pending" as const,
+          });
           if (error) throw new FacebookApiError(error.message);
         }
         commentsSynced++;

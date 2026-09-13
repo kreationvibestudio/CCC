@@ -44,8 +44,12 @@ import type { Comment, MediaContent } from "@/types/database";
 import type { TeamMember } from "@/lib/comments/data";
 
 async function copyText(text: string, ok: string) {
-  await navigator.clipboard.writeText(text);
-  toast.success(ok);
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(ok);
+  } catch {
+    toast.error("Could not copy. Select the text and copy it yourself.");
+  }
 }
 
 export function MediaCommand({
@@ -240,13 +244,21 @@ function DraftIssueButton({ topic }: { topic: string }) {
       disabled={pending}
       onClick={() => {
         start(async () => {
-          const result = await draftFromIssue(topic);
-          if (result.error) {
-            toast.error(result.error);
-            return;
+          try {
+            const result = await draftFromIssue(topic);
+            if (result.error) {
+              toast.error(result.error);
+              return;
+            }
+            toast.success(
+              result.reused
+                ? "That draft is already ready — copy it into Facebook"
+                : "Draft ready — copy it into Facebook"
+            );
+            router.refresh();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not write that draft.");
           }
-          toast.success("Draft ready — copy it into Facebook");
-          router.refresh();
         });
       }}
     >

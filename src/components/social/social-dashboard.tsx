@@ -63,7 +63,7 @@ export function SocialDashboard({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Social Media Command Center"
+        title="Page posts"
         description="Connect and monitor your campaign's social platforms"
       >
         <div className="flex flex-wrap gap-2">

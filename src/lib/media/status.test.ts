@@ -2,11 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { canTransition, statusPatch, transitionError } from "./status.ts";
 
-test("draft can be approved or killed, not posted", () => {
+test("draft can be approved, posted, or killed", () => {
   assert.equal(canTransition("draft", "approved"), true);
   assert.equal(canTransition("draft", "killed"), true);
-  assert.equal(canTransition("draft", "posted"), false);
-  assert.match(transitionError("draft", "posted") ?? "", /Cannot move/);
+  assert.equal(canTransition("draft", "posted"), true);
 });
 
 test("approved can schedule, revert, post, or kill", () => {

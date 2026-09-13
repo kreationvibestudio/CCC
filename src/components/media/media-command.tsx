@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -10,22 +10,19 @@ import {
   Copy,
   Heart,
   Loader2,
-  Megaphone,
   MessageSquare,
+  Plus,
   Reply,
   Share2,
   Sparkles,
 } from "lucide-react";
-import { PageHeader, StatCard } from "@/components/shared/page-shell";
 import { FacebookSyncButton } from "@/components/social/facebook-sync-button";
 import { MediaSchemaSetup } from "@/components/media/media-schema-setup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -37,187 +34,369 @@ import {
   createMediaContent,
   draftFromIssue,
   markMediaPosted,
-  publishMediaToFacebook,
   updateMediaStatus,
 } from "@/lib/media/actions";
-import { MEDIA_TRANSITIONS } from "@/lib/media/status";
 import { ISSUE_TOPICS } from "@/lib/media/topics";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { displayFacebookAuthor } from "@/lib/integrations/facebook/comment-author";
 import type { MediaCommandData } from "@/lib/media/data";
-import type { Comment, MediaContent, MediaContentStatus } from "@/types/database";
+import type { Comment, MediaContent } from "@/types/database";
 import type { TeamMember } from "@/lib/comments/data";
 
-const STATUS_VARIANT: Record<MediaContentStatus, "secondary" | "info" | "warning" | "success" | "destructive"> = {
-  draft: "secondary",
-  approved: "info",
-  scheduled: "warning",
-  posted: "success",
-  killed: "destructive",
-};
-
-const CALL_VARIANT: Record<string, "destructive" | "warning" | "secondary"> = {
-  critical: "destructive",
-  high: "warning",
-  watch: "secondary",
-};
-
 async function copyText(text: string, ok: string) {
-  await navigator.clipboard.writeText(text);
-  toast.success(ok);
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(ok);
+  } catch {
+    toast.error("Could not copy. Select the text and copy it yourself.");
+  }
 }
 
 export function MediaCommand({
   data,
   canManage,
   canReply,
-  initialTab = "war-room",
 }: {
   data: MediaCommandData;
   canManage: boolean;
   canReply: boolean;
-  initialTab?: string;
 }) {
-  const tab = initialTab === "calendar" || initialTab === "brief" ? initialTab : "war-room";
+  const next = data.brief.nextPosts[0];
+  const toPost = data.items.filter(
+    (item) => item.status === "draft" || item.status === "approved" || item.status === "scheduled"
+  );
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Media Command"
-        description="Run the shift: comments and posts in the war room, a week of drafts, and a huddle brief you can paste into WhatsApp."
-      >
-        <div className="flex flex-wrap gap-2">
-          <FacebookSyncButton />
-          <Button variant="outline" asChild>
-            <Link href="/comments">Comments inbox</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/social">Social</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/sentiment">Sentiment</Link>
-          </Button>
+    <div className="space-y-8">
+      <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">Media</h1>
+          <p className="text-base font-medium">{data.brief.mediaLine}</p>
+          <p className="text-sm text-muted-foreground">
+            Reply first. Then write one post. Copy the huddle when the team is ready.
+          </p>
         </div>
-      </PageHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => copyText(data.brief.huddleText, "Copied the huddle for WhatsApp")}>
+            <Copy className="h-4 w-4" /> Copy huddle
+          </Button>
+          <FacebookSyncButton />
+        </div>
+      </header>
 
       {data.schemaMissing ? (
-        <MediaSchemaSetup message="The calendar table is not on this database yet. War room and brief still work from Facebook comments and posts." />
+        <MediaSchemaSetup message="One SQL apply unlocks saving drafts. Replies and the huddle already work." />
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Must act" value={data.mustAct.length} change="Pending, flagged, or misinfo" icon={Megaphone} />
-        <StatCard title="Pending" value={data.brief.pending} change="Still waiting on a reply" icon={MessageSquare} />
-        <StatCard title="Misinfo" value={data.brief.misinfo} change="Open flags" />
-        <StatCard title="This week’s drafts" value={data.items.filter((item) => item.status !== "killed").length} change="Calendar items" />
-      </div>
+      <section className="space-y-3" aria-labelledby="reply-now">
+        <StepHeading
+          n={1}
+          title="Reply now"
+          titleId="reply-now"
+          hint={
+            data.mustAct.length === 0
+              ? "Inbox is clear."
+              : `${data.mustAct.length} comment${data.mustAct.length === 1 ? "" : "s"} need a reply — start with rumours.`
+          }
+          action={
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/comments">Full inbox</Link>
+            </Button>
+          }
+        />
+        {data.mustAct.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-sm text-muted-foreground">
+              Nothing urgent. Check Facebook after the next sync.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {data.mustAct.map((comment) => (
+              <MustActRow key={comment.id} comment={comment} team={data.team} canReply={canReply} />
+            ))}
+          </div>
+        )}
+      </section>
 
-      <Tabs defaultValue={tab}>
-        <TabsList>
-          <TabsTrigger value="war-room">War room</TabsTrigger>
-          <TabsTrigger value="calendar">Calendar</TabsTrigger>
-          <TabsTrigger value="brief">Brief</TabsTrigger>
-        </TabsList>
-        <TabsContent value="war-room">
-          <WarRoom data={data} canReply={canReply} />
-        </TabsContent>
-        <TabsContent value="calendar">
-          <CalendarPane
-            items={data.items}
-            topIssue={data.topIssue}
-            canManage={canManage}
-            schemaMissing={data.schemaMissing}
-          />
-        </TabsContent>
-        <TabsContent value="brief">
-          <BriefPane data={data} />
-        </TabsContent>
-      </Tabs>
+      <section className="space-y-3" aria-labelledby="next-post">
+        <StepHeading
+          n={2}
+          title="Write the next post"
+          titleId="next-post"
+          hint={
+            next
+              ? `People are talking about ${next.topic}. Write that, then copy it into Facebook.`
+              : "No hot issue yet. Keep replies moving."
+          }
+        />
+
+        {next ? (
+          <Card className="border-primary/30">
+            <CardContent className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-medium capitalize">{next.topic}</p>
+                <p className="text-sm text-muted-foreground">{next.talkingPoint}</p>
+              </div>
+              {canManage && !data.schemaMissing ? (
+                <DraftIssueButton topic={next.topic} />
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <WriteOwnPost canManage={canManage} disabled={data.schemaMissing} />
+
+        {toPost.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Ready to copy</p>
+            {toPost.map((item) => (
+              <DraftRow key={item.id} item={item} canManage={canManage} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No drafts yet. Write the next post above.</p>
+        )}
+
+      </section>
+
+      <section className="space-y-3" aria-labelledby="what-landed">
+        <StepHeading
+          n={3}
+          title="What landed"
+          titleId="what-landed"
+          hint="Last Facebook posts. Repeat what worked."
+          action={
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/social">All posts</Link>
+            </Button>
+          }
+        />
+        {data.lastPosts.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-sm text-muted-foreground">
+              Sync Facebook to see what is landing.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {data.lastPosts.slice(0, 4).map((post) => (
+              <Card key={post.id}>
+                <CardContent className="space-y-2 py-4">
+                  <p className="text-sm">{post.content || "(no caption)"}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    {post.posted_at ? <span>{formatDate(post.posted_at)}</span> : null}
+                    <span className="inline-flex items-center gap-1"><Heart className="h-3 w-3" /> {formatNumber(post.likes)}</span>
+                    <span className="inline-flex items-center gap-1"><MessageSquare className="h-3 w-3" /> {formatNumber(post.comments_count)}</span>
+                    <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" /> {formatNumber(post.shares)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function WarRoom({ data, canReply }: { data: MediaCommandData; canReply: boolean }) {
+function StepHeading({
+  n,
+  title,
+  titleId,
+  hint,
+  action,
+}: {
+  n: number;
+  title: string;
+  titleId: string;
+  hint: string;
+  action?: React.ReactNode;
+}) {
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 lg:grid-cols-3">
-        {data.calls.map((call) => (
-          <Link key={call.id} href={call.href} className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <Card className="h-full transition-shadow hover:border-primary/40 hover:shadow-md">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-sm">{call.title}</CardTitle>
-                  <Badge variant={CALL_VARIANT[call.severity] ?? "secondary"}>{call.severity}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-1 text-sm text-muted-foreground">
-                <p>{call.reason}</p>
-                <p className="font-medium text-foreground">{call.action}</p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Must-act queue</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {data.mustAct.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No pending, flagged, or misinfo comments in the latest inbox page.</p>
-            ) : (
-              data.mustAct.map((comment) => (
-                <MustActRow key={comment.id} comment={comment} team={data.team} canReply={canReply} />
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Issue heat</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {data.issueHeat.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Sync comments to see topics.</p>
-              ) : (
-                data.issueHeat.map((issue) => (
-                  <div key={issue.topic} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="capitalize">{issue.topic}</span>
-                    <Badge variant="secondary">{issue.count}</Badge>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Last posts</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {data.lastPosts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No Facebook posts synced yet.</p>
-              ) : (
-                data.lastPosts.map((post) => (
-                  <div key={post.id} className="space-y-1 rounded-lg border border-border p-3">
-                    <p className="text-sm">{post.content || "(no caption)"}</p>
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      {post.posted_at ? <span>{formatDate(post.posted_at)}</span> : null}
-                      <span className="inline-flex items-center gap-1"><Heart className="h-3 w-3" /> {formatNumber(post.likes)}</span>
-                      <span className="inline-flex items-center gap-1"><MessageSquare className="h-3 w-3" /> {formatNumber(post.comments_count)}</span>
-                      <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" /> {formatNumber(post.shares)}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+        >
+          {n}
+        </span>
+        <div className="min-w-0">
+          <h2 id={titleId} className="text-lg font-semibold">
+            {title}
+          </h2>
+          <p className="text-sm text-muted-foreground">{hint}</p>
         </div>
       </div>
+      {action}
     </div>
+  );
+}
+
+function DraftIssueButton({ topic }: { topic: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  return (
+    <Button
+      className="shrink-0"
+      disabled={pending}
+      onClick={() => {
+        start(async () => {
+          try {
+            const result = await draftFromIssue(topic);
+            if (result.error) {
+              toast.error(result.error);
+              return;
+            }
+            toast.success(
+              result.reused
+                ? "That draft is already ready — copy it into Facebook"
+                : "Draft ready — copy it into Facebook"
+            );
+            router.refresh();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not write that draft.");
+          }
+        });
+      }}
+    >
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+      Write this post
+    </Button>
+  );
+}
+
+function WriteOwnPost({ canManage, disabled }: { canManage: boolean; disabled: boolean }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, start] = useTransition();
+  const [body, setBody] = useState("");
+  const [topic, setTopic] = useState("");
+
+  if (!canManage) return null;
+
+  return (
+    <>
+      <Button variant="outline" disabled={disabled} onClick={() => setOpen(true)}>
+        <Plus className="h-4 w-4" /> Write your own
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Write your own post</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Under 280 characters. No invented promises.</p>
+          <div className="space-y-1">
+            <Label htmlFor="own-topic">Topic</Label>
+            <NativeSelect id="own-topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
+              <option value="">Pick a topic</option>
+              {ISSUE_TOPICS.filter((item) => item !== "other").map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </NativeSelect>
+          </div>
+          <textarea
+            className="min-h-[120px] w-full rounded-md border border-border bg-background p-3 text-sm"
+            value={body}
+            maxLength={280}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="We hear you on…"
+          />
+          <p className="text-xs text-muted-foreground">{body.length}/280</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button
+              disabled={pending || !body.trim()}
+              onClick={() => {
+                start(async () => {
+                  const title = topic ? `On ${topic}` : "Campaign post";
+                  const result = await createMediaContent({
+                    title,
+                    body: body.trim(),
+                    issue_topic: topic || null,
+                  });
+                  if (result.error) {
+                    toast.error(result.error);
+                    return;
+                  }
+                  toast.success("Draft saved");
+                  setBody("");
+                  setOpen(false);
+                  router.refresh();
+                });
+              }}
+            >
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save draft
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function DraftRow({ item, canManage }: { item: MediaContent; canManage: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-medium text-sm">{item.title}</p>
+          {item.issue_topic ? <Badge variant="secondary">{item.issue_topic}</Badge> : null}
+        </div>
+        <p className="text-sm whitespace-pre-wrap">{item.body}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => copyText(item.body, "Copied — paste into Facebook")}>
+            <Copy className="h-3 w-3" /> Copy for Facebook
+          </Button>
+          {canManage ? (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  start(async () => {
+                    const result = await markMediaPosted(item.id);
+                    if (result.error) {
+                      toast.error(result.error);
+                      return;
+                    }
+                    toast.success("Marked posted");
+                    router.refresh();
+                  });
+                }}
+              >
+                <CheckCircle className="h-3 w-3" /> It’s posted
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={pending}
+                onClick={() => {
+                  start(async () => {
+                    const result = await updateMediaStatus(item.id, "killed");
+                    if (result.error) {
+                      toast.error(result.error);
+                      return;
+                    }
+                    toast.success("Removed");
+                    router.refresh();
+                  });
+                }}
+              >
+                Remove
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -234,6 +413,7 @@ function MustActRow({
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
+  const urgent = comment.is_misinformation || comment.status === "flagged";
 
   async function suggest() {
     setLoading("suggest");
@@ -262,54 +442,53 @@ function MustActRow({
     router.refresh();
   }
 
-  async function assign(userId: string) {
-    setLoading("assign");
-    const result = await assignComment(comment.id, userId || null);
-    setLoading(null);
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-    toast.success("Assigned");
-    router.refresh();
-  }
-
   return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-medium text-sm text-foreground">{displayFacebookAuthor(comment.author_name)}</span>
-        {comment.is_misinformation ? <Badge variant="destructive">Misinfo</Badge> : null}
-        <Badge variant={comment.status === "flagged" ? "destructive" : "warning"}>{comment.status}</Badge>
-        {comment.issue_topic && comment.issue_topic !== "other" ? (
-          <Badge variant="secondary">{comment.issue_topic}</Badge>
-        ) : null}
-        {comment.priority_score >= 70 ? <Badge variant="destructive">P{comment.priority_score}</Badge> : null}
-      </div>
-      <p className="mt-2 text-sm">{comment.content}</p>
-      <div className="mt-2 flex flex-wrap gap-1">
-        <Button size="sm" variant="outline" asChild>
-          <Link href="/comments">Open inbox</Link>
-        </Button>
+    <Card className={urgent ? "border-destructive/40" : undefined}>
+      <CardContent className="space-y-3 py-4">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-sm font-medium text-foreground">{displayFacebookAuthor(comment.author_name)}</span>
+          {comment.is_misinformation ? <Badge variant="destructive">Rumour</Badge> : null}
+          {comment.issue_topic && comment.issue_topic !== "other" ? (
+            <Badge variant="secondary">{comment.issue_topic}</Badge>
+          ) : null}
+        </div>
+        <p className="text-sm">{comment.content}</p>
         {canReply ? (
-          <>
-            <Button size="sm" variant="outline" onClick={() => { setReplyOpen(true); setReplyText(""); }}>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => { setReplyOpen(true); setReplyText(""); }}>
               <Reply className="h-3 w-3" /> Reply
             </Button>
             <Button size="sm" variant="outline" disabled={loading === "suggest"} onClick={suggest}>
               {loading === "suggest" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bot className="h-3 w-3" />}
-              AI Reply
+              Suggest reply
             </Button>
             {team.length > 0 ? (
-              <NativeSelect className="h-8 w-auto text-xs" defaultValue="" onChange={(e) => assign(e.target.value)}>
-                <option value="" disabled>Assign…</option>
+              <NativeSelect
+                className="h-8 w-auto text-xs"
+                defaultValue=""
+                onChange={(e) => {
+                  assignComment(comment.id, e.target.value).then((result) => {
+                    if (result.error) toast.error(result.error);
+                    else {
+                      toast.success("Assigned");
+                      router.refresh();
+                    }
+                  });
+                }}
+              >
+                <option value="" disabled>Hand to…</option>
                 {team.map((member) => (
                   <option key={member.id} value={member.id}>{member.full_name}</option>
                 ))}
               </NativeSelect>
             ) : null}
-          </>
-        ) : null}
-      </div>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/comments">Open inbox</Link>
+          </Button>
+        )}
+      </CardContent>
 
       <Dialog open={replyOpen} onOpenChange={setReplyOpen}>
         <DialogContent>
@@ -323,350 +502,14 @@ function MustActRow({
             onChange={(e) => setReplyText(e.target.value)}
           />
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={suggest} disabled={!!loading}>Suggest with AI</Button>
+            <Button variant="outline" onClick={suggest} disabled={!!loading}>Suggest reply</Button>
             <Button onClick={sendReply} disabled={!!loading || !replyText.trim()}>
               {loading === "reply" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Post reply
+              Send
             </Button>
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function CalendarPane({
-  items,
-  topIssue,
-  canManage,
-  schemaMissing,
-}: {
-  items: MediaContent[];
-  topIssue: string | null;
-  canManage: boolean;
-  schemaMissing: boolean;
-}) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [topic, setTopic] = useState(topIssue && ISSUE_TOPICS.includes(topIssue as (typeof ISSUE_TOPICS)[number]) ? topIssue : "");
-  const [talking, setTalking] = useState("");
-  const [scheduledAt, setScheduledAt] = useState("");
-
-  const grouped = useMemo(() => {
-    const order: MediaContentStatus[] = ["draft", "approved", "scheduled", "posted", "killed"];
-    return order.map((status) => ({ status, rows: items.filter((item) => item.status === status) }));
-  }, [items]);
-
-  function submit(form?: { title: string; body: string; issue_topic?: string; talking_points?: string[]; scheduled_at?: string }) {
-    start(async () => {
-      const result = await createMediaContent({
-        title: form?.title ?? title,
-        body: form?.body ?? body,
-        issue_topic: form?.issue_topic ?? (topic || null),
-        talking_points: form?.talking_points ?? talking.split("\n").map((line) => line.trim()).filter(Boolean),
-        scheduled_at: form?.scheduled_at ?? (scheduledAt || null),
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("Draft saved");
-      setTitle("");
-      setBody("");
-      setTalking("");
-      setScheduledAt("");
-      router.refresh();
-    });
-  }
-
-  function draftIssue(issue: string) {
-    start(async () => {
-      const result = await draftFromIssue(issue);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(`Drafted “${result.title ?? issue}”`);
-      router.refresh();
-    });
-  }
-
-  return (
-    <div className="grid gap-4 xl:grid-cols-3">
-      <Card className="xl:col-span-1">
-        <CardHeader>
-          <CardTitle className="text-base">New post</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {topIssue ? (
-            <Button
-              type="button"
-              className="w-full"
-              disabled={!canManage || pending || schemaMissing}
-              onClick={() => draftIssue(topIssue)}
-            >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Draft a {topIssue} post
-            </Button>
-          ) : null}
-          <div className="space-y-1">
-            <Label htmlFor="media-title">Title</Label>
-            <Input id="media-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="On roads" />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="media-body">Body</Label>
-            <textarea
-              id="media-body"
-              className="min-h-[120px] w-full rounded-md border border-border bg-background p-3 text-sm"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              maxLength={280}
-              placeholder="Under 280 characters. No invented promises."
-            />
-            <p className="text-xs text-muted-foreground">{body.length}/280</p>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="media-topic">Issue</Label>
-            <NativeSelect id="media-topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
-              <option value="">No topic</option>
-              {ISSUE_TOPICS.filter((item) => item !== "other").map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="media-points">Talking points (one per line)</Label>
-            <textarea
-              id="media-points"
-              className="min-h-[80px] w-full rounded-md border border-border bg-background p-3 text-sm"
-              value={talking}
-              onChange={(e) => setTalking(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="media-when">Schedule (optional)</Label>
-            <Input id="media-when" type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
-          </div>
-          <Button type="button" disabled={!canManage || pending || schemaMissing} onClick={() => submit()}>
-            Save draft
-          </Button>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-4 xl:col-span-2">
-        {grouped.map((group) => (
-          <Card key={group.status}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-base capitalize">{group.status}</CardTitle>
-              <Badge variant={STATUS_VARIANT[group.status]}>{group.rows.length}</Badge>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {group.rows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">None</p>
-              ) : (
-                group.rows.map((item) => (
-                  <CalendarRow key={item.id} item={item} canManage={canManage} />
-                ))
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CalendarRow({ item, canManage }: { item: MediaContent; canManage: boolean }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [when, setWhen] = useState("");
-  const nexts = MEDIA_TRANSITIONS[item.status];
-
-  function move(to: MediaContentStatus) {
-    start(async () => {
-      const result = await updateMediaStatus(item.id, to, { scheduledAt: when || item.scheduled_at });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(`Moved to ${to}`);
-      router.refresh();
-    });
-  }
-
-  function markPosted() {
-    start(async () => {
-      const result = await markMediaPosted(item.id);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("Marked posted");
-      router.refresh();
-    });
-  }
-
-  function publish() {
-    start(async () => {
-      const result = await publishMediaToFacebook(item.id);
-      if ("error" in result && result.error) {
-        toast.error(result.error);
-        return;
-      }
-      if ("copyInstead" in result && result.copyInstead) {
-        await copyText(item.body, "Copied body — Facebook could not publish. Paste in Meta Business Suite.");
-        if (result.publishError) toast.message(result.publishError);
-        return;
-      }
-      toast.success("published" in result && result.published ? "Published to Facebook" : "Saved");
-      router.refresh();
-    });
-  }
-
-  return (
-    <div className="space-y-2 rounded-lg border border-border p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="font-medium text-sm">{item.title}</p>
-        {item.issue_topic ? <Badge variant="secondary">{item.issue_topic}</Badge> : null}
-        <Badge variant="outline">{item.platform}</Badge>
-      </div>
-      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.body}</p>
-      {item.talking_points.length > 0 ? (
-        <ul className="list-disc pl-5 text-xs text-muted-foreground">
-          {item.talking_points.map((point) => <li key={point}>{point}</li>)}
-        </ul>
-      ) : null}
-      {item.scheduled_at ? (
-        <p className="text-xs text-muted-foreground">Scheduled {formatDate(item.scheduled_at)}</p>
-      ) : null}
-      <div className="flex flex-wrap gap-1">
-        <Button size="sm" variant="outline" onClick={() => copyText(item.body, "Copied for Meta Business Suite")}>
-          <Copy className="h-3 w-3" /> Copy body
-        </Button>
-        {canManage && item.status !== "posted" && item.status !== "killed" ? (
-          <>
-            <Input
-              type="datetime-local"
-              className="h-8 w-auto text-xs"
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
-            />
-            {nexts.includes("approved") ? (
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => move("approved")}>Approve</Button>
-            ) : null}
-            {nexts.includes("scheduled") ? (
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => move("scheduled")}>Schedule</Button>
-            ) : null}
-            {nexts.includes("draft") ? (
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => move("draft")}>Back to draft</Button>
-            ) : null}
-            {nexts.includes("posted") ? (
-              <Button size="sm" variant="outline" disabled={pending} onClick={markPosted}>
-                <CheckCircle className="h-3 w-3" /> Mark posted
-              </Button>
-            ) : null}
-            <Button size="sm" variant="outline" disabled={pending} onClick={publish}>
-              Publish if token allows
-            </Button>
-            {nexts.includes("killed") ? (
-              <Button size="sm" variant="ghost" disabled={pending} onClick={() => move("killed")}>Kill</Button>
-            ) : null}
-          </>
-        ) : null}
-        {canManage && item.status === "killed" ? (
-          <Button size="sm" variant="outline" disabled={pending} onClick={() => move("draft")}>Restore draft</Button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function BriefPane({ data }: { data: MediaCommandData }) {
-  const { brief } = data;
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0">
-          <div>
-            <CardTitle className="text-base">Daily media brief</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">{brief.mediaLine}</p>
-          </div>
-          <Button variant="outline" onClick={() => copyText(brief.huddleText, "Huddle copied for WhatsApp")}>
-            <Copy className="h-4 w-4" /> Copy for WhatsApp
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <p>{brief.summary}</p>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="success">Positive {brief.sentimentBreakdown.positive}%</Badge>
-            <Badge variant="secondary">Neutral {brief.sentimentBreakdown.neutral}%</Badge>
-            <Badge variant="destructive">Negative {brief.sentimentBreakdown.negative}%</Badge>
-            <Badge variant="warning">{brief.pending} pending</Badge>
-            <Badge variant="outline">{brief.flagged} flagged</Badge>
-            <Badge variant="destructive">{brief.misinfo} misinfo</Badge>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {brief.topIssues.map((issue) => (
-              <Badge key={issue} variant="secondary">{issue}</Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Best post (7 days)</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            {brief.bestPost ? (
-              <>
-                <p className="text-foreground">{brief.bestPost.content || "(no caption)"}</p>
-                <p className="mt-2">{brief.bestPost.likes} likes · {brief.bestPost.comments_count} comments · {brief.bestPost.shares} shares</p>
-              </>
-            ) : (
-              <p>No Facebook post in the last 7 days.</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base">Watch (weakest, 7 days)</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            {brief.worstPost ? (
-              <>
-                <p className="text-foreground">{brief.worstPost.content || "(no caption)"}</p>
-                <p className="mt-2">{brief.worstPost.likes} likes · {brief.worstPost.comments_count} comments</p>
-              </>
-            ) : (
-              <p>Not enough posts to compare.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">Next three posts</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {brief.nextPosts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No issue heat yet — keep replies moving instead of inventing a post.</p>
-          ) : (
-            brief.nextPosts.map((item, index) => (
-              <div key={`${item.topic}-${index}`} className="rounded-lg border border-border p-3">
-                <p className="text-sm font-medium capitalize">{index + 1}. {item.topic}</p>
-                <p className="text-sm">{item.talkingPoint}</p>
-                <p className="text-xs text-muted-foreground">{item.why}</p>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">WhatsApp huddle</CardTitle></CardHeader>
-        <CardContent>
-          <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{brief.huddleText}</pre>
-        </CardContent>
-      </Card>
-    </div>
+    </Card>
   );
 }

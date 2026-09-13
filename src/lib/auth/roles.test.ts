@@ -35,6 +35,14 @@ describe("Field Agent role", () => {
   });
 });
 
+describe("media team home", () => {
+  it("sends the media team to Media, not the executive dashboard", () => {
+    assert.equal(homePathForRole("media_director"), "/media");
+    assert.equal(homePathForRole("social_media_team"), "/media");
+    assert.equal(homePathForRole("campaign_director"), "/dashboard");
+  });
+});
+
 describe("PU agent code issuance", () => {
   it("lets HQ campaign leads open PU Agents and issue codes", () => {
     for (const role of [

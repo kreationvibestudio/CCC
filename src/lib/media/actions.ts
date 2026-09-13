@@ -92,39 +92,62 @@ export async function draftFromIssue(topic: string) {
 
   const issue = isIssueTopic(topic) ? topic : "other";
   const supabase = await createClient();
-  const { data: comments } = await supabase
-    .from("comments")
-    .select("content")
-    .eq("tenant_id", gate.user.profile.tenant_id)
-    .eq("issue_topic", issue)
-    .order("created_at", { ascending: false })
-    .limit(8);
 
-  const draft = await draftPostWithAI(
-    issue,
-    (comments ?? []).map((row) => String(row.content ?? ""))
-  );
+  try {
+    if (issue !== "other") {
+      const { data: existing } = await supabase
+        .from("media_content")
+        .select("id, title")
+        .eq("tenant_id", gate.user.profile.tenant_id)
+        .eq("issue_topic", issue)
+        .in("status", ["draft", "approved", "scheduled"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-  const { error } = await supabase.from("media_content").insert({
-    tenant_id: gate.user.profile.tenant_id,
-    title: draft.title,
-    body: draft.body,
-    issue_topic: issue === "other" ? null : issue,
-    platform: "facebook",
-    status: "draft",
-    talking_points: draft.talking_points,
-    created_by: gate.user.id,
-  });
-
-  if (error) {
-    if (isMissingRelationError(error.message, "media_content")) {
-      return { error: "Apply the media_content SQL in Supabase, then refresh." };
+      if (existing) {
+        return { success: true, title: existing.title, reused: true };
+      }
     }
-    return { error: error.message };
-  }
 
-  revalidateMedia();
-  return { success: true, title: draft.title };
+    const { data: comments } = await supabase
+      .from("comments")
+      .select("content")
+      .eq("tenant_id", gate.user.profile.tenant_id)
+      .eq("issue_topic", issue)
+      .order("created_at", { ascending: false })
+      .limit(8);
+
+    const draft = await draftPostWithAI(
+      issue,
+      (comments ?? []).map((row) => String(row.content ?? ""))
+    );
+
+    const { error } = await supabase.from("media_content").insert({
+      tenant_id: gate.user.profile.tenant_id,
+      title: draft.title,
+      body: draft.body,
+      issue_topic: issue === "other" ? null : issue,
+      platform: "facebook",
+      status: "draft",
+      talking_points: draft.talking_points,
+      created_by: gate.user.id,
+    });
+
+    if (error) {
+      if (isMissingRelationError(error.message, "media_content")) {
+        return { error: "Apply the media_content SQL in Supabase, then refresh." };
+      }
+      return { error: error.message };
+    }
+
+    revalidateMedia();
+    return { success: true, title: draft.title };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Could not write that draft. Try again.",
+    };
+  }
 }
 
 export async function updateMediaStatus(

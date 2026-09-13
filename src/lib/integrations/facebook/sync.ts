@@ -68,13 +68,13 @@ async function getFacebookConfig(tenantId: string) {
 
   if (!pageId || pageId.length < 5 || /^your[_-]/i.test(pageId) || pageId === "[SENSITIVE]") {
     throw new FacebookApiError(
-      "Facebook page ID is missing. Paste it under Social Media → Connect Facebook (or set FACEBOOK_PAGE_ID)."
+      "Facebook page ID is missing. Paste it under Page posts → Connect Facebook (or set FACEBOOK_PAGE_ID)."
     );
   }
 
   if (!isUsableFacebookToken(userToken) && !isUsableFacebookToken(pageToken)) {
     throw new FacebookApiError(
-      "Facebook page token is missing or expired. Paste a never-expiring page token under Social Media → Connect Facebook."
+      "Facebook page token is missing or expired. Paste a never-expiring page token under Page posts → Connect Facebook."
     );
   }
 

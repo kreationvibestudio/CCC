@@ -1,7 +1,7 @@
 import type { MediaContentStatus } from "../../types/database.ts";
 
 export const MEDIA_TRANSITIONS: Record<MediaContentStatus, MediaContentStatus[]> = {
-  draft: ["approved", "killed"],
+  draft: ["approved", "posted", "killed"],
   approved: ["scheduled", "draft", "posted", "killed"],
   scheduled: ["posted", "approved", "killed"],
   posted: [],

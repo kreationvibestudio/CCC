@@ -41,6 +41,8 @@ export interface FacebookSyncResult {
   commentsSynced: number;
   commentsSkippedReason?: string;
   tokenSource?: string;
+  authorsNamed?: number;
+  authorsHidden?: number;
 }
 
 export class FacebookApiError extends Error {
@@ -373,81 +375,111 @@ export async function fetchPosts(pageId: string, pageToken: string, limit = 25):
   throw new FacebookApiError(`Could not fetch posts. ${FACEBOOK_PERMISSION_HELP}`);
 }
 
-const COMMENT_AUTHOR_FIELDS = "id,name,first_name,last_name,username,picture";
-const COMMENT_FIELD_SETS = [
-  `id,message,created_time,from{${COMMENT_AUTHOR_FIELDS}}`,
-  "id,message,created_time,from{id,name,username,picture}",
-  "id,message,created_time,from{id,name,picture}",
-  "id,message,created_time,from",
-] as const;
+const COMMENT_LIST_FIELDS = "id,message,created_time,from";
+const COMMENT_FROM_FIELDS = "from";
 
 function graphRecordHasError(value: unknown) {
   return Boolean(value && typeof value === "object" && "error" in value);
 }
 
-/** Fill in `from` when the comments list omitted name/username but Graph has them on the node or user. */
-async function enrichCommentAuthors(comments: FacebookComment[], pageToken: string) {
-  const missing = comments.filter((comment) => {
-    const resolved = resolveFacebookCommentAuthor(comment);
-    return resolved.authorName === UNKNOWN_FACEBOOK_AUTHOR;
-  });
-  if (missing.length === 0) return;
+function uniqueTokens(tokens: Array<string | null | undefined>) {
+  return [...new Set(tokens.filter((token) => isUsableFacebookToken(token)))];
+}
 
-  try {
-    const ids = missing.map((comment) => comment.id).slice(0, 50);
-    const details = await graphGet<Record<string, FacebookComment>>("/", pageToken, {
-      ids: ids.join(","),
-      fields: `from{${COMMENT_AUTHOR_FIELDS}}`,
-    });
-    for (const comment of comments) {
-      const extra = details[comment.id];
-      if (!extra || graphRecordHasError(extra)) continue;
-      mergeFacebookCommentFrom(comment, extra.from);
+function commentStillUnknown(comment: FacebookComment) {
+  return resolveFacebookCommentAuthor(comment).authorName === UNKNOWN_FACEBOOK_AUTHOR;
+}
+
+/** Fill in `from` when the comments list omitted it. Prefer a plain `from` — expanded user fields often strip the whole object. */
+export async function enrichCommentAuthors(
+  comments: FacebookComment[],
+  tokens: Array<string | null | undefined>
+) {
+  const usableTokens = uniqueTokens(tokens);
+  if (usableTokens.length === 0) return;
+
+  for (const token of usableTokens) {
+    const missing = comments.filter(commentStillUnknown);
+    if (missing.length === 0) return;
+
+    for (let i = 0; i < missing.length; i += 50) {
+      const chunk = missing.slice(i, i + 50);
+      try {
+        const details = await graphGet<Record<string, FacebookComment>>("/", token, {
+          ids: chunk.map((comment) => comment.id).join(","),
+          fields: COMMENT_FROM_FIELDS,
+        });
+        for (const comment of comments) {
+          const extra = details[comment.id];
+          if (!extra || graphRecordHasError(extra)) continue;
+          mergeFacebookCommentFrom(comment, extra.from);
+        }
+      } catch {
+        // List data is still usable even if this token cannot read authors.
+      }
     }
-  } catch {
-    // List data is still usable even if author enrichment fails.
-  }
 
-  const stillMissingIds = [
-    ...new Set(
-      comments
-        .filter((comment) => {
-          const resolved = resolveFacebookCommentAuthor(comment);
-          return resolved.authorName === UNKNOWN_FACEBOOK_AUTHOR && comment.from?.id;
-        })
-        .map((comment) => comment.from?.id)
-        .filter((id): id is string => Boolean(id))
-    ),
-  ].slice(0, 50);
+    const stillMissingUserIds = [
+      ...new Set(
+        comments
+          .filter((comment) => commentStillUnknown(comment) && comment.from?.id)
+          .map((comment) => comment.from?.id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
 
-  if (stillMissingIds.length === 0) return;
-
-  try {
-    const users = await graphGet<Record<string, FacebookCommentFrom>>("/", pageToken, {
-      ids: stillMissingIds.join(","),
-      fields: COMMENT_AUTHOR_FIELDS,
-    });
-    for (const comment of comments) {
-      const user = comment.from?.id ? users[comment.from.id] : undefined;
-      if (!user || graphRecordHasError(user)) continue;
-      mergeFacebookCommentFrom(comment, user);
+    for (let i = 0; i < stillMissingUserIds.length; i += 50) {
+      const chunk = stillMissingUserIds.slice(i, i + 50);
+      try {
+        const users = await graphGet<Record<string, FacebookCommentFrom>>("/", token, {
+          ids: chunk.join(","),
+          fields: "id,name,picture",
+        });
+        for (const comment of comments) {
+          const user = comment.from?.id ? users[comment.from.id] : undefined;
+          if (!user || graphRecordHasError(user)) continue;
+          mergeFacebookCommentFrom(comment, user);
+        }
+      } catch {
+        // Keep whatever author fields we already have.
+      }
     }
-  } catch {
-    // Keep whatever author fields we already have.
   }
 }
 
-export async function fetchPostComments(postId: string, pageToken: string): Promise<FacebookComment[]> {
+export async function fetchCommentAuthorsByIds(
+  commentIds: string[],
+  tokens: Array<string | null | undefined>
+): Promise<Map<string, FacebookCommentFrom>> {
+  const comments: FacebookComment[] = commentIds
+    .filter(Boolean)
+    .map((id) => ({ id, message: "", created_time: "" }));
+  await enrichCommentAuthors(comments, tokens);
+  const found = new Map<string, FacebookCommentFrom>();
+  for (const comment of comments) {
+    if (!comment.from || commentStillUnknown(comment)) continue;
+    found.set(comment.id, comment.from);
+  }
+  return found;
+}
+
+export async function fetchPostComments(
+  postId: string,
+  pageToken: string,
+  opts?: { userToken?: string | null }
+): Promise<FacebookComment[]> {
+  const tokens = uniqueTokens([pageToken, opts?.userToken]);
   let lastError: unknown;
 
-  for (const fields of COMMENT_FIELD_SETS) {
+  const attempts: Array<Record<string, string>> = [
+    { fields: COMMENT_LIST_FIELDS, filter: "stream", limit: "100" },
+    { fields: COMMENT_LIST_FIELDS, limit: "100" },
+  ];
+  for (const params of attempts) {
     try {
-      const result = await graphGet<{ data: FacebookComment[] }>(`/${postId}/comments`, pageToken, {
-        fields,
-        limit: "100",
-      });
+      const result = await graphGet<{ data: FacebookComment[] }>(`/${postId}/comments`, pageToken, params);
       const comments = result.data ?? [];
-      await enrichCommentAuthors(comments, pageToken);
+      await enrichCommentAuthors(comments, tokens);
       return comments;
     } catch (err) {
       lastError = err;

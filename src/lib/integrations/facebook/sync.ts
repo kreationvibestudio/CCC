@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { analyzeCommentText } from "@/lib/ai/analyze-comment";
 import {
+  fetchCommentAuthorsByIds,
   fetchPageInfo,
   fetchPostComments,
   fetchPosts,
@@ -12,7 +13,10 @@ import {
   FacebookApiError,
 } from "./client";
 import { isSocialDemoModeEnabled, seedDemoSocialData, shouldAttemptLiveFacebookSync } from "./demo";
-import { resolveFacebookCommentAuthor } from "./comment-author";
+import {
+  isPlaceholderFacebookAuthor,
+  resolveFacebookCommentAuthor,
+} from "./comment-author";
 
 const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
@@ -242,7 +246,7 @@ async function syncFacebookLive(
     if (skipRemainingComments) continue;
 
     try {
-      const comments = await fetchPostComments(post.id, pageToken);
+      const comments = await fetchPostComments(post.id, pageToken, { userToken: config.userToken });
 
       for (const comment of comments) {
         const { data: existingComment } = await supabase
@@ -302,14 +306,106 @@ async function syncFacebookLive(
     }
   }
 
+  const authors = await refreshStoredFacebookCommentAuthors(tenantId, {
+    pageToken,
+    userToken: config.userToken,
+  });
+  if (!commentsSkippedReason && authors.hidden > 0 && authors.updated === 0) {
+    commentsSkippedReason =
+      `Facebook hid ${authors.hidden} commenter name${authors.hidden === 1 ? "" : "s"}. ` +
+      "Meta only returns visitor names after Advanced Access to Business Asset User Profile Access.";
+  }
+
   await supabase.from("activities").insert({
     tenant_id: tenantId,
     action: "facebook.sync",
     description: `Synced ${postsSynced} Facebook posts from ${page.name}`,
-    metadata: { postsSynced, commentsSynced, tokenSource, commentFailures },
+    metadata: { postsSynced, commentsSynced, tokenSource, commentFailures, ...authors },
   });
 
-  return { page, postsSynced, commentsSynced, commentsSkippedReason, tokenSource };
+  return {
+    page,
+    postsSynced,
+    commentsSynced,
+    commentsSkippedReason,
+    tokenSource,
+    authorsNamed: authors.updated,
+    authorsHidden: authors.hidden,
+  };
+}
+
+export async function refreshStoredFacebookCommentAuthors(
+  tenantId: string,
+  tokens?: { pageToken?: string; userToken?: string | null }
+): Promise<{ updated: number; hidden: number; checked: number }> {
+  const supabase = await getDbClient();
+  const { data: rows } = await supabase
+    .from("comments")
+    .select("id, platform_comment_id, author_name, author_avatar")
+    .eq("tenant_id", tenantId)
+    .eq("platform", "facebook")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const placeholders = (rows ?? []).filter((row) => isPlaceholderFacebookAuthor(row.author_name));
+  if (placeholders.length === 0) {
+    return { updated: 0, hidden: 0, checked: 0 };
+  }
+
+  let pageToken = tokens?.pageToken ?? "";
+  let userToken = tokens?.userToken ?? "";
+  try {
+    if (!isUsableFacebookToken(pageToken) || !isUsableFacebookToken(userToken)) {
+      const config = await getFacebookConfig(tenantId);
+      userToken = userToken || config.userToken;
+      if (!isUsableFacebookToken(pageToken)) {
+        const { data: existingAccount } = await supabase
+          .from("social_accounts")
+          .select("access_token_encrypted")
+          .eq("tenant_id", tenantId)
+          .eq("platform", "facebook")
+          .eq("account_id", config.pageId)
+          .maybeSingle();
+        const resolved = await getWorkingPageToken({
+          pageId: config.pageId,
+          envPageToken: config.pageToken,
+          envUserToken: config.userToken,
+          storedPageToken: existingAccount?.access_token_encrypted ?? config.storedPageToken,
+        });
+        pageToken = resolved.pageToken;
+      }
+    }
+  } catch {
+    return { updated: 0, hidden: placeholders.length, checked: placeholders.length };
+  }
+
+  const found = await fetchCommentAuthorsByIds(
+    placeholders.map((row) => row.platform_comment_id),
+    [pageToken, userToken]
+  );
+
+  let updated = 0;
+  for (const row of placeholders) {
+    const from = found.get(row.platform_comment_id);
+    if (!from) continue;
+    const author = resolveFacebookCommentAuthor({ from }, row.author_name);
+    if (isPlaceholderFacebookAuthor(author.authorName)) continue;
+    const { error } = await supabase
+      .from("comments")
+      .update({
+        author_name: author.authorName,
+        author_avatar: author.authorAvatar ?? row.author_avatar ?? null,
+      })
+      .eq("id", row.id);
+    if (error) throw new FacebookApiError(error.message);
+    updated++;
+  }
+
+  return {
+    updated,
+    hidden: placeholders.length - updated,
+    checked: placeholders.length,
+  };
 }
 
 export async function syncFacebookForCampaignTenant() {

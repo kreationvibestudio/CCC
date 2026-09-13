@@ -68,6 +68,18 @@ Then redeploy.
 
 ---
 
+## Commenter names show as Unknown commenter / Facebook User
+
+Graph returns the Page's own name (e.g. Hon Akhakon Anenih) but **hides visitor names** until Meta approves:
+
+- Advanced Access to `pages_read_user_content`, `pages_read_engagement`, `pages_show_list`
+- Advanced Access to **[Business Asset User Profile Access](https://developers.facebook.com/docs/features-reference/business-asset-user-profile-access/)**
+- Business verification and a Live app
+
+Tokens and field requests cannot invent names Facebook omits. After Meta approves the feature, click **Sync Facebook Now**. Until then, HQ can set a name from the public Page.
+
+---
+
 ## Permission error (`pages_read_engagement` / `#10`)
 
 Regenerate the token with the permissions listed above, then update Vercel and redeploy.

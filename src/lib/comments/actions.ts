@@ -7,6 +7,8 @@ import { denyWriteIfRestricted } from "@/types/auth";
 import { analyzeCommentWithAI } from "@/lib/ai/analyze-comment";
 import { suggestReply } from "@/lib/ai/suggest-reply";
 import { postFacebookCommentReply } from "@/lib/integrations/facebook/reply";
+import { refreshStoredFacebookCommentAuthors } from "@/lib/integrations/facebook/sync";
+import { isPlaceholderFacebookAuthor } from "@/lib/integrations/facebook/comment-author";
 
 export async function updateCommentStatus(
   commentId: string,
@@ -199,4 +201,35 @@ export async function getSuggestedReply(commentId: string) {
   if (!comment) return { error: "Not found" };
   const suggestion = await suggestReply(comment);
   return { suggestion };
+}
+
+export async function refreshFacebookCommentAuthors() {
+  const user = await requirePermission("comments.reply");
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
+  try {
+    const result = await refreshStoredFacebookCommentAuthors(user.profile.tenant_id);
+    if (result.updated > 0) revalidatePath("/comments");
+    return result;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not refresh commenter names" };
+  }
+}
+
+export async function updateCommentAuthor(commentId: string, authorName: string) {
+  const user = await requirePermission("comments.moderate");
+  const blocked = denyWriteIfRestricted(user.role);
+  if (blocked) return { error: blocked };
+  const trimmed = authorName.trim();
+  if (!trimmed || isPlaceholderFacebookAuthor(trimmed)) {
+    return { error: "Enter the commenter's real name" };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("comments")
+    .update({ author_name: trimmed })
+    .eq("id", commentId);
+  if (error) return { error: error.message };
+  revalidatePath("/comments");
+  return { success: true };
 }

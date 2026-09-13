@@ -81,7 +81,16 @@ export function FacebookConnectForm({
           </li>
           <li>
             Add permissions: <code>pages_show_list</code>, <code>pages_read_engagement</code>,{" "}
-            <code>pages_read_user_content</code>, <code>pages_manage_engagement</code>
+            <code>pages_read_user_content</code>, <code>pages_manage_engagement</code>. Visitor names
+            also need Advanced Access to{" "}
+            <a
+              className="underline"
+              href="https://developers.facebook.com/docs/features-reference/business-asset-user-profile-access/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Business Asset User Profile Access
+            </a>
           </li>
           <li>
             Generate Token as a page admin, then run <code>GET /me/accounts</code> and copy the{" "}

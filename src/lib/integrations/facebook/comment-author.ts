@@ -1,4 +1,5 @@
 export const UNKNOWN_FACEBOOK_AUTHOR = "Facebook User";
+export const UNKNOWN_FACEBOOK_AUTHOR_LABEL = "Unknown commenter";
 
 export type FacebookCommentFrom = {
   id?: string;
@@ -22,7 +23,13 @@ function clean(value?: string | null) {
 export function isPlaceholderFacebookAuthor(name?: string | null) {
   const trimmed = clean(name);
   if (!trimmed) return true;
-  return /^facebook user$/i.test(trimmed);
+  return /^(facebook user|unknown commenter)$/i.test(trimmed);
+}
+
+/** Label for the inbox. Graph often omits visitor names; do not show "Facebook User" as a person. */
+export function displayFacebookAuthor(name?: string | null) {
+  if (isPlaceholderFacebookAuthor(name)) return UNKNOWN_FACEBOOK_AUTHOR_LABEL;
+  return clean(name) ?? UNKNOWN_FACEBOOK_AUTHOR_LABEL;
 }
 
 /** Display name from Graph `from.name`, then username, then a prior stored name. */

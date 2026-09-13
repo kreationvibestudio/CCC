@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   assignComment, flagMisinformation, getSuggestedReply,
   replyToComment, resolveComment, classifyAllComments,
+  refreshFacebookCommentAuthors, updateCommentAuthor,
 } from "@/lib/comments/actions";
 import { FacebookSyncButton } from "@/components/social/facebook-sync-button";
 import { PageHeader, EmptyState } from "@/components/shared/page-shell";
@@ -22,10 +23,14 @@ import {
   orderedQuickAnswers,
   recommendedQuickAnswerIds,
 } from "@/lib/comments/quick-answers";
+import {
+  displayFacebookAuthor,
+  isPlaceholderFacebookAuthor,
+} from "@/lib/integrations/facebook/comment-author";
 import type { Comment } from "@/types/database";
 import type { TeamMember } from "@/lib/comments/data";
 import {
-  Bot, CheckCircle, Flag, Loader2, MessageSquare, Reply, Sparkles,
+  Bot, CheckCircle, Flag, Loader2, MessageSquare, Pencil, Reply, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/components/providers/auth-provider";
@@ -57,6 +62,29 @@ export function CommentsInbox({
   const [replyText, setReplyText] = useState("");
   const [selectedQuickAnswer, setSelectedQuickAnswer] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState("");
+
+  const hiddenAuthors = comments.filter(
+    (comment) => comment.platform === "facebook" && isPlaceholderFacebookAuthor(comment.author_name)
+  ).length;
+
+  useEffect(() => {
+    if (!canWrite || hiddenAuthors === 0) return;
+    let cancelled = false;
+    refreshFacebookCommentAuthors().then((result) => {
+      if (cancelled || "error" in result) return;
+      if (result.updated > 0) {
+        toast.success(
+          `Filled ${result.updated} commenter name${result.updated === 1 ? "" : "s"} from Facebook`
+        );
+        router.refresh();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [canWrite, hiddenAuthors, router]);
 
   const filtered = useMemo(() => {
     return comments.filter((c) => {
@@ -126,6 +154,18 @@ export function CommentsInbox({
     router.refresh();
   }
 
+  async function handleRename() {
+    if (!renameId || !renameText.trim()) return;
+    setLoading(renameId);
+    const result = await updateCommentAuthor(renameId, renameText.trim());
+    setLoading(null);
+    if (result.error) { toast.error(result.error); return; }
+    toast.success("Commenter name saved");
+    setRenameId(null);
+    setRenameText("");
+    router.refresh();
+  }
+
   const replyComment = comments.find((comment) => comment.id === replyOpen) ?? null;
   const quickAnswers = replyComment ? orderedQuickAnswers(replyComment) : [];
   const recommendedIds = replyComment
@@ -171,6 +211,22 @@ export function CommentsInbox({
         <Badge variant="secondary">{filtered.length} comments</Badge>
       </div>
 
+      {hiddenAuthors > 0 ? (
+        <div className="rounded-md border border-amber-400/60 bg-amber-500/15 px-3 py-2 text-sm text-amber-100">
+          Facebook hid {hiddenAuthors} commenter name{hiddenAuthors === 1 ? "" : "s"}. Meta only
+          returns visitor names after Advanced Access to{" "}
+          <a
+            className="underline"
+            href="https://developers.facebook.com/docs/features-reference/business-asset-user-profile-access/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Business Asset User Profile Access
+          </a>
+          . Sync again after Meta approves it, or set a name from the page.
+        </div>
+      ) : null}
+
       {filtered.length === 0 ? (
         <EmptyState title="No comments match" description="Sync Facebook or adjust filters" action={<FacebookSyncButton />} />
       ) : (
@@ -182,7 +238,22 @@ export function CommentsInbox({
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className="capitalize">{comment.platform}</Badge>
-                      <span className="font-medium text-sm">{comment.author_name}</span>
+                      <span className="font-medium text-sm">
+                        {displayFacebookAuthor(comment.author_name)}
+                      </span>
+                      {canWrite && comment.platform === "facebook" && isPlaceholderFacebookAuthor(comment.author_name) ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-1 text-xs"
+                          onClick={() => {
+                            setRenameId(comment.id);
+                            setRenameText("");
+                          }}
+                        >
+                          <Pencil className="h-3 w-3 mr-1" /> Set name
+                        </Button>
+                      ) : null}
                       <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
                       {comment.priority_score >= 70 && (
                         <Badge variant="destructive">Priority {comment.priority_score}</Badge>
@@ -254,7 +325,7 @@ export function CommentsInbox({
           {replyComment ? (
             <blockquote className="rounded-md border bg-muted/50 p-3 text-sm">
               <p className="mb-1 text-xs font-medium text-muted-foreground">
-                {replyComment.author_name}
+                {displayFacebookAuthor(replyComment.author_name)}
               </p>
               <p className="whitespace-pre-wrap">{replyComment.content}</p>
             </blockquote>
@@ -279,7 +350,10 @@ export function CommentsInbox({
                       variant={selected ? "default" : "outline"}
                       className="h-auto max-w-full whitespace-normal px-3 py-1.5 text-left"
                       onClick={() => {
-                        setReplyText(fillQuickAnswer(answer.body, replyComment.author_name));
+                        setReplyText(fillQuickAnswer(
+                          answer.body,
+                          isPlaceholderFacebookAuthor(replyComment.author_name) ? "" : replyComment.author_name
+                        ));
                         setSelectedQuickAnswer(answer.id);
                       }}
                     >
@@ -316,6 +390,29 @@ export function CommentsInbox({
             <Button onClick={handleReply} disabled={!!loading || !replyText.trim()}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Post Reply
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!renameId} onOpenChange={(o) => !o && setRenameId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set commenter name</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Facebook hid this visitor&apos;s name. Type it from the Page if you can see it there.
+          </p>
+          <Input
+            value={renameText}
+            onChange={(e) => setRenameText(e.target.value)}
+            placeholder="e.g. Ada Okojie"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRenameId(null)}>Cancel</Button>
+            <Button onClick={handleRename} disabled={!!loading || !renameText.trim()}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save name
             </Button>
           </div>
         </DialogContent>

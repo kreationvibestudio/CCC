@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader, EmptyState } from "@/components/shared/page-shell";
 import { FacebookSyncButton } from "@/components/social/facebook-sync-button";
 import { formatDate } from "@/lib/utils";
+import { displayFacebookAuthor } from "@/lib/integrations/facebook/comment-author";
 import type { Comment } from "@/types/database";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "success" | "warning" | "destructive"> = {
@@ -37,7 +38,7 @@ export function CommentsDashboard({ comments }: { comments: Comment[] }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="capitalize">{comment.platform}</Badge>
-                    <span className="font-medium text-sm">{comment.author_name}</span>
+                    <span className="font-medium text-sm">{displayFacebookAuthor(comment.author_name)}</span>
                     <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
                   </div>
                   <p className="mt-2 text-sm">{comment.content}</p>

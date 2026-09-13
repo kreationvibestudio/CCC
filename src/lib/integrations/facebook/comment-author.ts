@@ -23,7 +23,7 @@ function clean(value?: string | null) {
 export function isPlaceholderFacebookAuthor(name?: string | null) {
   const trimmed = clean(name);
   if (!trimmed) return true;
-  return /^(facebook user|unknown commenter)$/i.test(trimmed);
+  return /^(facebook user|unknown commenter|anonymous user)$/i.test(trimmed);
 }
 
 /** Label for the inbox. Graph often omits visitor names; do not show "Facebook User" as a person. */

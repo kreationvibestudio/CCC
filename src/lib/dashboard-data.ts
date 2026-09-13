@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { briefingFromTotals, totalsFromComments, type CommentTotals } from "@/lib/ai/briefing";
+import { buildMediaBrief } from "@/lib/media/brief";
 import { isMissingColumnError } from "@/lib/public-error";
 import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
 import { POSTGREST_MAX_ROWS } from "@/lib/supabase/paginate";
@@ -35,6 +36,7 @@ export interface DashboardBriefing {
   topIssues: string[];
   recommendations: string[];
   sentimentBreakdown: { positive: number; neutral: number; negative: number };
+  mediaLine?: string;
 }
 
 export interface DashboardData {
@@ -141,7 +143,7 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
     ),
     supabase.from("campaign_events").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
     // Only the engagement sparkline needs individual posts.
-    supabase.from("social_posts").select("likes, shares, comments_count, posted_at").eq("tenant_id", tenantId).order("posted_at", { ascending: false }).limit(10),
+    supabase.from("social_posts").select("id, content, likes, shares, comments_count, engagement_rate, posted_at").eq("tenant_id", tenantId).order("posted_at", { ascending: false }).limit(10),
     supabase.from("activities").select("id, action, description, created_at").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(8),
     supabase.from("ai_briefings").select("content, briefing_date").eq("tenant_id", tenantId).order("briefing_date", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).in("role", ["ward_coordinator", "volunteer_coordinator", "polling_unit_supervisor"]),
@@ -232,6 +234,22 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
   const liveBriefing = briefingFromTotals(commentTotals, metrics.posts, metrics.likes);
   const hasLiveActivity = metrics.comments > 0 || metrics.posts > 0;
 
+  const mediaBrief = buildMediaBrief({
+    totals: commentTotals,
+    pending: metrics.pending_comments,
+    flagged: 0,
+    misinfo: commentTotals.misinformation,
+    posts: recentPosts.map((post) => ({
+      id: String(post.id ?? post.posted_at ?? "post"),
+      content: String(post.content ?? ""),
+      likes: post.likes ?? 0,
+      comments_count: post.comments_count ?? 0,
+      shares: post.shares ?? 0,
+      engagement_rate: Number(post.engagement_rate ?? 0) || 0,
+      posted_at: post.posted_at ?? null,
+    })),
+  });
+
   const briefing: DashboardBriefing =
     hasLiveActivity && briefingContent
       ? {
@@ -246,8 +264,9 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
             ? liveBriefing.sentimentBreakdown
             : (briefingContent.sentiment_breakdown as DashboardBriefing["sentimentBreakdown"]) ??
               liveBriefing.sentimentBreakdown,
+          mediaLine: mediaBrief.mediaLine,
         }
-      : liveBriefing;
+      : { ...liveBriefing, mediaLine: mediaBrief.mediaLine };
 
   return {
     tenantName: tenant?.name ?? "Campaign Command Center",

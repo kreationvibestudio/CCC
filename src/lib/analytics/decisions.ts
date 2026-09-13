@@ -100,7 +100,7 @@ export function buildDecisionCalls(input: DecisionInput): DecisionCall[] {
       title: `Message on ${input.hotIssue.topic}`,
       reason: `${input.hotIssue.topic} is drawing heat (${input.hotIssue.negative} negative / ${input.hotIssue.total} total).`,
       action: "Brief spokespeople and publish a concrete plan post on this issue.",
-      href: "/social",
+      href: "/media",
     });
   }
 

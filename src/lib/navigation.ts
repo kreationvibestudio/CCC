@@ -18,6 +18,7 @@ import {
   Shield,
   UserCheck,
   GraduationCap,
+  Megaphone,
 } from "lucide-react";
 
 export interface NavItem {
@@ -30,6 +31,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { title: "Executive Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
+  { title: "Media Command", href: "/media", icon: Megaphone, permission: "social.view" },
   { title: "Social Media", href: "/social", icon: MessageSquare, permission: "social.view" },
   { title: "Comments", href: "/comments", icon: MessagesSquare, permission: "comments.view", badge: "Live" },
   { title: "AI Assistant", href: "/ai", icon: Bot, permission: "ai.use" },

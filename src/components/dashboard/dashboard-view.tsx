@@ -210,16 +210,19 @@ export function DashboardView({ data, canSeeDonations = false }: { data: Dashboa
         </Card>
         </Link>
 
-        <Link href="/ai" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="AI daily briefing">
+        <Link href="/media" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Media brief">
         <Card className="h-full transition-shadow hover:border-primary/40 hover:shadow-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Bot className="h-4 w-4" /> AI Daily Briefing
+              <Bot className="h-4 w-4" /> Media brief
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             {briefing && (
               <>
+                {briefing.mediaLine ? (
+                  <p className="font-medium text-foreground">{briefing.mediaLine}</p>
+                ) : null}
                 <p className="text-muted-foreground">{briefing.summary}</p>
                 <div className="flex flex-wrap gap-1">
                   {briefing.topIssues.map((issue) => (

@@ -295,7 +295,7 @@ export async function getWorkingPageToken(options: {
 
   if (candidates.length === 0) {
     throw new FacebookApiError(
-      "Facebook is not configured with usable tokens. Paste a page token under Social Media → Connect Facebook."
+      "Facebook is not configured with usable tokens. Paste a page token under Page posts → Connect Facebook."
     );
   }
 

@@ -32,8 +32,8 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { title: "Media", href: "/media", icon: Megaphone, permission: "social.view", badge: "Live" },
   { title: "Executive Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
-  { title: "Social Media", href: "/social", icon: MessageSquare, permission: "social.view" },
   { title: "Comments", href: "/comments", icon: MessagesSquare, permission: "comments.view", badge: "Live" },
+  { title: "Page posts", href: "/social", icon: MessageSquare, permission: "social.view" },
   { title: "AI Assistant", href: "/ai", icon: Bot, permission: "ai.use" },
   { title: "Sentiment", href: "/sentiment", icon: TrendingUp, permission: "sentiment.view" },
   { title: "Volunteers", href: "/volunteers", icon: Users, permission: "volunteers.view" },

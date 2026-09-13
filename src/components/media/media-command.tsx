@@ -61,7 +61,6 @@ export function MediaCommand({
   const toPost = data.items.filter(
     (item) => item.status === "draft" || item.status === "approved" || item.status === "scheduled"
   );
-  const posted = data.items.filter((item) => item.status === "posted");
 
   return (
     <div className="space-y-8">
@@ -86,20 +85,21 @@ export function MediaCommand({
       ) : null}
 
       <section className="space-y-3" aria-labelledby="reply-now">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">1</p>
-            <h2 id="reply-now" className="text-lg font-semibold">Reply now</h2>
-            <p className="text-sm text-muted-foreground">
-              {data.mustAct.length === 0
-                ? "Inbox is clear."
-                : `${data.mustAct.length} comment${data.mustAct.length === 1 ? "" : "s"} need a reply — start with rumours.`}
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/comments">Full inbox</Link>
-          </Button>
-        </div>
+        <StepHeading
+          n={1}
+          title="Reply now"
+          titleId="reply-now"
+          hint={
+            data.mustAct.length === 0
+              ? "Inbox is clear."
+              : `${data.mustAct.length} comment${data.mustAct.length === 1 ? "" : "s"} need a reply — start with rumours.`
+          }
+          action={
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/comments">Full inbox</Link>
+            </Button>
+          }
+        />
         {data.mustAct.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-sm text-muted-foreground">
@@ -116,15 +116,16 @@ export function MediaCommand({
       </section>
 
       <section className="space-y-3" aria-labelledby="next-post">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">2</p>
-          <h2 id="next-post" className="text-lg font-semibold">Write the next post</h2>
-          <p className="text-sm text-muted-foreground">
-            {next
+        <StepHeading
+          n={2}
+          title="Write the next post"
+          titleId="next-post"
+          hint={
+            next
               ? `People are talking about ${next.topic}. Write that, then copy it into Facebook.`
-              : "No hot issue yet. Keep replies moving."}
-          </p>
-        </div>
+              : "No hot issue yet. Keep replies moving."
+          }
+        />
 
         {next ? (
           <Card className="border-primary/30">
@@ -153,29 +154,20 @@ export function MediaCommand({
           <p className="text-sm text-muted-foreground">No drafts yet. Write the next post above.</p>
         )}
 
-        {posted.length > 0 ? (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">Already posted</p>
-            {posted.slice(0, 3).map((item) => (
-              <p key={item.id} className="text-sm text-muted-foreground">
-                {item.title} — {item.posted_at ? formatDate(item.posted_at) : "posted"}
-              </p>
-            ))}
-          </div>
-        ) : null}
       </section>
 
       <section className="space-y-3" aria-labelledby="what-landed">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">3</p>
-            <h2 id="what-landed" className="text-lg font-semibold">What landed</h2>
-            <p className="text-sm text-muted-foreground">Last Facebook posts. Repeat what worked.</p>
-          </div>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/social">All posts</Link>
-          </Button>
-        </div>
+        <StepHeading
+          n={3}
+          title="What landed"
+          titleId="what-landed"
+          hint="Last Facebook posts. Repeat what worked."
+          action={
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/social">All posts</Link>
+            </Button>
+          }
+        />
         {data.lastPosts.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-sm text-muted-foreground">
@@ -200,6 +192,40 @@ export function MediaCommand({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function StepHeading({
+  n,
+  title,
+  titleId,
+  hint,
+  action,
+}: {
+  n: number;
+  title: string;
+  titleId: string;
+  hint: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+        >
+          {n}
+        </span>
+        <div className="min-w-0">
+          <h2 id={titleId} className="text-lg font-semibold">
+            {title}
+          </h2>
+          <p className="text-sm text-muted-foreground">{hint}</p>
+        </div>
+      </div>
+      {action}
     </div>
   );
 }

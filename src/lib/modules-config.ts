@@ -8,7 +8,7 @@ export interface ModuleConfig {
 export const MODULES: Record<string, ModuleConfig> = {
   social: {
     slug: "social",
-    title: "Social Media Command Center",
+    title: "Page posts",
     description: "Facebook page sync, post performance, and comment intake.",
     features: ["Facebook metrics", "Post performance", "Follower count", "Engagement rate", "Page token", "Daily sync"],
   },

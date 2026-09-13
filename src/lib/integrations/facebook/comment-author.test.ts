@@ -51,6 +51,7 @@ describe("resolveFacebookCommentAuthor", () => {
     assert.equal(displayFacebookAuthor("Facebook User"), UNKNOWN_FACEBOOK_AUTHOR_LABEL);
     assert.equal(displayFacebookAuthor("Ada Okojie"), "Ada Okojie");
     assert.equal(isPlaceholderFacebookAuthor("Unknown commenter"), true);
+    assert.equal(isPlaceholderFacebookAuthor("Anonymous User"), true);
   });
 
   it("reads the profile picture url", () => {

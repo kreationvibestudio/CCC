@@ -70,13 +70,19 @@ Then redeploy.
 
 ## Commenter names show as Unknown commenter / Facebook User
 
-Graph returns the Page's own name (e.g. Hon Akhakon Anenih) but **hides visitor names** until Meta approves:
+Graph returns the Page's own name (e.g. Hon Akhakon Anenih) but **hides visitor names**. Sync cannot invent them.
 
-- Advanced Access to `pages_read_user_content`, `pages_read_engagement`, `pages_show_list`
-- Advanced Access to **[Business Asset User Profile Access](https://developers.facebook.com/docs/features-reference/business-asset-user-profile-access/)**
-- Business verification and a Live app
+Unlock them in Meta (app **campaign commander center**):
 
-Tokens and field requests cannot invent names Facebook omits. After Meta approves the feature, click **Sync Facebook Now**. Until then, HQ can set a name from the public Page.
+1. App must be **Live**, and the Business must be **verified**
+2. App Review → Permissions and features → Advanced Access for:
+   - [Business Asset User Profile Access](https://developers.facebook.com/docs/features-reference/business-asset-user-profile-access/)
+   - `pages_read_user_content`
+   - `pages_read_engagement`
+3. Use case (also shown on `/comments`): HQ staff reply to Page comments and need the commenter's name. Names stay inside the signed-in inbox. No ads or resale.
+4. After Meta approves, open `/comments` and click **Check again**
+
+Until then, HQ can **Set name** from the public Page. The next sync keeps a staff-set name.
 
 ---
 

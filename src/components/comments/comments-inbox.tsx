@@ -8,6 +8,7 @@ import {
   refreshFacebookCommentAuthors, updateCommentAuthor,
 } from "@/lib/comments/actions";
 import { FacebookSyncButton } from "@/components/social/facebook-sync-button";
+import { FacebookCommenterNamesCard } from "@/components/social/facebook-commenter-names-card";
 import { PageHeader, EmptyState } from "@/components/shared/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -211,21 +212,7 @@ export function CommentsInbox({
         <Badge variant="secondary">{filtered.length} comments</Badge>
       </div>
 
-      {hiddenAuthors > 0 ? (
-        <div className="rounded-md border border-amber-400/60 bg-amber-500/15 px-3 py-2 text-sm text-amber-100">
-          Facebook hid {hiddenAuthors} commenter name{hiddenAuthors === 1 ? "" : "s"}. Meta only
-          returns visitor names after Advanced Access to{" "}
-          <a
-            className="underline"
-            href="https://developers.facebook.com/docs/features-reference/business-asset-user-profile-access/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Business Asset User Profile Access
-          </a>
-          . Sync again after Meta approves it, or set a name from the page.
-        </div>
-      ) : null}
+      <FacebookCommenterNamesCard hiddenCount={hiddenAuthors} canWrite={canWrite} />
 
       {filtered.length === 0 ? (
         <EmptyState title="No comments match" description="Sync Facebook or adjust filters" action={<FacebookSyncButton />} />

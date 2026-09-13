@@ -193,7 +193,7 @@ export async function getSuggestedReply(commentId: string) {
   const supabase = await createClient();
   const { data: comment } = await supabase
     .from("comments")
-    .select("content, issue_topic, sentiment, author_name")
+    .select("content, issue_topic, sentiment, author_name, is_misinformation")
     .eq("id", commentId)
     .single();
   if (!comment) return { error: "Not found" };

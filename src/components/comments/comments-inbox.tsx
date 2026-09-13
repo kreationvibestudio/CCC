@@ -212,7 +212,7 @@ export function CommentsInbox({
       </div>
 
       {hiddenAuthors > 0 ? (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+        <div className="rounded-md border border-amber-400/60 bg-amber-500/15 px-3 py-2 text-sm text-amber-100">
           Facebook hid {hiddenAuthors} commenter name{hiddenAuthors === 1 ? "" : "s"}. Meta only
           returns visitor names after Advanced Access to{" "}
           <a

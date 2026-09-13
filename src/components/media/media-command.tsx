@@ -133,8 +133,8 @@ export function MediaCommand({
                 <p className="text-sm font-medium capitalize">{next.topic}</p>
                 <p className="text-sm text-muted-foreground">{next.talkingPoint}</p>
               </div>
-              {canManage ? (
-                <DraftIssueButton topic={next.topic} disabled={data.schemaMissing} />
+              {canManage && !data.schemaMissing ? (
+                <DraftIssueButton topic={next.topic} />
               ) : null}
             </CardContent>
           </Card>
@@ -204,14 +204,14 @@ export function MediaCommand({
   );
 }
 
-function DraftIssueButton({ topic, disabled }: { topic: string; disabled: boolean }) {
+function DraftIssueButton({ topic }: { topic: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
 
   return (
     <Button
       className="shrink-0"
-      disabled={disabled || pending}
+      disabled={pending}
       onClick={() => {
         start(async () => {
           const result = await draftFromIssue(topic);

@@ -35,6 +35,8 @@ export async function POST() {
       followers: result.page.followers_count ?? result.page.fan_count ?? 0,
       postsSynced: result.postsSynced,
       commentsSynced: result.commentsSynced,
+      authorsNamed: result.authorsNamed ?? 0,
+      authorsHidden: result.authorsHidden ?? 0,
       warning: result.commentsSkippedReason,
       tokenSource: result.tokenSource,
       demo: isDemo,

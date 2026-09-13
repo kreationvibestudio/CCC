@@ -27,11 +27,20 @@ export function FacebookSyncButton() {
       }
 
       const demo = data.tokenSource === "demo" || data.demo;
+      const named = Number(data.authorsNamed ?? 0);
+      const hidden = Number(data.authorsHidden ?? 0);
       toast.success(
         demo
           ? `Loaded ${data.postsSynced} demo posts for ${data.pageName} (connect a live page token to sync real Facebook)`
-          : `Synced ${data.postsSynced} live posts from ${data.pageName} (${data.followers?.toLocaleString()} followers)`
+          : `Synced ${data.postsSynced} live posts from ${data.pageName} (${data.followers?.toLocaleString()} followers)` +
+            (named ? `. Recovered ${named} commenter name${named === 1 ? "" : "s"}` : "")
       );
+      if (!demo && hidden > 0 && named === 0) {
+        toast.warning(
+          `Facebook hid ${hidden} commenter name${hidden === 1 ? "" : "s"}. Meta only returns visitor names after Advanced Access to Business Asset User Profile Access.`,
+          { duration: 12000 }
+        );
+      }
 
       if (data.warning) {
         toast.warning(data.warning, { duration: 8000 });

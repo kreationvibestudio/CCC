@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   UNKNOWN_FACEBOOK_AUTHOR,
+  UNKNOWN_FACEBOOK_AUTHOR_LABEL,
+  displayFacebookAuthor,
   isPlaceholderFacebookAuthor,
   resolveFacebookCommentAuthor,
 } from "./comment-author.ts";
@@ -43,6 +45,12 @@ describe("resolveFacebookCommentAuthor", () => {
     const resolved = resolveFacebookCommentAuthor({}, "Facebook User");
     assert.equal(resolved.authorName, UNKNOWN_FACEBOOK_AUTHOR);
     assert.equal(isPlaceholderFacebookAuthor("Facebook User"), true);
+  });
+
+  it("shows Unknown commenter instead of Facebook User in the inbox", () => {
+    assert.equal(displayFacebookAuthor("Facebook User"), UNKNOWN_FACEBOOK_AUTHOR_LABEL);
+    assert.equal(displayFacebookAuthor("Ada Okojie"), "Ada Okojie");
+    assert.equal(isPlaceholderFacebookAuthor("Unknown commenter"), true);
   });
 
   it("reads the profile picture url", () => {

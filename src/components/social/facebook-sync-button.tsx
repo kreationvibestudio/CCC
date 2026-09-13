@@ -37,8 +37,8 @@ export function FacebookSyncButton() {
       );
       if (!demo && hidden > 0 && named === 0) {
         toast.warning(
-          `Facebook hid ${hidden} commenter name${hidden === 1 ? "" : "s"}. Meta only returns visitor names after Advanced Access to Business Asset User Profile Access.`,
-          { duration: 12000 }
+          `Facebook is still hiding ${hidden} visitor name${hidden === 1 ? "" : "s"}. Open Comments for the Meta App Review steps, or use Set name.`,
+          { duration: 10000 }
         );
       }
 

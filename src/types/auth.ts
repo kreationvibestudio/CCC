@@ -183,5 +183,7 @@ export function isFieldAgentRole(role: UserRole) {
 }
 
 export function homePathForRole(role: UserRole) {
-  return isFieldAgentRole(role) ? "/agent" : "/dashboard";
+  if (isFieldAgentRole(role)) return "/agent";
+  if (role === "media_director" || role === "social_media_team") return "/media";
+  return "/dashboard";
 }

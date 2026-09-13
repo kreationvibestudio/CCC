@@ -12,7 +12,6 @@ import {
 } from "recharts";
 import { PageHeader, StatCard } from "@/components/shared/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/utils";
 import type { DashboardData } from "@/lib/dashboard-data";
 
@@ -133,14 +132,6 @@ export function DashboardView({ data, canSeeDonations = false }: { data: Dashboa
     ? Math.min(100, Math.round((stats.donations / stats.fundraisingGoal) * 100))
     : 0;
 
-  const sentimentData = briefing
-    ? [
-        { name: "Positive", value: briefing.sentimentBreakdown.positive },
-        { name: "Neutral", value: briefing.sentimentBreakdown.neutral },
-        { name: "Negative", value: briefing.sentimentBreakdown.negative },
-      ]
-    : [];
-
   return (
     <div className="space-y-6">
       <PageHeader title="Executive Dashboard" description={`${data.tenantName} — Live campaign intelligence`} />
@@ -214,31 +205,16 @@ export function DashboardView({ data, canSeeDonations = false }: { data: Dashboa
         <Card className="h-full transition-shadow hover:border-primary/40 hover:shadow-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Bot className="h-4 w-4" /> Media brief
+              <Bot className="h-4 w-4" /> Media
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             {briefing && (
               <>
-                {briefing.mediaLine ? (
-                  <p className="font-medium text-foreground">{briefing.mediaLine}</p>
-                ) : null}
-                <p className="text-muted-foreground">{briefing.summary}</p>
-                <div className="flex flex-wrap gap-1">
-                  {briefing.topIssues.map((issue) => (
-                    <Badge key={issue} variant="secondary">{issue}</Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2 text-xs">
-                  {sentimentData.map((s) => (
-                    <span key={s.name} className="rounded bg-muted px-2 py-1">{s.name}: {s.value}%</span>
-                  ))}
-                </div>
-                <ul className="space-y-1 text-xs text-muted-foreground">
-                  {briefing.recommendations.slice(0, 4).map((rec) => (
-                    <li key={rec}>• {rec}</li>
-                  ))}
-                </ul>
+                <p className="font-medium text-foreground">
+                  {briefing.mediaLine || briefing.summary}
+                </p>
+                <p className="text-muted-foreground">Open Media to reply, write the next post, and copy the huddle.</p>
               </>
             )}
           </CardContent>

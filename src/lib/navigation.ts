@@ -30,8 +30,8 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  { title: "Media", href: "/media", icon: Megaphone, permission: "social.view", badge: "Live" },
   { title: "Executive Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
-  { title: "Media Command", href: "/media", icon: Megaphone, permission: "social.view" },
   { title: "Social Media", href: "/social", icon: MessageSquare, permission: "social.view" },
   { title: "Comments", href: "/comments", icon: MessagesSquare, permission: "comments.view", badge: "Live" },
   { title: "AI Assistant", href: "/ai", icon: Bot, permission: "ai.use" },
@@ -53,6 +53,7 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export const QUICK_ACTIONS = [
+  { title: "Media desk", href: "/media", permission: "social.view" as Permission, creates: false },
   { title: "Issue PU codes", href: "/polling-units/agents", permission: "polling_units.manage" as Permission, creates: true },
   { title: "New Event", href: "/events/new", permission: "events.manage" as Permission, creates: true },
   { title: "Send Broadcast", href: "/communications/campaigns/new", permission: "communications.send" as Permission, creates: true },

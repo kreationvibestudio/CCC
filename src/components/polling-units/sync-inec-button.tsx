@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 type SyncResponse = {
   success?: boolean;
   error?: string;
-  state?: string;
+  source?: string;
   processed?: number;
   inserted?: number;
   updated?: number;
@@ -29,7 +29,7 @@ export function SyncInecRegisterButton() {
 
   async function run() {
     setRunning(true);
-    setProgress("Loading Edo INEC register…");
+    setProgress("Polling INEC CVR…");
     let inserted = 0;
     let updated = 0;
     let failed = 0;
@@ -37,6 +37,18 @@ export function SyncInecRegisterButton() {
     let offset = 0;
     let pruneOnly = false;
     try {
+      const pollRes = await fetch("/api/polling-units/sync-inec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ poll: true }),
+      });
+      const pollData = (await pollRes.json()) as SyncResponse;
+      if (pollRes.ok) {
+        setProgress(`Polled ${(pollData.stateTotal ?? 0).toLocaleString()} INEC units — writing to HQ…`);
+      } else {
+        setProgress("INEC CVR busy — using last snapshot…");
+      }
+
       for (let i = 0; i < 900; i += 1) {
         const res = await fetch("/api/polling-units/sync-inec", {
           method: "POST",
@@ -45,7 +57,7 @@ export function SyncInecRegisterButton() {
         });
         const data = (await res.json()) as SyncResponse;
         if (!res.ok) {
-          toast.error(data.error || "Could not load Edo polling units");
+          toast.error(data.error || "Could not poll INEC CVR");
           break;
         }
         inserted += data.inserted ?? 0;
@@ -56,7 +68,7 @@ export function SyncInecRegisterButton() {
         setProgress(
           pruneOnly
             ? `Removing other states… ${pruned.toLocaleString()} removed`
-            : `Edo ${loaded.toLocaleString()} / ${(data.stateTotal ?? 0).toLocaleString()}`
+            : `${data.source === "github" ? "Snapshot" : "INEC CVR"} ${loaded.toLocaleString()} / ${(data.stateTotal ?? 0).toLocaleString()}`
         );
         if (data.done) break;
         if ((data.stateRemaining ?? 0) > 0) {
@@ -76,7 +88,7 @@ export function SyncInecRegisterButton() {
       } else if (failed > 0) {
         toast.error(`Edo PU sync failed for ${failed} polling units`);
       } else {
-        toast("Edo polling units already match the INEC register");
+        toast("Edo polling units already match the INEC CVR register");
       }
       router.refresh();
     } catch {
@@ -90,7 +102,7 @@ export function SyncInecRegisterButton() {
   return (
     <Button type="button" variant="default" disabled={running} onClick={() => void run()}>
       <Landmark className="mr-2 h-4 w-4" />
-      {running ? progress || "Loading Edo PUs…" : "Load Edo INEC PUs"}
+      {running ? progress || "Loading Edo PUs…" : "Refresh from INEC CVR"}
     </Button>
   );
 }

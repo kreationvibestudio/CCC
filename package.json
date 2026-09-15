@@ -20,6 +20,7 @@
     "pu:apply-gps": "node --experimental-strip-types scripts/apply-inec-gps.mjs",
     "pu:geocode": "node --experimental-strip-types scripts/geocode-polling-units.mjs",
     "pu:sync-inec": "node --experimental-strip-types scripts/sync-inec-polling-units.mjs",
+    "pu:poll-cvr": "node --experimental-strip-types scripts/poll-cvr-polling-units.mjs",
     "pu:bootstrap": "npm run pu:import && npm run pu:pins",
     "agent:issue-codes": "node --experimental-strip-types scripts/issue-agent-codes.mjs",
     "cloud:setup": "node scripts/cloud-setup.mjs",

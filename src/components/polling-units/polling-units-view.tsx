@@ -101,7 +101,7 @@ export function PollingUnitsView({
       setRows(result.rows);
       setTotal(result.total);
     });
-  }, [canQuery, lga, ward, debouncedSearch, page]);
+  }, [canQuery, lga, ward, debouncedSearch, page, summary.puCount]);
 
   const withCoords = useMemo(() => rows.filter((u) => u.latitude && u.longitude), [rows]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

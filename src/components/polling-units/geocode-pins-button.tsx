@@ -122,7 +122,8 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
     let pinned = 0;
     let offset = 0;
     try {
-      for (let i = 0; i < 80; i += 1) {
+      let catalogLeft = true;
+      for (let i = 0; i < 80 && catalogLeft; i += 1) {
         const res = await fetch("/api/polling-units/geocode", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -134,10 +135,16 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
           data = raw ? (JSON.parse(raw) as typeof data) : {};
         } catch {
           toast.error(res.ok ? "INEC align returned invalid JSON" : `INEC align failed (HTTP ${res.status})`);
+          catalogLeft = false;
           break;
         }
         if (!res.ok) {
+          if (/Missing .*edo-polling-unit-gps/i.test(data.error || raw)) {
+            catalogLeft = false;
+            break;
+          }
           toast.error(data.error || `Could not align INEC GPS (HTTP ${res.status})`);
+          catalogLeft = false;
           break;
         }
         pinned += data.geocoded ?? 0;
@@ -146,10 +153,37 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
         setProgress(
           `${pinned.toLocaleString()} aligned · catalog ${(data.catalog ?? 0).toLocaleString()} · ${left.toLocaleString()} left`
         );
-        if (!left) break;
+        if (!left) catalogLeft = false;
+      }
+
+      for (let i = 0; i < 8; i += 1) {
+        const res = await fetch("/api/polling-units/geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cvr: true, force: true, limit: 10 }),
+        });
+        const raw = await res.text();
+        let data: GeocodeResponse & { remainingApprox?: number; catalog?: number } = {};
+        try {
+          data = raw ? (JSON.parse(raw) as typeof data) : {};
+        } catch {
+          toast.error(res.ok ? "INEC CVR GPS returned invalid JSON" : `INEC CVR GPS failed (HTTP ${res.status})`);
+          break;
+        }
+        if (!res.ok) {
+          toast.error(data.error || `Could not poll INEC CVR GPS (HTTP ${res.status})`);
+          break;
+        }
+        pinned += data.geocoded ?? 0;
+        const left = data.remaining ?? 0;
+        setRemaining(left);
+        setProgress(
+          `${pinned.toLocaleString()} from INEC CVR · ${left.toLocaleString()} still approximate`
+        );
+        if (!data.processed || left === 0) break;
       }
       if (pinned > 0) toast.success(`Aligned ${pinned.toLocaleString()} pin${pinned === 1 ? "" : "s"} to INEC GPS`);
-      else toast("Pins already match INEC GPS (or catalog is empty — run npm run pu:fetch-gps)");
+      else toast("Pins already match INEC GPS");
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "INEC align stopped — try again");

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatPollingUnitCode, padPuCode, padWardCode } from "./code.ts";
 import { CAMPAIGN_STATE, CAMPAIGN_STATE_CODE, isCampaignPollingUnit } from "./scope.ts";
+import { loadCvrEdoUnits } from "./cvr-poller.ts";
 import {
   loadInecStateUnits,
   resolveInecState,
@@ -31,6 +32,7 @@ export type ExistingPollingUnit = {
 export type InecSyncResult = {
   state: string;
   fileName: string;
+  source: "cvr" | "cache" | "github";
   processed: number;
   inserted: number;
   updated: number;
@@ -270,6 +272,7 @@ export async function syncInecRegisterBatch(
     return {
       state: CAMPAIGN_STATE,
       fileName: "edo.json",
+      source: "github",
       processed: 0,
       inserted: 0,
       updated: 0,
@@ -291,7 +294,17 @@ export async function syncInecRegisterBatch(
   }
   const limit = Math.min(Math.max(options?.limit ?? 250, 1), 400);
   const offset = Math.max(options?.offset ?? 0, 0);
-  const units = await loadInecStateUnits(meta.token);
+  let units: InecRegisterUnit[];
+  let fileName = meta.fileName;
+  let source: InecSyncResult["source"] = "github";
+  try {
+    const loaded = await loadCvrEdoUnits();
+    units = loaded.units;
+    source = loaded.source;
+    fileName = loaded.source === "cache" ? "edo-cvr-cache.json" : "cvr.inecnigeria.org";
+  } catch {
+    units = await loadInecStateUnits(meta.token);
+  }
   const batch = units.slice(offset, offset + limit);
   const existing = await loadExistingForBatch(supabase, tenantId, meta, batch);
   const used = new Set<string>();
@@ -362,7 +375,8 @@ export async function syncInecRegisterBatch(
   }
   return {
     state: meta.token,
-    fileName: meta.fileName,
+    fileName,
+    source,
     processed: batch.length,
     inserted,
     updated,

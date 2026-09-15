@@ -10,6 +10,7 @@ import {
   geocodePendingForTenant,
 } from "@/lib/polling-units/geocode-batch";
 import { applyInecGpsForTenant } from "@/lib/polling-units/inec-cvr-gps";
+import { pollCvrGpsForTenant } from "@/lib/polling-units/cvr-poller";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
     let retryFailed = false;
     let approx = false;
     let inec = false;
+    let cvr = false;
     let force = false;
     let limit: number | undefined;
     let offset = 0;
@@ -56,12 +58,14 @@ export async function POST(req: NextRequest) {
         limit?: number;
         approx?: boolean;
         inec?: boolean;
+        cvr?: boolean;
         force?: boolean;
         offset?: number;
       };
       retryFailed = Boolean(body.retryFailed);
       approx = Boolean(body.approx);
       inec = Boolean(body.inec);
+      cvr = Boolean(body.cvr);
       force = Boolean(body.force);
       if (typeof body.limit === "number") limit = body.limit;
       if (typeof body.offset === "number" && Number.isFinite(body.offset)) {
@@ -71,7 +75,7 @@ export async function POST(req: NextRequest) {
       // empty body is fine
     }
 
-    const mode = inec ? "inec" : approx ? "approx" : "street";
+    const mode = inec || cvr ? "inec" : approx ? "approx" : "street";
     if (!canManagePins(user.role, mode)) {
       return NextResponse.json(
         {
@@ -104,6 +108,24 @@ export async function POST(req: NextRequest) {
           samples: r.samples,
           errors: r.errors,
         }))
+      : cvr
+        ? await pollCvrGpsForTenant(supabase, user.profile.tenant_id, {
+            limit: limit ?? 12,
+            force: force || true,
+          }).then((r) => ({
+            processed: r.processed,
+            geocoded: r.updated,
+            failed: r.errors.length,
+            remaining: r.remaining,
+            remainingApprox: r.remainingApprox,
+            mapped: r.mapped,
+            total: r.total,
+            provider: "inec_cvr_live" as const,
+            catalog: r.catalog,
+            nextOffset: r.nextOffset,
+            samples: r.samples,
+            errors: r.errors,
+          }))
       : approx
         ? await fillApproxPinsForTenant(supabase, user.profile.tenant_id, {
             limit: limit ?? 250,

@@ -554,7 +554,7 @@ export function AdminView({
             under deploy timeouts) and Lagos/Abuja sample volunteers, CRM contacts, events,
             comments, activities, and linked donations. Keeps the Edo INEC register and team
             accounts. Situation Room voter totals only count Edo units. You can also use Polling
-            Units → Load Edo INEC PUs to prune other states.
+            Units → Refresh from INEC CVR to prune other states.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="destructive" disabled={pending} onClick={handlePurgeNonEdo}>

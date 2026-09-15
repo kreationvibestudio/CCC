@@ -39,16 +39,40 @@ export async function POST(req: NextRequest) {
   let offset = 0;
   let limit = 400;
   let pruneOnly = false;
+  let poll = false;
   try {
-    const body = (await req.json()) as { offset?: number; limit?: number; pruneOnly?: boolean };
+    const body = (await req.json()) as { offset?: number; limit?: number; pruneOnly?: boolean; poll?: boolean };
     if (typeof body.offset === "number") offset = body.offset;
     if (typeof body.limit === "number") limit = body.limit;
     pruneOnly = Boolean(body.pruneOnly);
+    poll = Boolean(body.poll);
   } catch {
     // empty body starts Edo ingest
   }
 
   try {
+    if (poll) {
+      const { loadCvrEdoUnits } = await import("@/lib/polling-units/cvr-poller");
+      const loaded = await loadCvrEdoUnits({ fresh: true });
+      return NextResponse.json({
+        success: true,
+        source: loaded.source,
+        fileName: "cvr.inecnigeria.org",
+        state: CAMPAIGN_STATE,
+        processed: loaded.units.length,
+        inserted: 0,
+        updated: 0,
+        failed: 0,
+        pruned: 0,
+        offset: 0,
+        nextOffset: 0,
+        stateTotal: loaded.units.length,
+        stateRemaining: loaded.units.length,
+        pruneRemaining: 0,
+        done: false,
+        catalogStates: 1,
+      });
+    }
     const result = await syncInecRegisterBatch(createServiceClient(), user.profile.tenant_id, {
       state: CAMPAIGN_STATE,
       offset,

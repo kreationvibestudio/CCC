@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import {
   Bot,
   CheckCircle,
   Copy,
+  FileText,
   Heart,
   Loader2,
   MessageSquare,
@@ -36,8 +37,10 @@ import {
   markMediaPosted,
   updateMediaStatus,
 } from "@/lib/media/actions";
-import { ISSUE_TOPICS } from "@/lib/media/topics";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { unpackTalkingPoints } from "@/lib/media/draft-fallback";
+import { PICKABLE_TOPICS, topicLabel } from "@/lib/media/topics";
+import { MEDIA_TONES, MEDIA_TONE_COPY, type MediaTone } from "@/lib/media/tones";
+import { cn, formatDate, formatNumber } from "@/lib/utils";
 import { displayFacebookAuthor } from "@/lib/integrations/facebook/comment-author";
 import type { MediaCommandData } from "@/lib/media/data";
 import type { Comment, MediaContent } from "@/types/database";
@@ -61,10 +64,10 @@ export function MediaCommand({
   canManage: boolean;
   canReply: boolean;
 }) {
-  const next = data.brief.nextPosts[0];
   const toPost = data.items.filter(
     (item) => item.status === "draft" || item.status === "approved" || item.status === "scheduled"
   );
+  const heat = data.brief.topIssues.filter((topic) => topic && topic !== "other");
 
   return (
     <div className="space-y-8">
@@ -73,7 +76,7 @@ export function MediaCommand({
           <h1 className="text-2xl font-bold tracking-tight">Media</h1>
           <p className="text-base font-medium">{data.brief.mediaLine}</p>
           <p className="text-sm text-muted-foreground">
-            Reply first. Then write one post. Copy the huddle when the team is ready.
+            Reply first. Then pick the beat HQ wants to own — comment heat is only a hint.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -122,30 +125,18 @@ export function MediaCommand({
       <section className="space-y-3" aria-labelledby="next-post">
         <StepHeading
           n={2}
-          title="Write the next post"
+          title="Choose what Edo reads next"
           titleId="next-post"
-          hint={
-            next
-              ? `People are talking about ${next.topic}. Write that, then copy it into Facebook.`
-              : "No hot issue yet. Keep replies moving."
-          }
+          hint="Employment or any other heat topic appears because comments keep mentioning it — not because HQ chose it. Pick the beat, pick a tone, then write a Facebook caption plus a short article."
         />
 
-        {next ? (
-          <Card className="border-primary/30">
-            <CardContent className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-sm font-medium capitalize">{next.topic}</p>
-                <p className="text-sm text-muted-foreground">{next.talkingPoint}</p>
-              </div>
-              {canManage && !data.schemaMissing ? (
-                <DraftIssueButton topic={next.topic} />
-              ) : null}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <WriteOwnPost canManage={canManage} disabled={data.schemaMissing} />
+        <AgendaDesk
+          heat={heat}
+          issueHeat={data.issueHeat}
+          misinfo={data.brief.misinfo}
+          canManage={canManage}
+          disabled={data.schemaMissing}
+        />
 
         {toPost.length > 0 ? (
           <div className="space-y-2">
@@ -155,9 +146,8 @@ export function MediaCommand({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No drafts yet. Write the next post above.</p>
+          <p className="text-sm text-muted-foreground">No drafts yet. Pick a beat above and write.</p>
         )}
-
       </section>
 
       <section className="space-y-3" aria-labelledby="what-landed">
@@ -234,37 +224,156 @@ function StepHeading({
   );
 }
 
-function DraftIssueButton({ topic }: { topic: string }) {
+function AgendaDesk({
+  heat,
+  issueHeat,
+  misinfo,
+  canManage,
+  disabled,
+}: {
+  heat: string[];
+  issueHeat: { topic: string; count: number }[];
+  misinfo: number;
+  canManage: boolean;
+  disabled: boolean;
+}) {
   const router = useRouter();
+  const [topic, setTopic] = useState("");
+  const [tone, setTone] = useState<MediaTone>("agenda");
   const [pending, start] = useTransition();
+  const heatCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of issueHeat) {
+      if (row.topic) map.set(row.topic, row.count);
+    }
+    return map;
+  }, [issueHeat]);
 
   return (
-    <Button
-      className="shrink-0"
-      disabled={pending}
-      onClick={() => {
-        start(async () => {
-          try {
-            const result = await draftFromIssue(topic);
-            if (result.error) {
-              toast.error(result.error);
-              return;
-            }
-            toast.success(
-              result.reused
-                ? "That draft is already ready — copy it into Facebook"
-                : "Draft ready — copy it into Facebook"
-            );
-            router.refresh();
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Could not write that draft.");
-          }
-        });
-      }}
-    >
-      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-      Write this post
-    </Button>
+    <Card>
+      <CardContent className="space-y-5 py-5">
+        {heat.length > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Comment heat right now:{" "}
+            <span className="font-medium text-foreground">
+              {heat.map((item) => topicLabel(item)).join(", ")}
+            </span>
+            . That is what people are writing — not what you must post.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No comment heat yet. Pick the beat HQ wants Edo to argue about this week.
+          </p>
+        )}
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Beat</p>
+          <div className="flex flex-wrap gap-2">
+            {PICKABLE_TOPICS.map((item) => {
+              const selected = topic === item;
+              const count = heatCounts.get(item) ?? 0;
+              const isHeat = heat.includes(item);
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setTopic(item)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:bg-accent"
+                  )}
+                >
+                  {topicLabel(item)}
+                  {isHeat ? (
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                        selected ? "bg-primary-foreground/20" : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                      )}
+                    >
+                      heat{count > 0 ? ` ${count}` : ""}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+            {misinfo > 0 ? (
+              <button
+                type="button"
+                aria-pressed={topic === "fact-check"}
+                onClick={() => setTopic("fact-check")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                  topic === "fact-check"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background hover:bg-accent"
+                )}
+              >
+                Fact-check
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Tone</legend>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {MEDIA_TONES.map((item) => {
+              const selected = tone === item;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setTone(item)}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-left transition-colors",
+                    selected
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-background hover:bg-accent"
+                  )}
+                >
+                  <span className="block text-sm font-medium">{MEDIA_TONE_COPY[item].label}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {MEDIA_TONE_COPY[item].hint}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <div className="flex flex-wrap gap-2">
+          {canManage ? (
+            <Button
+              disabled={disabled || pending || !topic}
+              onClick={() => {
+                start(async () => {
+                  try {
+                    const result = await draftFromIssue(topic, tone);
+                    if (result.error) {
+                      toast.error(result.error);
+                      return;
+                    }
+                    toast.success("Draft ready — copy the Facebook caption or the article");
+                    router.refresh();
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not write that draft.");
+                  }
+                });
+              }}
+            >
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Write post + article
+            </Button>
+          ) : null}
+          <WriteOwnPost canManage={canManage} disabled={disabled} />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -287,31 +396,31 @@ function WriteOwnPost({ canManage, disabled }: { canManage: boolean; disabled: b
           <DialogHeader>
             <DialogTitle>Write your own post</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">Under 280 characters. No invented promises.</p>
+          <p className="text-sm text-muted-foreground">Facebook caption. No invented promises.</p>
           <div className="space-y-1">
             <Label htmlFor="own-topic">Topic</Label>
             <NativeSelect id="own-topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
               <option value="">Pick a topic</option>
-              {ISSUE_TOPICS.filter((item) => item !== "other").map((item) => (
-                <option key={item} value={item}>{item}</option>
+              {PICKABLE_TOPICS.map((item) => (
+                <option key={item} value={item}>{topicLabel(item)}</option>
               ))}
             </NativeSelect>
           </div>
           <textarea
-            className="min-h-[120px] w-full rounded-md border border-border bg-background p-3 text-sm"
+            className="min-h-[140px] w-full rounded-md border border-border bg-background p-3 text-sm"
             value={body}
-            maxLength={280}
+            maxLength={720}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="We hear you on…"
+            placeholder="The question Edo should be asking this week…"
           />
-          <p className="text-xs text-muted-foreground">{body.length}/280</p>
+          <p className="text-xs text-muted-foreground">{body.length}/720</p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button
               disabled={pending || !body.trim()}
               onClick={() => {
                 start(async () => {
-                  const title = topic ? `On ${topic}` : "Campaign post";
+                  const title = topic ? `On ${topicLabel(topic)}` : "Campaign post";
                   const result = await createMediaContent({
                     title,
                     body: body.trim(),
@@ -341,19 +450,40 @@ function WriteOwnPost({ canManage, disabled }: { canManage: boolean; disabled: b
 function DraftRow({ item, canManage }: { item: MediaContent; canManage: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const extras = unpackTalkingPoints(item.talking_points);
+  const toneLabel = extras.tone ? MEDIA_TONE_COPY[extras.tone].label : null;
 
   return (
     <Card>
       <CardContent className="space-y-3 py-4">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-medium text-sm">{item.title}</p>
-          {item.issue_topic ? <Badge variant="secondary">{item.issue_topic}</Badge> : null}
+          {item.issue_topic ? <Badge variant="secondary">{topicLabel(item.issue_topic)}</Badge> : null}
+          {toneLabel ? <Badge variant="outline">{toneLabel}</Badge> : null}
         </div>
-        <p className="text-sm whitespace-pre-wrap">{item.body}</p>
+        <div className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Facebook caption</p>
+          <p className="text-sm whitespace-pre-wrap">{item.body}</p>
+        </div>
+        {extras.article ? (
+          <div className="space-y-1 rounded-md border border-border bg-muted/40 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Article</p>
+            <p className="text-sm whitespace-pre-wrap">{extras.article}</p>
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={() => copyText(item.body, "Copied — paste into Facebook")}>
             <Copy className="h-3 w-3" /> Copy for Facebook
           </Button>
+          {extras.article ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => copyText(extras.article ?? "", "Copied the article")}
+            >
+              <FileText className="h-3 w-3" /> Copy article
+            </Button>
+          ) : null}
           {canManage ? (
             <>
               <Button
@@ -449,7 +579,7 @@ function MustActRow({
           <span className="text-sm font-medium text-foreground">{displayFacebookAuthor(comment.author_name)}</span>
           {comment.is_misinformation ? <Badge variant="destructive">Rumour</Badge> : null}
           {comment.issue_topic && comment.issue_topic !== "other" ? (
-            <Badge variant="secondary">{comment.issue_topic}</Badge>
+            <Badge variant="secondary">{topicLabel(comment.issue_topic)}</Badge>
           ) : null}
         </div>
         <p className="text-sm">{comment.content}</p>

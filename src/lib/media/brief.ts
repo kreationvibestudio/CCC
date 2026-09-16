@@ -134,12 +134,11 @@ export function mediaLineFromSignals(input: {
       : "inbox clear";
   const first = input.nextPosts[0];
   if (first) {
-    const topic = first.topic === "inbox" || first.topic === "fact-check" ? first.topic : first.topic;
-    if (topic === "inbox") return `Today: clear the comment backlog. ${queue}.`;
-    if (topic === "fact-check") return `Today: post a short fact-check. ${queue}.`;
-    return `Today: draft a ${topic} post. ${queue}.`;
+    if (first.topic === "inbox") return `Today: clear the comment backlog. ${queue}.`;
+    if (first.topic === "fact-check") return `Today: post a short fact-check. ${queue}.`;
+    return `Comment heat: ${first.topic}. HQ picks the beat. ${queue}.`;
   }
-  return `Media desk: ${queue}.`;
+  return `Media desk: ${queue}. Pick a beat to own.`;
 }
 
 function huddleDate(now: Date) {
@@ -170,7 +169,7 @@ export function formatHuddleText(brief: Omit<MediaBrief, "huddleText">, now = ne
     `Heat: ${issues}`,
     `Best post: ${best}`,
     `Watch: ${watch}`,
-    `Next 3 posts:`,
+    `Heat suggestions (HQ still picks the beat):`,
     next,
     `Copy into Meta Business Suite. Do not invent promises.`,
   ].join("\n");

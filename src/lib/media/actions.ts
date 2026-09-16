@@ -7,7 +7,9 @@ import { authorize } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { denyWriteIfRestricted } from "@/types/auth";
 import { draftPostWithAI } from "@/lib/ai/draft-post";
+import { packTalkingPoints } from "@/lib/media/draft-fallback";
 import { isIssueTopic } from "@/lib/media/topics";
+import { isMediaTone } from "@/lib/media/tones";
 import { statusPatch } from "@/lib/media/status";
 import { publishFacebookPagePost } from "@/lib/integrations/facebook/publish";
 import { isMissingRelationError } from "@/lib/public-error";
@@ -84,53 +86,40 @@ export async function createMediaContent(input: {
   return { success: true };
 }
 
-export async function draftFromIssue(topic: string) {
+export async function draftFromIssue(topic: string, tone?: string) {
   const gate = await authorize("social.manage");
   if (!gate.ok) return { error: gate.error };
   const blocked = denyWriteIfRestricted(gate.user.role);
   if (blocked) return { error: blocked };
 
-  const issue = isIssueTopic(topic) ? topic : "other";
+  const issue = isIssueTopic(topic) ? topic : topic === "fact-check" || topic === "inbox" ? topic : "other";
+  const chosen = isMediaTone(tone) ? tone : "agenda";
   const supabase = await createClient();
 
   try {
-    if (issue !== "other") {
-      const { data: existing } = await supabase
-        .from("media_content")
-        .select("id, title")
-        .eq("tenant_id", gate.user.profile.tenant_id)
-        .eq("issue_topic", issue)
-        .in("status", ["draft", "approved", "scheduled"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existing) {
-        return { success: true, title: existing.title, reused: true };
-      }
-    }
-
+    const commentTopic = isIssueTopic(issue) ? issue : "other";
     const { data: comments } = await supabase
       .from("comments")
       .select("content")
       .eq("tenant_id", gate.user.profile.tenant_id)
-      .eq("issue_topic", issue)
+      .eq("issue_topic", commentTopic)
       .order("created_at", { ascending: false })
       .limit(8);
 
     const draft = await draftPostWithAI(
       issue,
-      (comments ?? []).map((row) => String(row.content ?? ""))
+      (comments ?? []).map((row) => String(row.content ?? "")),
+      chosen
     );
 
     const { error } = await supabase.from("media_content").insert({
       tenant_id: gate.user.profile.tenant_id,
       title: draft.title,
       body: draft.body,
-      issue_topic: issue === "other" ? null : issue,
+      issue_topic: isIssueTopic(issue) ? issue : null,
       platform: "facebook",
       status: "draft",
-      talking_points: draft.talking_points,
+      talking_points: packTalkingPoints(draft),
       created_by: gate.user.id,
     });
 

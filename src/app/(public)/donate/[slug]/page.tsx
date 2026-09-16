@@ -2,9 +2,9 @@ import { HeartHandshake } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { paystackPaymentLinkFromSetting } from "@/lib/campaign";
-import { formatCurrency } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import { PublicDonateForm } from "@/components/donations/public-donate-form";
+import { PublicFundraisingMeter } from "@/components/donations/public-fundraising-meter";
 
 export const dynamic = "force-dynamic";
 
@@ -50,10 +50,10 @@ export default async function DonateSlugPage({ params }: { params: Promise<{ slu
           <CardTitle className="text-2xl">Support {campaignName}</CardTitle>
           <CardDescription>
             Enter your details, then complete payment on Paystack by card, bank transfer, or USSD.
-            {goal > 0 ? ` ${formatCurrency(raised)} of ${formatCurrency(goal)} raised.` : ""}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
+          <PublicFundraisingMeter raised={raised} goal={goal} />
           <PublicDonateForm slug={slug} fallbackCheckoutUrl={checkoutUrl} />
         </CardContent>
       </Card>

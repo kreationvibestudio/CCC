@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { fundraisingProgress, paymentMethodLabel, summarizeDonations } from "./summary.ts";
+import {
+  fundraisingProgress,
+  paymentMethodLabel,
+  publicFundraisingBarPercent,
+  publicFundraisingPercentLabel,
+  summarizeDonations,
+} from "./summary.ts";
 
 describe("summarizeDonations", () => {
   it("totals gifts, unique donors, and average", () => {
@@ -31,6 +37,18 @@ describe("fundraisingProgress", () => {
     assert.equal(fundraisingProgress(40_000, 100_000), 40);
     assert.equal(fundraisingProgress(150_000, 100_000), 100);
     assert.equal(fundraisingProgress(10, 0), 0);
+  });
+});
+
+describe("publicFundraisingPercentLabel", () => {
+  it("shows percent of goal and keeps tiny gifts visible as under 1%", () => {
+    assert.equal(publicFundraisingPercentLabel(20_000, 150_000_000), "<1%");
+    assert.equal(publicFundraisingPercentLabel(0, 150_000_000), "0%");
+    assert.equal(publicFundraisingPercentLabel(15_000_000, 150_000_000), "10%");
+    assert.equal(publicFundraisingPercentLabel(10, 0), "");
+    assert.equal(publicFundraisingBarPercent(20_000, 150_000_000), 2);
+    assert.equal(publicFundraisingBarPercent(15_000_000, 150_000_000), 10);
+    assert.equal(publicFundraisingBarPercent(0, 150_000_000), 0);
   });
 });
 

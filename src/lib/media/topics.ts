@@ -17,8 +17,34 @@ export const ISSUE_TOPICS: IssueTopic[] = [
   "other",
 ];
 
+/** Beats HQ can pick. `other` stays a fallback, not a chip. */
+export const PICKABLE_TOPICS: IssueTopic[] = ISSUE_TOPICS.filter((topic) => topic !== "other");
+
+export const TOPIC_LABELS: Record<IssueTopic, string> = {
+  security: "Security",
+  roads: "Roads",
+  education: "Education",
+  healthcare: "Healthcare",
+  agriculture: "Agriculture",
+  economy: "Cost of living",
+  employment: "Jobs",
+  youth: "Youth",
+  women: "Women",
+  electricity: "Power",
+  water: "Water",
+  corruption: "Accountability",
+  infrastructure: "Infrastructure",
+  other: "Other",
+};
+
 export function isIssueTopic(value: string | null | undefined): value is IssueTopic {
   return Boolean(value && ISSUE_TOPICS.includes(value as IssueTopic));
+}
+
+export function topicLabel(topic: string): string {
+  if (topic === "fact-check") return "Fact-check";
+  if (topic === "inbox") return "Inbox";
+  return isIssueTopic(topic) ? TOPIC_LABELS[topic] : topic.replace(/_/g, " ");
 }
 
 /** Concrete next-post lines — never “post more.” */

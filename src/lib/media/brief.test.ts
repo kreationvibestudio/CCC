@@ -77,12 +77,12 @@ test("media brief names best and worst posts and builds a WhatsApp huddle", () =
   assert.equal(brief.worstPost?.id, "worst");
   assert.deepEqual(brief.topIssues, ["roads", "employment"]);
   assert.equal(brief.nextPosts[0]?.topic, "roads");
-  assert.match(brief.mediaLine, /draft a roads post/i);
+  assert.match(brief.mediaLine, /Comment heat: roads/i);
   assert.match(brief.huddleText, /Media huddle/);
   assert.match(brief.huddleText, /12 pending/);
   assert.match(brief.huddleText, /Uromi/);
   assert.match(brief.huddleText, /Good morning Edo/);
-  assert.match(brief.huddleText, /Meta Business Suite/);
+  assert.match(brief.huddleText, /Heat suggestions/);
 });
 
 test("empty activity stays at zero and still has a huddle line", () => {
@@ -97,7 +97,7 @@ test("empty activity stays at zero and still has a huddle line", () => {
   assert.equal(brief.bestPost, null);
   assert.deepEqual(brief.nextPosts, []);
   assert.match(brief.summary, /No campaign activity/);
-  assert.equal(brief.mediaLine, "Media desk: inbox clear.");
+  assert.equal(brief.mediaLine, "Media desk: inbox clear. Pick a beat to own.");
   assert.match(brief.huddleText, /Hold replies/);
 });
 
@@ -108,6 +108,6 @@ test("one-line pin prefers the first recommended post", () => {
       pending: 4,
       misinfo: 1,
     }),
-    /Today: draft a roads post\. 4 pending, 1 misinfo/
+    /Comment heat: roads\. HQ picks the beat\. 4 pending, 1 misinfo/
   );
 });

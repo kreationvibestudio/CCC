@@ -77,8 +77,8 @@ export function hqCreateUserBodies(input: {
   // profile explicitly with the service role after the login exists, and
   // app_metadata is carried only because it is service-role-only and audit-friendly.
   return [
-    { ...base, app_metadata: { tenant_id: tenantId, role, hq_invite: true }, user_metadata: { full_name } },
-    { ...base, app_metadata: { tenant_id: tenantId, hq_invite: true }, user_metadata: { full_name } },
+    { ...base, app_metadata: { tenant_id: tenantId, role, hq_invite: true, must_change_password: true }, user_metadata: { full_name } },
+    { ...base, app_metadata: { tenant_id: tenantId, hq_invite: true, must_change_password: true }, user_metadata: { full_name } },
     { ...base, user_metadata: { full_name } },
   ];
 }
@@ -201,6 +201,7 @@ export async function adminCreateAuthUser(input: {
     if (res.status >= 200 && res.status < 300) {
       const userId = authUserIdFromBody(parseJson(res.text)) ?? (await findAuthUserIdByEmail(input.email));
       if (!userId) return { error: "Auth created a login but did not return a user id" };
+      await adminSetMustChangePassword(userId, true);
       return { userId, created: true };
     }
 
@@ -230,6 +231,38 @@ export async function adminDeleteAuthUser(userId: string): Promise<{ success?: t
   }
   if (!res) return { error: "SUPABASE_SERVICE_ROLE_KEY is not configured" };
   if (res.status === 404) return { success: true };
+  if (res.status < 200 || res.status >= 300) return { error: parseGoTrueError(res.status, res.text) };
+  return { success: true };
+}
+
+export async function adminSetMustChangePassword(
+  userId: string,
+  value: boolean
+): Promise<{ success?: true; error?: string }> {
+  const id = userId.trim();
+  if (!id) return { error: "User id is required" };
+  let currentMeta: Record<string, unknown> = {};
+  try {
+    const existing = await authAdminRequest(`/admin/users/${encodeURIComponent(id)}`);
+    if (existing && existing.status >= 200 && existing.status < 300) {
+      const body = parseJson(existing.text) as { app_metadata?: Record<string, unknown> };
+      if (body.app_metadata && typeof body.app_metadata === "object") {
+        currentMeta = body.app_metadata;
+      }
+    }
+  } catch {
+    // GoTrue usually merges app_metadata; we still send a full object when we can.
+  }
+  let res: AdminHttpResult | null;
+  try {
+    res = await authAdminRequest(`/admin/users/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: { app_metadata: { ...currentMeta, must_change_password: value } },
+    });
+  } catch (e) {
+    return { error: e instanceof Error && e.message.trim() ? e.message.trim() : "Auth admin request failed" };
+  }
+  if (!res) return { error: "SUPABASE_SERVICE_ROLE_KEY is not configured" };
   if (res.status < 200 || res.status >= 300) return { error: parseGoTrueError(res.status, res.text) };
   return { success: true };
 }

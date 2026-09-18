@@ -658,6 +658,7 @@ export function AdminView({
             <p className="mt-3 rounded-md border border-border bg-muted/40 p-3 text-sm">
               Temporary password (copy now):{" "}
               <code className="font-mono text-foreground">{invitePassword}</code>
+              . They must replace it at first sign-in before HQ opens.
             </p>
           )}
           <p className="mt-3 text-xs text-muted-foreground">

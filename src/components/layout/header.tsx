@@ -149,7 +149,7 @@ export function Header() {
               <User className="mr-2 h-4 w-4" /> Profile
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push("/settings/security")}>
-              <Settings className="mr-2 h-4 w-4" /> Security & 2FA
+              <Settings className="mr-2 h-4 w-4" /> Password & 2FA
             </DropdownMenuItem>
             {user?.isPlatformOperator && (
               <DropdownMenuItem onClick={() => router.push("/platform")}>

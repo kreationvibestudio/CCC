@@ -87,7 +87,7 @@ export default async function SettingsPage() {
             </fieldset>
           </form>
           <p className="mt-4 text-sm text-muted-foreground">
-            For MFA, open{" "}
+            To change your password or set up MFA, open{" "}
             <Link href="/settings/security" className="text-primary underline-offset-2 hover:underline">
               Security settings
             </Link>

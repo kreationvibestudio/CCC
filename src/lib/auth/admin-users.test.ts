@@ -59,6 +59,8 @@ describe("hqCreateUserBodies", () => {
       role: "polling_agent",
     });
     assert.equal(bodies[0].app_metadata?.role, "polling_agent");
+    assert.equal(bodies[0].app_metadata?.must_change_password, true);
+    assert.equal(bodies[1].app_metadata?.must_change_password, true);
     assert.equal("role" in (bodies[1].app_metadata ?? {}), false);
     assert.equal(bodies[2].app_metadata, undefined);
   });

@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { safeInternalPath } from "@/lib/auth/bearer";
+import { jsonUnauthorizedBody, wantsJsonUnauthorized } from "@/lib/auth/json-unauthorized";
 import { buildCsp } from "@/lib/security/headers";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
@@ -84,6 +85,12 @@ export async function updateSession(request: NextRequest) {
   };
 
   if (!user && !isPublicRoute) {
+    if (wantsJsonUnauthorized(path)) {
+      const response = NextResponse.json(jsonUnauthorizedBody(), { status: 401 });
+      response.headers.set("content-security-policy", csp);
+      supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+      return response;
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", path);

@@ -18,6 +18,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FacebookSyncButton } from "@/components/social/facebook-sync-button";
+import { FacebookConnectForm } from "@/components/social/facebook-connect-form";
 import { MediaSchemaSetup } from "@/components/media/media-schema-setup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,12 @@ import type { MediaCommandData } from "@/lib/media/data";
 import type { Comment, MediaContent } from "@/types/database";
 import type { TeamMember } from "@/lib/comments/data";
 
+type FacebookStatus = {
+  pageId: string;
+  configured: boolean;
+  lastError: string | null;
+};
+
 async function copyText(text: string, ok: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -59,10 +66,12 @@ export function MediaCommand({
   data,
   canManage,
   canReply,
+  facebook,
 }: {
   data: MediaCommandData;
   canManage: boolean;
   canReply: boolean;
+  facebook: FacebookStatus;
 }) {
   const toPost = data.items.filter(
     (item) => item.status === "draft" || item.status === "approved" || item.status === "scheduled"
@@ -78,14 +87,35 @@ export function MediaCommand({
           <p className="text-sm text-muted-foreground">
             Reply first. Then pick the beat HQ wants to own — comment heat is only a hint.
           </p>
+          {facebook.lastError ? (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              Last Facebook sync: {facebook.lastError}{" "}
+              <Link href="/social" className="underline">
+                Open Page posts
+              </Link>
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={() => copyText(data.brief.huddleText, "Copied the huddle for WhatsApp")}>
             <Copy className="h-4 w-4" /> Copy huddle
           </Button>
+          {canManage && facebook.configured ? (
+            <FacebookConnectForm
+              defaultPageId={facebook.pageId || "671649942702174"}
+              configured
+            />
+          ) : null}
           <FacebookSyncButton />
         </div>
       </header>
+
+      {canManage && !facebook.configured ? (
+        <FacebookConnectForm
+          defaultPageId={facebook.pageId || "671649942702174"}
+          configured={false}
+        />
+      ) : null}
 
       {data.schemaMissing ? (
         <MediaSchemaSetup message="One SQL apply unlocks saving drafts. Replies and the huddle already work." />

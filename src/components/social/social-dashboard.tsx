@@ -101,8 +101,7 @@ export function SocialDashboard({
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="py-4 text-sm">
             Live Facebook is not connected. Use <strong>Connect Facebook</strong> above to paste your
-            page ID and page access token. Until then, demo sample posts can still load with{" "}
-            <strong>Sync Facebook Now</strong>.
+            page ID and page access token, then click <strong>Sync Facebook Now</strong>.
           </CardContent>
         </Card>
       )}

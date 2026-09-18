@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/components/providers/auth-provider";
+import {
+  facebookSyncFailureMessage,
+  readJsonObject,
+} from "@/lib/integrations/facebook/sync-response";
 
 export function FacebookSyncButton() {
   const { canWrite } = usePermissions();
@@ -16,13 +20,20 @@ export function FacebookSyncButton() {
   async function handleSync() {
     setLoading(true);
     try {
-      const res = await fetch("/api/sync/facebook", { method: "POST" });
-      const data = await res.json();
+      const res = await fetch("/api/sync/facebook", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      const data = await readJsonObject(res);
 
       if (!res.ok) {
-        const msg = data.error ?? "Sync failed";
-        const full = typeof msg === "string" ? msg : msg;
-        toast.error(full, { duration: 12000 });
+        toast.error(facebookSyncFailureMessage(res, data), { duration: 12000 });
+        return;
+      }
+
+      if (!data) {
+        toast.error(facebookSyncFailureMessage(res, null), { duration: 12000 });
         return;
       }
 
@@ -32,7 +43,7 @@ export function FacebookSyncButton() {
       toast.success(
         demo
           ? `Loaded ${data.postsSynced} demo posts for ${data.pageName} (connect a live page token to sync real Facebook)`
-          : `Synced ${data.postsSynced} live posts from ${data.pageName} (${data.followers?.toLocaleString()} followers)` +
+          : `Synced ${data.postsSynced} live posts from ${data.pageName} (${Number(data.followers ?? 0).toLocaleString()} followers)` +
             (named ? `. Recovered ${named} commenter name${named === 1 ? "" : "s"}` : "")
       );
       if (!demo && hidden > 0 && named === 0) {
@@ -42,13 +53,16 @@ export function FacebookSyncButton() {
         );
       }
 
-      if (data.warning) {
+      if (typeof data.warning === "string" && data.warning) {
         toast.warning(data.warning, { duration: 8000 });
       }
 
       router.refresh();
     } catch {
-      toast.error("Could not connect to Facebook. Check your .env.local settings.");
+      toast.error(
+        "Could not reach Facebook sync. Check your connection, then try Page posts → Connect Facebook.",
+        { duration: 12000 }
+      );
     } finally {
       setLoading(false);
     }

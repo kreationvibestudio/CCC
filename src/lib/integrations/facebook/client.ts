@@ -63,9 +63,8 @@ export const FACEBOOK_TOKEN_REFRESH_HELP = `Facebook access token expired or inv
 3. Add permissions: pages_show_list, pages_read_engagement, pages_read_user_content, pages_manage_engagement
 4. Generate Access Token → log in as the page admin
 5. Exchange for a long-lived page token (see FACEBOOK-SETUP.md) — page tokens from a long-lived user token do not expire
-6. Update FACEBOOK_USER_ACCESS_TOKEN and FACEBOOK_PAGE_ACCESS_TOKEN in Vercel + .env.local
-7. Optionally set FACEBOOK_APP_ID + FACEBOOK_APP_SECRET so CCC can auto-refresh user tokens
-8. Redeploy / restart, then sync again`;
+6. Paste the page token in HQ under Page posts → Connect Facebook (no .env.local needed)
+7. Optionally set FACEBOOK_APP_ID + FACEBOOK_APP_SECRET in Vercel so CCC can auto-refresh user tokens`;
 
 export const FACEBOOK_PERMISSION_HELP = `Facebook token is missing required permissions. Fix:
 1. Go to developers.facebook.com → your app → Tools → Graph API Explorer
@@ -75,8 +74,7 @@ export const FACEBOOK_PERMISSION_HELP = `Facebook token is missing required perm
    • pages_read_engagement
    • pages_read_user_content
 4. Log in with the Facebook account that manages your page
-5. Copy the new token into .env.local / Vercel as FACEBOOK_USER_ACCESS_TOKEN
-6. Restart / redeploy`;
+5. Run GET /me/accounts and paste that page token in HQ under Page posts → Connect Facebook`;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -108,6 +108,23 @@ function publicTermiiError(status: number, payload: Record<string, unknown> | nu
   return `Termii rejected the send (HTTP ${status}).`;
 }
 
+export function parseTermiiBalancePayload(
+  status: number,
+  payload: Record<string, unknown> | null,
+  apiKey: string | null
+): TermiiAccount {
+  if (status === 401 || status < 200 || status >= 300) {
+    return { ok: false, error: publicTermiiError(status, payload, apiKey) };
+  }
+  const balance = typeof payload?.balance === "number" ? payload.balance : Number(payload?.balance);
+  if (!Number.isFinite(balance)) {
+    return { ok: false, error: "Termii did not return a wallet balance." };
+  }
+  const currency =
+    typeof payload?.currency === "string" && payload.currency.trim() ? payload.currency.trim() : "NGN";
+  return { ok: true, balance, currency };
+}
+
 export function parseTermiiSendPayload(
   status: number,
   bodyText: string,
@@ -150,8 +167,6 @@ export async function getTermiiAccount(): Promise<TermiiAccount> {
   if (!apiKey) {
     return { ok: false, error: "TERMII_API_KEY is not configured. Add it in Vercel env or .env.local." };
   }
-  const sender = resolveTermiiSenderId();
-  if ("error" in sender) return { ok: false, error: sender.error };
 
   const url = new URL(`${TERMII_BASE}/get-balance`);
   url.searchParams.set("api_key", apiKey);
@@ -168,15 +183,7 @@ export async function getTermiiAccount(): Promise<TermiiAccount> {
   } catch {
     payload = null;
   }
-  if (res.status === 401 || !res.ok) {
-    return { ok: false, error: publicTermiiError(res.status, payload, apiKey) };
-  }
-  const balance = typeof payload?.balance === "number" ? payload.balance : Number(payload?.balance);
-  return {
-    ok: true,
-    balance: Number.isFinite(balance) ? balance : undefined,
-    currency: typeof payload?.currency === "string" ? payload.currency : "NGN",
-  };
+  return parseTermiiBalancePayload(res.status, payload, apiKey);
 }
 
 export async function sendTermiiSms(to: string, message: string): Promise<TermiiSendResult> {

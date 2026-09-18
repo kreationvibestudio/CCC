@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import type { MessageTemplate, MessageCampaign } from "@/types/database";
 import { usePermissions } from "@/components/providers/auth-provider";
+import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 
 const SUPPORT_LEVELS = ["strong", "leaning", "undecided", "opposed"] as const;
 
@@ -47,6 +48,7 @@ export function CommunicationsView({
             : "View SMS templates and send Termii broadcasts to CRM contacts"
         }
       >
+        <TermiiWalletDial />
         {canCreate ? (
         <div className="flex gap-2">
           <Button asChild>
@@ -186,6 +188,7 @@ function SendCampaignDialog({
         <DialogHeader>
           <DialogTitle>Send “{campaign.name}”</DialogTitle>
         </DialogHeader>
+        <TermiiWalletDial />
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Dispatches via Termii to CRM contacts with phone numbers. Optional filters

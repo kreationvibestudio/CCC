@@ -129,8 +129,13 @@ describe("reminderConfirmCopy", () => {
   it("names not-started and overdue people when nothing is selected", () => {
     const result = reminderConfirmCopy({ selectedCount: 0, needsTrainingCount: 20 });
     assert.equal(result.audience, "needs_training");
-    assert.match(result.message, /20 volunteer/);
-    assert.match(result.message, /have not started or are overdue/);
+    assert.match(result.message, /20 volunteers who have not started or are overdue/);
+  });
+
+  it("uses singular copy for one person who has not started or is overdue", () => {
+    const result = reminderConfirmCopy({ selectedCount: 0, needsTrainingCount: 1 });
+    assert.equal(result.audience, "needs_training");
+    assert.match(result.message, /1 volunteer who has not started or is overdue/);
   });
 
   it("blocks send when there is no selection and nobody needs a reminder", () => {

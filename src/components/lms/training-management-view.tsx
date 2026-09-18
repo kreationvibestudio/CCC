@@ -260,7 +260,13 @@ export function TrainingManagementView({
           ) : null}
           {needsTraining.length > 0 ? (
             <p className="text-sm text-amber-600">
-              {notStarted.length} have not started{overdue.length ? `, ${overdue.length} overdue` : ""}. With no rows selected, Send reminders uses that list.
+              {[
+                notStarted.length ? `${notStarted.length} ${notStarted.length === 1 ? "has" : "have"} not started` : null,
+                overdue.length ? `${overdue.length} overdue` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              . With no rows selected, Send reminders uses that list.
             </p>
           ) : null}
           <div className="overflow-x-auto rounded-xl border">

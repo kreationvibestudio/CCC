@@ -75,10 +75,14 @@ export function reminderConfirmCopy(input: {
   }
   if (input.needsTrainingCount > 0) {
     const n = input.needsTrainingCount;
+    const who =
+      n === 1
+        ? "1 volunteer who has not started or is overdue"
+        : `${n} volunteers who have not started or are overdue`;
     return {
       ok: true,
       audience: "needs_training",
-      message: `Send training reminders to ${n} volunteer${n === 1 ? "" : "s"} who have not started or are overdue? Each message includes their phone (login username), training code, and the training link.`,
+      message: `Send training reminders to ${who}? Each message includes their phone (login username), training code, and the training link.`,
     };
   }
   return { ok: false, audience: "none", message: REMINDER_NONE_MESSAGE };

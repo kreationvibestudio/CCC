@@ -11,6 +11,8 @@ import { isEnvFlagEnabled } from "@/lib/env-flags";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { adminSetMustChangePassword } from "@/lib/auth/admin-users";
+import { mustChangePassword, validateNewPassword } from "@/lib/auth/password";
 
 export async function signIn(email: string, password: string) {
   const supabase = await createClient();
@@ -21,6 +23,9 @@ export async function signIn(email: string, password: string) {
 
   const user = data.user;
   if (!user) return { error: "Sign in failed" };
+  if (mustChangePassword(user)) {
+    return { success: true as const, next: "/change-password" as const, mustChangePassword: true as const };
+  }
   if (user.email && (await isPlatformOperatorUser(user.id, user.email))) {
     const { data: profile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
     if (!profile) return { success: true as const, next: "/platform" };
@@ -298,8 +303,57 @@ export async function updatePassword(password: string) {
     return { error: "Password must be at least 8 characters" };
   }
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sign in first" };
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.message };
+  await adminSetMustChangePassword(user.id, false);
+  await supabase.auth.refreshSession();
   await logAudit("auth.password_reset");
   return { success: true };
+}
+
+export async function changeOwnPassword(input: {
+  current: string;
+  next: string;
+  confirm: string;
+}) {
+  const invalid = validateNewPassword(input);
+  if (invalid) return { error: invalid };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) return { error: "Sign in first" };
+
+  const { error: reauthError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: input.current,
+  });
+  if (reauthError) {
+    return { error: "Current password is not correct" };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: input.next });
+  if (error) return { error: error.message };
+
+  const cleared = await adminSetMustChangePassword(user.id, false);
+  if (cleared.error) {
+    return { error: cleared.error };
+  }
+  const { error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    return {
+      error:
+        "Password saved, but this session is still marked temporary. Sign out, then sign in with your new password.",
+    };
+  }
+
+  await logAudit("auth.password_changed");
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const role = (profile?.role ?? "supporter") as UserRole;
+  return { success: true as const, next: homePathForRole(role) };
 }

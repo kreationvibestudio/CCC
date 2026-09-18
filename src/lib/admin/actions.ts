@@ -101,7 +101,7 @@ export async function inviteUser(formData: FormData) {
       message: created.created
         ? roleRaw === "polling_agent"
           ? `Invited ${email} as Field Agent. Copy the temporary password, then tie them to a polling unit under Polling units → PU Agents.`
-          : `Invited ${email}. Share the temporary password securely; they should change it after first login.`
+          : `Invited ${email}. Copy the temporary password and send it securely. They must set a permanent password at first sign-in.`
         : `Updated ${email} in this campaign workspace.`,
     };
   } catch (e) {

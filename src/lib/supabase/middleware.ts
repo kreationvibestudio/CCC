@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { safeInternalPath } from "@/lib/auth/bearer";
 import { jsonUnauthorizedBody, wantsJsonUnauthorized } from "@/lib/auth/json-unauthorized";
+import { mustChangePassword, passwordChangeAllowedPath } from "@/lib/auth/password";
 import { buildCsp } from "@/lib/security/headers";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
@@ -97,7 +98,23 @@ export async function updateSession(request: NextRequest) {
     return redirectTo(url);
   }
 
-  if (user && isAuthRoute && !isResetPassword) {
+  if (user && mustChangePassword(user) && !passwordChangeAllowedPath(path)) {
+    if (wantsJsonUnauthorized(path)) {
+      const response = NextResponse.json(
+        { error: "Set a permanent password before using HQ" },
+        { status: 403 }
+      );
+      response.headers.set("content-security-policy", csp);
+      supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+      return response;
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = "/change-password";
+    url.search = "";
+    return redirectTo(url);
+  }
+
+  if (user && isAuthRoute && !isResetPassword && !mustChangePassword(user)) {
     const url = request.nextUrl.clone();
     const next = safeInternalPath(request.nextUrl.searchParams.get("redirect")) ?? "/dashboard";
     const q = next.indexOf("?");

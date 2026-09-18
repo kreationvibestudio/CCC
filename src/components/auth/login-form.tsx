@@ -36,6 +36,12 @@ export function LoginForm() {
         toast.error(result.error);
         return;
       }
+      if (result.next === "/change-password") {
+        toast.success("Set a permanent password to continue");
+        router.push("/change-password");
+        router.refresh();
+        return;
+      }
       toast.success("Welcome to Campaign Command Center");
       const next =
         safeInternalPath(searchParams.get("redirect")) || result.next || "/dashboard";

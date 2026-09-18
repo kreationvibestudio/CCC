@@ -161,9 +161,31 @@ export function TrainingManagementView({
             variant="secondary"
             onClick={() =>
               start(async () => {
+                if (
+                  !window.confirm(
+                    overdue.length
+                      ? `Send overdue training reminders to ${overdue.length} volunteer${overdue.length === 1 ? "" : "s"} via Termii WhatsApp, email, and/or SMS?`
+                      : "No overdue volunteers are listed. Send anyway?"
+                  )
+                ) {
+                  return;
+                }
                 const result = await sendTrainingReminders();
                 if ("error" in result && result.error) toast.error(result.error);
-                else toast.success(`Reminders sent to ${"sent" in result ? result.sent : 0} overdue volunteers`);
+                else {
+                  const sent = "sent" in result ? result.sent : 0;
+                  const failed = "failed" in result ? result.failed : 0;
+                  const whatsappSent = "whatsappSent" in result ? result.whatsappSent : 0;
+                  const emailSent = "emailSent" in result ? result.emailSent : 0;
+                  const smsSent = "smsSent" in result ? result.smsSent : 0;
+                  toast.success(
+                    failed
+                      ? `Reminders sent to ${sent} (WhatsApp ${whatsappSent}, email ${emailSent}, SMS ${smsSent}). ${failed} failed.`
+                      : sent
+                        ? `Reminders sent to ${sent} overdue volunteer${sent === 1 ? "" : "s"} (WhatsApp ${whatsappSent}, email ${emailSent}, SMS ${smsSent}).`
+                        : "No overdue volunteers to remind."
+                  );
+                }
                 router.refresh();
               })
             }
@@ -230,7 +252,9 @@ export function TrainingManagementView({
             </p>
           ) : null}
           {overdue.length > 0 ? (
-            <p className="text-sm text-amber-600">{overdue.length} overdue. Filter the table or send reminders.</p>
+            <p className="text-sm text-amber-600">
+              {overdue.length} overdue. Send reminders uses Termii WhatsApp, email, and SMS for anyone those channels can reach.
+            </p>
           ) : null}
           <div className="overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">

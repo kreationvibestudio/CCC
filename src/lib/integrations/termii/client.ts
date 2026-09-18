@@ -49,6 +49,11 @@ export function termiiSenderIdConfigured(raw = process.env.TERMII_SENDER_ID): bo
   return !("error" in resolveTermiiSenderId(raw));
 }
 
+/** Plain SMS needs an API key plus an approved sender ID. */
+export function termiiSmsConfigured(): boolean {
+  return Boolean(resolveTermiiApiKey()) && termiiSenderIdConfigured();
+}
+
 /** Nigeria MSISDN for Termii: 234 + 10 subscriber digits. */
 export function toTermiiMsisdn(raw: string): string | null {
   let digits = raw.replace(/\D/g, "");

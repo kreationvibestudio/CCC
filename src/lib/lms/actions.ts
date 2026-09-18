@@ -7,6 +7,7 @@ import { denyWriteIfRestricted } from "@/types/auth";
 import { extraEnrollCourse, ensureTrainingCode, logLmsActivity, removeEnrollment } from "./enroll";
 import { getTrainingOverview } from "./hq-data";
 import { resolveAppHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "./send-training-code";
+import { sendVolunteerTrainingReminder, termiiReminderDeliveryConfigured } from "./send-training-reminder";
 import { termiiEmailConfigured, termiiWhatsAppConfigured } from "@/lib/integrations/termii/client";
 
 async function manageGate() {
@@ -221,22 +222,67 @@ export async function sendTrainingReminders() {
   const gate = await manageGate();
   if ("error" in gate) return { error: gate.error };
   const { user, supabase } = gate;
+  if (!termiiReminderDeliveryConfigured()) {
+    return {
+      error:
+        "No reminder channel is configured. Add Termii WhatsApp, email, and/or SMS (TERMII_API_KEY + TERMII_SENDER_ID) in Vercel.",
+    };
+  }
   const overview = await getTrainingOverview();
   if ("error" in overview) return overview;
+  let people = overview.overdue;
+  const cap = whatsappRecipientCap();
+  if (people.length > cap) people = people.slice(0, cap);
+
+  const slug = user.workspace?.slug ?? "";
+  const learnUrl = volunteerLearnLoginUrl(slug, resolveAppHost());
+  if (!learnUrl) {
+    return { error: "NEXT_PUBLIC_APP_URL is not set. Training login link cannot be built." };
+  }
+
   let sent = 0;
-  for (const volunteer of overview.overdue) {
-    await logLmsActivity(supabase, {
+  let whatsappSent = 0;
+  let emailSent = 0;
+  let smsSent = 0;
+  let failed = 0;
+  let lastError = "";
+  for (const volunteer of people) {
+    let code = volunteer.training_code ?? "";
+    if (!code) {
+      try {
+        code = await ensureTrainingCode(supabase, user.profile.tenant_id, volunteer.id, null);
+      } catch {
+        failed += 1;
+        lastError = "Could not create a training code for a volunteer.";
+        continue;
+      }
+    }
+    const result = await sendVolunteerTrainingReminder({
+      supabase,
       tenantId: user.profile.tenant_id,
       volunteerId: volunteer.id,
       actorId: user.id,
-      action: "training.reminder",
-      detail: `Please finish your required training before the deadline.`,
-      metadata: { source: "hq_bulk" },
+      phone: volunteer.phone,
+      email: volunteer.email,
+      name: volunteer.full_name,
+      trainingCode: code,
+      learnUrl,
     });
-    sent += 1;
+    if (result.whatsappSent) whatsappSent += 1;
+    if (result.emailSent) emailSent += 1;
+    if (result.smsSent) smsSent += 1;
+    if (result.whatsappSent || result.emailSent || result.smsSent) sent += 1;
+    else {
+      failed += 1;
+      if (result.error) lastError = result.error;
+    }
   }
+
   revalidatePath("/training");
-  return { success: true as const, sent };
+  if (!sent && failed) {
+    return { error: lastError || "Could not send training reminders.", sent, failed, whatsappSent, emailSent, smsSent };
+  }
+  return { success: true as const, sent, failed, whatsappSent, emailSent, smsSent };
 }
 
 export async function createLiveSession(formData: FormData) {

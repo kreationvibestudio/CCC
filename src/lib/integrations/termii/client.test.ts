@@ -12,6 +12,7 @@ import {
   sendTermiiWhatsAppTemplate,
   sendTermiiEmailTemplate,
   termiiEmailConfigured,
+  termiiSmsConfigured,
   termiiWhatsAppConfigured,
   toTermiiMsisdn,
   buildTermiiEmailTemplatePayload,
@@ -40,6 +41,23 @@ describe("resolveTermiiSenderId", () => {
   it("strips spaces so HoR 2027 becomes HoR2027", () => {
     assert.deepEqual(resolveTermiiSenderId("HoR 2027"), { senderId: "HoR2027" });
     assert.equal(compactTermiiSenderId("HoR 2027"), "HoR2027");
+  });
+
+  it("treats SMS as configured only with an API key and sender ID", () => {
+    const prevKey = process.env.TERMII_API_KEY;
+    const prevSender = process.env.TERMII_SENDER_ID;
+    delete process.env.TERMII_API_KEY;
+    process.env.TERMII_SENDER_ID = "HoR2027";
+    try {
+      assert.equal(termiiSmsConfigured(), false);
+      process.env.TERMII_API_KEY = "not-a-real-key";
+      assert.equal(termiiSmsConfigured(), true);
+    } finally {
+      if (prevKey === undefined) delete process.env.TERMII_API_KEY;
+      else process.env.TERMII_API_KEY = prevKey;
+      if (prevSender === undefined) delete process.env.TERMII_SENDER_ID;
+      else process.env.TERMII_SENDER_ID = prevSender;
+    }
   });
 
   it("rejects empty or too-short IDs", () => {

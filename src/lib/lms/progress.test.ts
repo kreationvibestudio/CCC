@@ -5,6 +5,7 @@ import {
   certificateCode,
   deploymentReadyFromEnrollments,
   gradeQuiz,
+  hasNotOpenedTraining,
   isOverdue,
   nextIncompleteModule,
   overallPathStatus,
@@ -112,6 +113,26 @@ describe("LMS progress", () => {
         ],
       }),
       "completed"
+    );
+  });
+
+  it("treats pending assigned courses as not opened, and login/progress as opened", () => {
+    assert.equal(
+      hasNotOpenedTraining("pending", [{ required: true, status: "assigned" }]),
+      true
+    );
+    assert.equal(hasNotOpenedTraining("pending", []), true);
+    assert.equal(
+      hasNotOpenedTraining("pending", [{ required: true, status: "in_progress" }]),
+      false
+    );
+    assert.equal(
+      hasNotOpenedTraining("in_progress", [{ required: true, status: "assigned" }]),
+      false
+    );
+    assert.equal(
+      hasNotOpenedTraining("completed", [{ required: true, status: "assigned" }]),
+      false
     );
   });
 

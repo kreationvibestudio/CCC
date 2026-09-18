@@ -130,6 +130,19 @@ export function isOverdue(dueAt: string | null | undefined, status: string, now 
   return !Number.isNaN(due.getTime()) && due.getTime() < now.getTime();
 }
 
+/** Never signed in / never started a course — HQ Pending, not In progress or Trained. */
+export function hasNotOpenedTraining(
+  trainingStatus: string | null | undefined,
+  enrollments: Array<{ required?: boolean; status: string }>
+) {
+  return (
+    effectiveTrainingStatus(
+      trainingStatus,
+      enrollments.map((row) => ({ required: row.required ?? true, status: row.status }))
+    ) === "pending"
+  );
+}
+
 /** Core briefing (null role) is assigned to everyone, including people who picked no support roles. */
 export function publishedCoursesForRoles<T extends { status: string; role_slug: string | null }>(
   courses: T[],

@@ -9,7 +9,15 @@ import { Label } from "@/components/ui/label";
 import { loginVolunteerLearn } from "@/lib/lms/learn";
 import { recoverStaleServerAction } from "@/lib/stale-server-action";
 
-export function LearnLoginForm({ slug, campaignName }: { slug: string; campaignName: string }) {
+export function LearnLoginForm({
+  slug,
+  campaignName,
+  defaultPhone,
+}: {
+  slug: string;
+  campaignName: string;
+  defaultPhone?: string;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
 
@@ -43,7 +51,15 @@ export function LearnLoginForm({ slug, campaignName }: { slug: string; campaignN
       </p>
       <div className="space-y-1.5">
         <Label htmlFor="phone">Phone number</Label>
-        <Input id="phone" name="phone" type="tel" required autoComplete="tel" placeholder="0813 374 7224" />
+        <Input
+          id="phone"
+          name="phone"
+          type="tel"
+          required
+          autoComplete="tel"
+          placeholder="0813 374 7224"
+          defaultValue={defaultPhone ?? ""}
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="code">Training code</Label>

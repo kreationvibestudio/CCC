@@ -25,7 +25,7 @@ import {
 } from "@/lib/lms/actions";
 import { supportRoleShort } from "@/lib/lms/roles";
 import { isOverdue, percentComplete } from "@/lib/lms/progress";
-import { reminderConfirmCopy } from "@/lib/lms/training-reminder-copy";
+import { needsTrainingPeople, reminderConfirmCopy } from "@/lib/lms/training-reminder-copy";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TrainingBadge } from "@/components/volunteers/training-badge";
 
@@ -82,19 +82,21 @@ export function TrainingManagementView({
   byRole,
   byLga,
   overdue,
+  notStarted,
   sessions,
   logs,
   modules,
   learnBase,
   canWrite,
 }: {
-  stats: { total: number; trained: number; ready: number; overdue: number; inProgress: number };
+  stats: { total: number; trained: number; ready: number; overdue: number; notStarted: number; inProgress: number };
   courses: Course[];
   volunteers: Volunteer[];
   enrollments: Enrollment[];
   byRole: Array<{ slug: string; name: string; total: number; ready: number; pct: number }>;
   byLga: Array<{ lga: string; total: number; ready: number; pct: number }>;
   overdue: Volunteer[];
+  notStarted: Volunteer[];
   sessions: Array<{ id: string; title: string; starts_at: string; location: string | null; meeting_url: string | null; capacity: number | null }>;
   logs: Array<{ id: string; action: string; detail: string | null; created_at: string; volunteer_id: string | null }>;
   modules: CourseModule[];
@@ -121,6 +123,8 @@ export function TrainingManagementView({
     if (!q) return true;
     return `${v.full_name} ${v.phone} ${v.lga} ${v.ward}`.toLowerCase().includes(q);
   });
+  const needsTraining = needsTrainingPeople({ notStarted, overdue });
+  const reminderButtonCount = selectedIds.length || needsTraining.length;
 
   return (
     <div className="space-y-6">
@@ -165,7 +169,7 @@ export function TrainingManagementView({
                 const ids = selectedIds.filter((id) => people.some((person) => person.id === id));
                 const confirm = reminderConfirmCopy({
                   selectedCount: ids.length,
-                  overdueCount: overdue.length,
+                  needsTrainingCount: needsTraining.length,
                 });
                 if (!confirm.ok) {
                   toast.error(confirm.message);
@@ -180,12 +184,11 @@ export function TrainingManagementView({
                   const whatsappSent = "whatsappSent" in result ? result.whatsappSent : 0;
                   const emailSent = "emailSent" in result ? result.emailSent : 0;
                   const smsSent = "smsSent" in result ? result.smsSent : 0;
-                  const who = confirm.audience === "overdue" ? " overdue" : "";
                   toast.success(
                     failed
                       ? `Reminders sent to ${sent} (WhatsApp ${whatsappSent}, email ${emailSent}, SMS ${smsSent}). ${failed} failed.`
                       : sent
-                        ? `Reminders sent to ${sent}${who} volunteer${sent === 1 ? "" : "s"} (WhatsApp ${whatsappSent}, email ${emailSent}, SMS ${smsSent}).`
+                        ? `Reminders sent to ${sent} volunteer${sent === 1 ? "" : "s"} with phone, training code, and login link (WhatsApp ${whatsappSent}, email ${emailSent}, SMS ${smsSent}).`
                         : "Nobody received a reminder (no WhatsApp, email, or SMS destination)."
                   );
                 }
@@ -194,7 +197,7 @@ export function TrainingManagementView({
             }
             disabled={pending}
           >
-            {selectedIds.length ? `Send reminders (${selectedIds.length})` : "Send reminders"}
+            {reminderButtonCount ? `Send reminders (${reminderButtonCount})` : "Send reminders"}
           </Button>
         ) : null}
         <Button
@@ -221,11 +224,12 @@ export function TrainingManagementView({
         </Button>
       </PageHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <StatCard title="Volunteers" value={stats.total} icon={GraduationCap} />
         <StatCard title="Trained" value={stats.trained} />
         <StatCard title="Ready for assignment" value={stats.ready} />
         <StatCard title="In progress" value={stats.inProgress} />
+        <StatCard title="Not started" value={stats.notStarted} />
         <StatCard title="Overdue" value={stats.overdue} />
       </div>
 
@@ -251,12 +255,12 @@ export function TrainingManagementView({
           <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search volunteers…" className="max-w-sm" />
           {canWrite ? (
             <p className="text-xs text-muted-foreground">
-              Select rows and use Send codes (WhatsApp/email logins) or Send reminders (WhatsApp, email, and SMS). With none selected, Send codes goes to every listed volunteer (up to 200); Send reminders goes to overdue people only. Email goes only to people who have an address. Email needs Termii TOKEN → Email Setup (configuration ID); WhatsApp numbers are attached by Termii, not Meta Cloud.
+              Select rows and use Send codes (WhatsApp/email logins) or Send reminders (WhatsApp, email, and SMS). With none selected, Send codes goes to every listed volunteer (up to 200); Send reminders goes to people who have not opened training yet, plus anyone overdue. Reminders include phone (login username), training code, and the training link. Email goes only to people who have an address. Email needs Termii TOKEN → Email Setup (configuration ID); WhatsApp numbers are attached by Termii, not Meta Cloud.
             </p>
           ) : null}
-          {overdue.length > 0 ? (
+          {needsTraining.length > 0 ? (
             <p className="text-sm text-amber-600">
-              {overdue.length} overdue. With no rows selected, Send reminders uses that overdue list.
+              {notStarted.length} have not started{overdue.length ? `, ${overdue.length} overdue` : ""}. With no rows selected, Send reminders uses that list.
             </p>
           ) : null}
           <div className="overflow-x-auto rounded-xl border">

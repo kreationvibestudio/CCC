@@ -4,6 +4,7 @@ import {
   reminderChannels,
   reminderConfirmCopy,
   reminderRecipients,
+  trainingReminderLearnUrl,
   trainingReminderSms,
 } from "./training-reminder-copy.ts";
 
@@ -46,70 +47,95 @@ describe("reminderChannels", () => {
 });
 
 describe("trainingReminderSms", () => {
-  it("includes first name, login URL, and training code", () => {
+  it("includes first name, login URL, phone username, and training code", () => {
     const body = trainingReminderSms({
       name: "Ada Firstlogin",
+      phone: "08031234567",
       learnUrl: "https://ccc.example/learn/edo/login",
       trainingCode: "ABCD-EFGH",
     });
     assert.match(body, /^Hi Ada,/);
-    assert.match(body, /please finish your volunteer training/);
+    assert.match(body, /you need to complete volunteer training/);
     assert.match(body, /https:\/\/ccc\.example\/learn\/edo\/login/);
-    assert.match(body, /ABCD-EFGH/);
+    assert.match(body, /Username \(phone\): 08031234567/);
+    assert.match(body, /Code: ABCD-EFGH/);
+  });
+});
+
+describe("trainingReminderLearnUrl", () => {
+  it("puts the phone username on the login link", () => {
+    assert.equal(
+      trainingReminderLearnUrl("https://ccc.example/learn/edo/login", "08031234567"),
+      "https://ccc.example/learn/edo/login?phone=08031234567"
+    );
   });
 });
 
 describe("reminderRecipients", () => {
-  const volunteers = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const volunteers = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
   const overdue = [{ id: "b" }];
+  const notStarted = [{ id: "a" }, { id: "b" }];
 
-  it("sends to the selected rows, not only overdue", () => {
+  it("sends to the selected rows, not only overdue or not started", () => {
     const result = reminderRecipients({
-      selectedIds: ["a", "c"],
+      selectedIds: ["c"],
       volunteers,
+      notStarted,
       overdue,
     });
     assert.equal(result.audience, "selected");
     assert.deepEqual(
       result.people.map((row) => row.id),
-      ["a", "c"]
+      ["c"]
     );
   });
 
-  it("falls back to overdue when nothing is selected", () => {
-    const result = reminderRecipients({ selectedIds: [], volunteers, overdue });
-    assert.equal(result.audience, "overdue");
+  it("falls back to people who have not started or are overdue", () => {
+    const result = reminderRecipients({
+      selectedIds: [],
+      volunteers,
+      notStarted,
+      overdue,
+    });
+    assert.equal(result.audience, "needs_training");
     assert.deepEqual(
       result.people.map((row) => row.id),
-      ["b"]
+      ["a", "b"]
     );
   });
 
-  it("is empty when there is no selection and nobody is overdue", () => {
-    const result = reminderRecipients({ selectedIds: [], volunteers, overdue: [] });
+  it("is empty when there is no selection and nobody needs a reminder", () => {
+    const result = reminderRecipients({
+      selectedIds: [],
+      volunteers,
+      notStarted: [],
+      overdue: [],
+    });
     assert.equal(result.audience, "none");
     assert.equal(result.people.length, 0);
   });
 });
 
 describe("reminderConfirmCopy", () => {
-  it("asks about the selected rows even when overdue is zero", () => {
-    const result = reminderConfirmCopy({ selectedCount: 23, overdueCount: 0 });
+  it("asks about the selected rows even when nobody is overdue", () => {
+    const result = reminderConfirmCopy({ selectedCount: 23, needsTrainingCount: 0 });
     assert.equal(result.ok, true);
     assert.equal(result.audience, "selected");
     assert.match(result.message, /23 selected volunteer/);
+    assert.match(result.message, /phone \(login username\), training code/);
     assert.doesNotMatch(result.message, /overdue|Send anyway/i);
   });
 
-  it("falls back to overdue only when nothing is selected", () => {
-    const result = reminderConfirmCopy({ selectedCount: 0, overdueCount: 4 });
-    assert.equal(result.audience, "overdue");
-    assert.match(result.message, /overdue training reminders to 4 volunteer/);
+  it("names not-started and overdue people when nothing is selected", () => {
+    const result = reminderConfirmCopy({ selectedCount: 0, needsTrainingCount: 20 });
+    assert.equal(result.audience, "needs_training");
+    assert.match(result.message, /20 volunteer/);
+    assert.match(result.message, /have not started or are overdue/);
   });
 
-  it("blocks send when there is no selection and nobody is overdue", () => {
-    const result = reminderConfirmCopy({ selectedCount: 0, overdueCount: 0 });
+  it("blocks send when there is no selection and nobody needs a reminder", () => {
+    const result = reminderConfirmCopy({ selectedCount: 0, needsTrainingCount: 0 });
     assert.equal(result.ok, false);
-    assert.match(result.message, /Select volunteers in the People table/);
+    assert.match(result.message, /has not started training or is overdue/);
   });
 });

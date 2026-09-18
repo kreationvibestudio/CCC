@@ -16,15 +16,21 @@ export function PublicFundraisingMeter({
   /** Hero-scale meter for the public donate page. */
   prominent?: boolean;
 }) {
-  if (!(goal > 0)) return null;
-  const label = publicFundraisingPercentLabel(raised, goal);
-  const bar = publicFundraisingBarPercent(raised, goal);
+  const hasGoal = goal > 0;
+  const label = hasGoal ? publicFundraisingPercentLabel(raised, goal) : "";
+  const bar = hasGoal ? publicFundraisingBarPercent(raised, goal) : 0;
   const [width, setWidth] = useState(0);
 
   useEffect(() => {
+    if (!hasGoal) {
+      setWidth(0);
+      return;
+    }
     const id = window.requestAnimationFrame(() => setWidth(bar));
     return () => window.cancelAnimationFrame(id);
-  }, [bar]);
+  }, [bar, hasGoal]);
+
+  if (!hasGoal) return null;
 
   const pctValue = Number.parseInt(label.replace(/\D/g, ""), 10);
   const showLivePct = Number.isFinite(pctValue) && label.endsWith("%") && !label.startsWith("<");

@@ -25,6 +25,7 @@ import {
 } from "@/lib/lms/actions";
 import { supportRoleShort } from "@/lib/lms/roles";
 import { isOverdue, percentComplete } from "@/lib/lms/progress";
+import { reminderConfirmCopy } from "@/lib/lms/training-reminder-copy";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TrainingBadge } from "@/components/volunteers/training-badge";
 
@@ -161,16 +162,17 @@ export function TrainingManagementView({
             variant="secondary"
             onClick={() =>
               start(async () => {
-                if (
-                  !window.confirm(
-                    overdue.length
-                      ? `Send overdue training reminders to ${overdue.length} volunteer${overdue.length === 1 ? "" : "s"} via Termii WhatsApp, email, and/or SMS?`
-                      : "No overdue volunteers are listed. Send anyway?"
-                  )
-                ) {
+                const ids = selectedIds.filter((id) => people.some((person) => person.id === id));
+                const confirm = reminderConfirmCopy({
+                  selectedCount: ids.length,
+                  overdueCount: overdue.length,
+                });
+                if (!confirm.ok) {
+                  toast.error(confirm.message);
                   return;
                 }
-                const result = await sendTrainingReminders();
+                if (!window.confirm(confirm.message)) return;
+                const result = await sendTrainingReminders(ids.length ? ids : undefined);
                 if ("error" in result && result.error) toast.error(result.error);
                 else {
                   const sent = "sent" in result ? result.sent : 0;
@@ -178,12 +180,13 @@ export function TrainingManagementView({
                   const whatsappSent = "whatsappSent" in result ? result.whatsappSent : 0;
                   const emailSent = "emailSent" in result ? result.emailSent : 0;
                   const smsSent = "smsSent" in result ? result.smsSent : 0;
+                  const who = confirm.audience === "overdue" ? " overdue" : "";
                   toast.success(
                     failed
                       ? `Reminders sent to ${sent} (WhatsApp ${whatsappSent}, email ${emailSent}, SMS ${smsSent}). ${failed} failed.`
                       : sent
-                        ? `Reminders sent to ${sent} overdue volunteer${sent === 1 ? "" : "s"} (WhatsApp ${whatsappSent}, email ${emailSent}, SMS ${smsSent}).`
-                        : "No overdue volunteers to remind."
+                        ? `Reminders sent to ${sent}${who} volunteer${sent === 1 ? "" : "s"} (WhatsApp ${whatsappSent}, email ${emailSent}, SMS ${smsSent}).`
+                        : "Nobody received a reminder (no WhatsApp, email, or SMS destination)."
                   );
                 }
                 router.refresh();
@@ -191,7 +194,7 @@ export function TrainingManagementView({
             }
             disabled={pending}
           >
-            Send reminders
+            {selectedIds.length ? `Send reminders (${selectedIds.length})` : "Send reminders"}
           </Button>
         ) : null}
         <Button
@@ -248,12 +251,12 @@ export function TrainingManagementView({
           <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search volunteers…" className="max-w-sm" />
           {canWrite ? (
             <p className="text-xs text-muted-foreground">
-              Select rows and use Send codes to WhatsApp and/or email training logins. With none selected, every listed volunteer is sent (up to 200). Email goes only to people who have an address. Email needs Termii TOKEN → Email Setup (configuration ID); WhatsApp numbers are attached by Termii, not Meta Cloud.
+              Select rows and use Send codes (WhatsApp/email logins) or Send reminders (WhatsApp, email, and SMS). With none selected, Send codes goes to every listed volunteer (up to 200); Send reminders goes to overdue people only. Email goes only to people who have an address. Email needs Termii TOKEN → Email Setup (configuration ID); WhatsApp numbers are attached by Termii, not Meta Cloud.
             </p>
           ) : null}
           {overdue.length > 0 ? (
             <p className="text-sm text-amber-600">
-              {overdue.length} overdue. Send reminders uses Termii WhatsApp, email, and SMS for anyone those channels can reach.
+              {overdue.length} overdue. With no rows selected, Send reminders uses that overdue list.
             </p>
           ) : null}
           <div className="overflow-x-auto rounded-xl border">

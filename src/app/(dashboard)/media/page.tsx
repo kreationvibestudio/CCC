@@ -7,10 +7,21 @@ import { canWriteRecords, hasPermission } from "@/types/auth";
 export default async function MediaCommandPage() {
   const user = await getCurrentUser();
   const tenantId = user!.profile.tenant_id;
-  const [data, facebook] = await Promise.all([
-    getMediaCommandData(tenantId),
-    getFacebookConnectionStatus(tenantId),
-  ]);
+  const data = await getMediaCommandData(tenantId);
+  let facebook = {
+    pageId: "",
+    configured: false,
+    lastError: null as string | null,
+  };
+  try {
+    facebook = await getFacebookConnectionStatus(tenantId);
+  } catch {
+    facebook = {
+      pageId: "",
+      configured: false,
+      lastError: "Could not load Facebook connection status.",
+    };
+  }
   const canManage = Boolean(
     user && canWriteRecords(user.role) && hasPermission(user.role, "social.manage")
   );

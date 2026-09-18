@@ -397,6 +397,8 @@ export async function testTermiiConnection(): Promise<{
   ok: boolean;
   error?: string;
   hasCredit?: boolean;
+  balance?: number;
+  currency?: string;
 }> {
   await requirePermission("admin.users");
   const account = await getTermiiAccount();
@@ -404,6 +406,8 @@ export async function testTermiiConnection(): Promise<{
   return {
     ok: true,
     hasCredit: account.balance == null ? undefined : account.balance > 0,
+    balance: account.balance,
+    currency: account.currency ?? "NGN",
   };
 }
 

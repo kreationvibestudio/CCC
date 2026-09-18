@@ -28,6 +28,8 @@ import {
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
 import { usePermissions } from "@/components/providers/auth-provider";
+import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
+import { formatTermiiWallet } from "@/lib/integrations/termii/wallet";
 
 function TestTermiiButton() {
   const [pending, start] = useTransition();
@@ -46,8 +48,8 @@ function TestTermiiButton() {
           }
           toast.success(
             result.hasCredit === false
-              ? "Termii accepted the API key, but the wallet has no credit."
-              : "Termii accepted the API key and sender ID."
+              ? `Termii accepted the API key, but the wallet has no credit (${formatTermiiWallet(result.balance ?? 0, result.currency)}).`
+              : `Termii wallet ${formatTermiiWallet(result.balance ?? 0, result.currency)}.`
           );
         })
       }
@@ -813,6 +815,7 @@ export function AdminView({
             );
           })}
           <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+            <TermiiWalletDial />
             <TestTermiiButton />
             <p className="text-xs text-muted-foreground">
               Values are never shown here. Set missing keys in `.env.local`, then

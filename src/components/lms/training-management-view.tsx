@@ -28,6 +28,7 @@ import { isOverdue, percentComplete } from "@/lib/lms/progress";
 import { needsTrainingPeople, reminderConfirmCopy } from "@/lib/lms/training-reminder-copy";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TrainingBadge } from "@/components/volunteers/training-badge";
+import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 
 type Course = {
   id: string;
@@ -108,6 +109,7 @@ export function TrainingManagementView({
   const [pending, start] = useTransition();
   const [filter, setFilter] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [walletRefresh, setWalletRefresh] = useState(0);
   const enrollByVolunteer = useMemo(() => {
     const map = new Map<string, Enrollment[]>();
     for (const row of enrollments) {
@@ -132,6 +134,7 @@ export function TrainingManagementView({
         title="Training Management"
         description="Role-based courses, live briefings, and who is ready for assignment"
       >
+        <TermiiWalletDial refreshKey={walletRefresh} />
         {canWrite ? (
           <Button
             variant="secondary"
@@ -152,6 +155,7 @@ export function TrainingManagementView({
                     ? `Codes sent to ${sent} (WhatsApp ${whatsappSent}, email ${emailSent}). ${failed} failed.`
                     : `Codes sent to ${sent} volunteer${sent === 1 ? "" : "s"} (WhatsApp ${whatsappSent}, email ${emailSent}).`
                 );
+                setWalletRefresh((n) => n + 1);
                 router.refresh();
               })
             }
@@ -192,6 +196,7 @@ export function TrainingManagementView({
                         : "Nobody received a reminder (no WhatsApp, email, or SMS destination)."
                   );
                 }
+                setWalletRefresh((n) => n + 1);
                 router.refresh();
               })
             }

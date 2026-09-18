@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useTransition } from "react";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +54,8 @@ export function LearnDashboardView({
   const nextHref = first?.course ? `/learn/${slug}/courses/${first.course.id}` : null;
   const rsvpSet = new Set(rsvps.map((r) => r.session_id));
   const hasCertificates = certificates.length > 0;
+  const firstName = volunteer.full_name.split(" ")[0];
+  const ready = Boolean(volunteer.deployment_ready);
 
   function retake(courseId: string) {
     if (!window.confirm("Retake this course from the start? Your certificate stays available.")) return;
@@ -75,9 +79,9 @@ export function LearnDashboardView({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-500">Volunteer Training</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">Welcome, {volunteer.full_name.split(" ")[0]}</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">Welcome, {firstName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {campaign} · finish your path to become ready for assignment.
+            {campaign} · {ready ? "you are ready for assignment." : "finish your path to become ready for assignment."}
           </p>
         </div>
         <Button
@@ -99,42 +103,95 @@ export function LearnDashboardView({
         </Button>
       </div>
 
+      {ready ? (
+        <motion.section
+          initial={{ opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="relative overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-card p-6 sm:p-8"
+          aria-label="Ready for assignment"
+        >
+          <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl" />
+          <motion.div
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.15, type: "spring", stiffness: 260, damping: 18 }}
+            className="relative inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
+          >
+            <CheckCircle2 className="h-8 w-8" aria-hidden />
+          </motion.div>
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25, duration: 0.4 }}
+            className="relative mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400"
+          >
+            Deployment ready
+          </motion.p>
+          <motion.h2
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.4 }}
+            className="relative mt-2 text-2xl font-bold tracking-tight sm:text-3xl"
+          >
+            {firstName}, you are ready for assignment
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45, duration: 0.4 }}
+            className="relative mt-2 max-w-lg text-sm text-muted-foreground"
+          >
+            Required training is complete
+            {hasCertificates ? " and your certificates are below" : ""}. HQ can place you in the field.
+          </motion.p>
+          {hasCertificates ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.55 }}
+              className="relative mt-5"
+            >
+              <Button asChild className="bg-emerald-600 hover:bg-emerald-600/90">
+                <a href="#certificates">View certificates</a>
+              </Button>
+            </motion.div>
+          ) : null}
+        </motion.section>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
-        {volunteer.deployment_ready ? (
+        {ready ? (
           <Badge variant="success">Ready for assignment</Badge>
         ) : (
           <Badge variant="warning">Training in progress</Badge>
         )}
         {roles.map((role) => (
-          <Badge key={role.slug} variant="info">{role.label}</Badge>
+          <Badge key={role.slug} variant="info">
+            {role.label}
+          </Badge>
         ))}
       </div>
 
-      <Card className="border-emerald-500/30 bg-emerald-500/5">
-        <CardHeader>
-          <CardTitle className="text-base">Next step</CardTitle>
-          <CardDescription>
-            {volunteer.deployment_ready
-              ? "Required training is complete. You can view your certificates below, or retake a course anytime."
-              : first?.course
+      {!ready ? (
+        <Card className="border-emerald-500/30 bg-emerald-500/5">
+          <CardHeader>
+            <CardTitle className="text-base">Next step</CardTitle>
+            <CardDescription>
+              {first?.course
                 ? `Continue ${first.course.title}`
                 : "Your coordinator will assign a learning path shortly."}
-          </CardDescription>
-        </CardHeader>
-        {nextHref && !volunteer.deployment_ready ? (
-          <CardContent>
-            <Button asChild>
-              <Link href={nextHref}>Continue training</Link>
-            </Button>
-          </CardContent>
-        ) : volunteer.deployment_ready && hasCertificates ? (
-          <CardContent>
-            <Button asChild>
-              <a href="#certificates">View certificates</a>
-            </Button>
-          </CardContent>
-        ) : null}
-      </Card>
+            </CardDescription>
+          </CardHeader>
+          {nextHref ? (
+            <CardContent>
+              <Button asChild>
+                <Link href={nextHref}>Continue training</Link>
+              </Button>
+            </CardContent>
+          ) : null}
+        </Card>
+      ) : null}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Your courses</h2>

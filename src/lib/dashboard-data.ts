@@ -37,6 +37,8 @@ export interface DashboardBriefing {
   recommendations: string[];
   sentimentBreakdown: { positive: number; neutral: number; negative: number };
   mediaLine?: string;
+  /** WhatsApp-ready Media huddle line for the HQ morning briefing. */
+  huddleText?: string;
 }
 
 export interface DashboardData {
@@ -265,8 +267,9 @@ export async function getDashboardData(tenantId: string): Promise<DashboardData>
             : (briefingContent.sentiment_breakdown as DashboardBriefing["sentimentBreakdown"]) ??
               liveBriefing.sentimentBreakdown,
           mediaLine: mediaBrief.mediaLine,
+          huddleText: mediaBrief.huddleText,
         }
-      : { ...liveBriefing, mediaLine: mediaBrief.mediaLine };
+      : { ...liveBriefing, mediaLine: mediaBrief.mediaLine, huddleText: mediaBrief.huddleText };
 
   return {
     tenantName: tenant?.name ?? "Campaign Command Center",

@@ -15,13 +15,17 @@ export default async function CertificatePage({
   return (
     <div className="space-y-4">
       <Button variant="outline" size="sm" asChild><Link href={`/learn/${slug}`}>Back</Link></Button>
-      <div className="rounded-xl border-2 border-emerald-500/40 bg-card p-8 text-center print:border-black">
+      <div className="relative overflow-hidden rounded-xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/10 to-card p-8 text-center print:border-black print:bg-white">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-emerald-500 print:hidden" />
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">Certificate of completion</p>
         <h1 className="mt-4 text-3xl font-bold">{cert.campaign}</h1>
         <p className="mt-6 text-sm text-muted-foreground">This certifies that</p>
         <p className="mt-1 text-2xl font-semibold">{cert.volunteer.full_name}</p>
         <p className="mt-4 text-sm text-muted-foreground">has completed</p>
         <p className="mt-1 text-xl font-medium">{cert.course.title}</p>
+        {cert.volunteer.deployment_ready ? (
+          <p className="mt-4 text-sm font-medium text-emerald-600">Ready for assignment</p>
+        ) : null}
         <p className="mt-6 text-sm">
           {new Date(cert.cert.issued_at).toLocaleDateString("en-NG", { dateStyle: "long" })}
         </p>

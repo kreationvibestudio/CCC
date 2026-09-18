@@ -1,5 +1,4 @@
-import { HeartHandshake } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand/logo";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { paystackPaymentLinkFromSetting } from "@/lib/campaign";
 import { notFound } from "next/navigation";
@@ -40,23 +39,33 @@ export default async function DonateSlugPage({ params }: { params: Promise<{ slu
   const campaignName = tenant.name?.trim() || "the campaign";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.45_0.15_255/0.08),transparent_50%)]" />
-      <Card className="relative z-10 w-full max-w-md border-border/50">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            <HeartHandshake className="h-6 w-6 text-primary" />
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.42_0.12_145/0.18),transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(165deg,transparent_35%,oklch(0.35_0.08_85/0.1))]" />
+      <div className="pointer-events-none absolute -left-24 top-1/3 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+
+      <section className="relative z-10 mx-auto flex min-h-[70vh] w-full max-w-xl flex-col justify-end px-4 pb-8 pt-16 sm:justify-center sm:pt-20">
+        <div className="mb-8 flex flex-col items-start gap-5">
+          <BrandLogo size={72} className="rounded-xl shadow-lg shadow-emerald-900/20" priority />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
+              {campaignName}
+            </p>
+            <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">Support the campaign</h1>
+            <p className="mt-3 max-w-md text-base leading-relaxed text-muted-foreground">
+              Every gift fuels field work across Edo. Pay securely with card, bank transfer, or USSD.
+            </p>
           </div>
-          <CardTitle className="text-2xl">Support {campaignName}</CardTitle>
-          <CardDescription>
-            Enter your details, then complete payment on Paystack by card, bank transfer, or USSD.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <PublicFundraisingMeter raised={raised} goal={goal} />
+          <PublicFundraisingMeter raised={raised} goal={goal} prominent />
+        </div>
+
+        <div
+          id="donate"
+          className="rounded-2xl border border-border/60 bg-card/90 p-5 shadow-xl backdrop-blur sm:p-6"
+        >
           <PublicDonateForm slug={slug} fallbackCheckoutUrl={checkoutUrl} />
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </div>
   );
 }

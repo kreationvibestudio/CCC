@@ -203,7 +203,7 @@ export async function seedDemoSocialData(tenantId: string): Promise<FacebookSync
     const platformCommentId = `demo_${c.id}`;
     const { data: existingComment } = await supabase
       .from("comments")
-      .select("id")
+      .select("id, status")
       .eq("tenant_id", tenantId)
       .eq("platform_comment_id", platformCommentId)
       .maybeSingle();
@@ -216,14 +216,17 @@ export async function seedDemoSocialData(tenantId: string): Promise<FacebookSync
       author_name: c.from,
       content: c.message,
       sentiment: "neutral" as const,
-      status: "pending" as const,
     };
 
     if (existingComment?.id) {
+      // Never reset HQ reply/resolve state when re-seeding demo comments.
       const { error } = await supabase.from("comments").update(payload).eq("id", existingComment.id);
       if (error) continue;
     } else {
-      const { error } = await supabase.from("comments").insert(payload);
+      const { error } = await supabase.from("comments").insert({
+        ...payload,
+        status: "pending" as const,
+      });
       if (error) continue;
     }
     commentsSynced += 1;

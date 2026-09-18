@@ -8,6 +8,7 @@ import { extraEnrollCourse, ensureTrainingCode, logLmsActivity, removeEnrollment
 import { getTrainingOverview } from "./hq-data";
 import { resolveAppHost, sendVolunteerTrainingCodes, volunteerLearnLoginUrl } from "./send-training-code";
 import { sendVolunteerTrainingReminder, termiiReminderDeliveryConfigured } from "./send-training-reminder";
+import { REMINDER_NONE_MESSAGE, reminderRecipients } from "./training-reminder-copy";
 import { termiiEmailConfigured, termiiWhatsAppConfigured } from "@/lib/integrations/termii/client";
 
 async function manageGate() {
@@ -218,7 +219,7 @@ export async function sendTrainingCodesWhatsApp(volunteerIds?: string[]) {
   return { success: true as const, sent, failed, whatsappSent, emailSent };
 }
 
-export async function sendTrainingReminders() {
+export async function sendTrainingReminders(volunteerIds?: string[]) {
   const gate = await manageGate();
   if ("error" in gate) return { error: gate.error };
   const { user, supabase } = gate;
@@ -230,7 +231,15 @@ export async function sendTrainingReminders() {
   }
   const overview = await getTrainingOverview();
   if ("error" in overview) return overview;
-  let people = overview.overdue;
+  const picked = reminderRecipients({
+    selectedIds: volunteerIds,
+    volunteers: overview.volunteers,
+    overdue: overview.overdue,
+  });
+  if (picked.audience === "none" || !picked.people.length) {
+    return { error: REMINDER_NONE_MESSAGE };
+  }
+  let people = picked.people;
   const cap = whatsappRecipientCap();
   if (people.length > cap) people = people.slice(0, cap);
 

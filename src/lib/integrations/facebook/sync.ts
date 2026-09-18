@@ -17,6 +17,7 @@ import {
   isPlaceholderFacebookAuthor,
   resolveFacebookCommentAuthor,
 } from "./comment-author";
+import { isHandledCommentStatus } from "@/lib/comments/status-filter";
 
 const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
@@ -251,36 +252,61 @@ async function syncFacebookLive(
       for (const comment of comments) {
         const { data: existingComment } = await supabase
           .from("comments")
-          .select("id, author_name, author_avatar")
+          .select("id, author_name, author_avatar, status")
           .eq("tenant_id", tenantId)
           .eq("platform_comment_id", comment.id)
           .maybeSingle();
 
-        // Fast local analysis during sync (avoid OpenAI timeouts in serverless)
-        const analysis = analyzeCommentText(comment.message);
         const author = resolveFacebookCommentAuthor(comment, existingComment?.author_name);
-        const commentFields = {
-          tenant_id: tenantId,
-          platform: "facebook" as const,
-          platform_comment_id: comment.id,
-          post_id: postDbId,
-          author_name: author.authorName,
-          author_avatar: author.authorAvatar ?? existingComment?.author_avatar ?? null,
-          content: comment.message,
-          created_at: comment.created_time,
-          ...analysis,
-        };
 
         if (existingComment) {
+          // Already handled in HQ — do not re-open or reshuffle into the inbox.
+          if (isHandledCommentStatus(String(existingComment.status ?? ""))) {
+            const betterName =
+              !isPlaceholderFacebookAuthor(author.authorName) &&
+              author.authorName !== existingComment.author_name;
+            if (betterName || author.authorAvatar) {
+              const { error } = await supabase
+                .from("comments")
+                .update({
+                  author_name: betterName ? author.authorName : existingComment.author_name,
+                  author_avatar: author.authorAvatar ?? existingComment.author_avatar ?? null,
+                })
+                .eq("id", existingComment.id);
+              if (error) throw new FacebookApiError(error.message);
+            }
+            continue;
+          }
+
+          const analysis = analyzeCommentText(comment.message);
           const { error } = await supabase
             .from("comments")
-            .update(commentFields)
+            .update({
+              tenant_id: tenantId,
+              platform: "facebook" as const,
+              platform_comment_id: comment.id,
+              post_id: postDbId,
+              author_name: author.authorName,
+              author_avatar: author.authorAvatar ?? existingComment.author_avatar ?? null,
+              content: comment.message,
+              created_at: comment.created_time,
+              ...analysis,
+            })
             .eq("id", existingComment.id);
           if (error) throw new FacebookApiError(error.message);
         } else {
+          const analysis = analyzeCommentText(comment.message);
           const { error } = await supabase.from("comments").insert({
-            ...commentFields,
+            tenant_id: tenantId,
+            platform: "facebook" as const,
+            platform_comment_id: comment.id,
+            post_id: postDbId,
+            author_name: author.authorName,
+            author_avatar: author.authorAvatar ?? null,
+            content: comment.message,
+            created_at: comment.created_time,
             status: "pending" as const,
+            ...analysis,
           });
           if (error) throw new FacebookApiError(error.message);
         }

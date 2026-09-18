@@ -28,6 +28,11 @@ import {
   displayFacebookAuthor,
   isPlaceholderFacebookAuthor,
 } from "@/lib/integrations/facebook/comment-author";
+import {
+  commentMatchesStatusFilter,
+  normalizeCommentStatusFilter,
+  type CommentStatusFilter,
+} from "@/lib/comments/status-filter";
 import type { Comment } from "@/types/database";
 import type { TeamMember } from "@/lib/comments/data";
 import {
@@ -47,7 +52,7 @@ const SENTIMENT_VARIANT: Record<string, "success" | "secondary" | "destructive">
 export function CommentsInbox({
   comments,
   team,
-  initialStatus = "all",
+  initialStatus = "needs_response",
 }: {
   comments: Comment[];
   team: TeamMember[];
@@ -57,7 +62,9 @@ export function CommentsInbox({
   const { canWrite } = usePermissions();
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
-  const [status, setStatus] = useState(initialStatus);
+  const [status, setStatus] = useState<CommentStatusFilter>(() =>
+    normalizeCommentStatusFilter(initialStatus)
+  );
   const [sentiment, setSentiment] = useState("all");
   const [replyOpen, setReplyOpen] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -90,13 +97,22 @@ export function CommentsInbox({
   const filtered = useMemo(() => {
     return comments.filter((c) => {
       if (platform !== "all" && c.platform !== platform) return false;
-      if (status !== "all" && c.status !== status) return false;
+      if (!commentMatchesStatusFilter(c.status, status)) return false;
       if (sentiment !== "all" && c.sentiment !== sentiment) return false;
       if (search && !c.content.toLowerCase().includes(search.toLowerCase()) &&
           !c.author_name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
   }, [comments, platform, status, sentiment, search]);
+
+  const openCount = useMemo(
+    () => comments.filter((c) => commentMatchesStatusFilter(c.status, "needs_response")).length,
+    [comments]
+  );
+  const repliedCount = useMemo(
+    () => comments.filter((c) => c.status === "replied").length,
+    [comments]
+  );
 
   async function handleAction(action: string, commentId: string, extra?: string) {
     setLoading(commentId);
@@ -148,10 +164,11 @@ export function CommentsInbox({
     const result = await replyToComment(replyOpen, replyText.trim());
     setLoading(null);
     if (result.error) { toast.error(result.error); return; }
-    toast.success("Reply posted");
+    toast.success("Reply posted — moved out of Needs response");
     setReplyOpen(null);
     setReplyText("");
     setSelectedQuickAnswer(null);
+    setStatus("needs_response");
     router.refresh();
   }
 
@@ -179,7 +196,11 @@ export function CommentsInbox({
     <div className="space-y-6">
       <PageHeader
         title="Unified Comment Management"
-        description={canWrite ? "Reply, assign, and monitor all platform comments" : "View and monitor all platform comments"}
+        description={
+          canWrite
+            ? "Needs response is the working queue. Replied and resolved stay available under those filters."
+            : "Needs response is the working queue. Replied and resolved stay available under those filters."
+        }
       >
         {canWrite ? (
         <div className="flex flex-wrap gap-2">
@@ -197,11 +218,18 @@ export function CommentsInbox({
           <option value="all">All platforms</option>
           <option value="facebook">Facebook</option>
         </NativeSelect>
-        <NativeSelect className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}>
+        <NativeSelect
+          className={selectClass}
+          value={status}
+          onChange={(e) => setStatus(normalizeCommentStatusFilter(e.target.value))}
+        >
+          <option value="needs_response">Needs response ({openCount})</option>
+          <option value="replied">Replied ({repliedCount})</option>
+          <option value="resolved">Resolved</option>
+          <option value="pending">Pending</option>
+          <option value="assigned">Assigned</option>
+          <option value="flagged">Flagged</option>
           <option value="all">All statuses</option>
-          {["pending", "assigned", "replied", "resolved", "flagged"].map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
         </NativeSelect>
         <NativeSelect className={selectClass} value={sentiment} onChange={(e) => setSentiment(e.target.value)}>
           <option value="all">All sentiment</option>
@@ -209,13 +237,21 @@ export function CommentsInbox({
             <option key={s} value={s}>{s}</option>
           ))}
         </NativeSelect>
-        <Badge variant="secondary">{filtered.length} comments</Badge>
+        <Badge variant="secondary">{filtered.length} shown</Badge>
       </div>
 
       <FacebookCommenterNamesCard hiddenCount={hiddenAuthors} canWrite={canWrite} />
 
       {filtered.length === 0 ? (
-        <EmptyState title="No comments match" description="Sync Facebook or adjust filters" action={<FacebookSyncButton />} />
+        <EmptyState
+          title={status === "needs_response" ? "Inbox clear" : "No comments match"}
+          description={
+            status === "needs_response"
+              ? "Nothing needs a reply right now. Sync Facebook for new comments, or open Replied."
+              : "Sync Facebook or adjust filters"
+          }
+          action={<FacebookSyncButton />}
+        />
       ) : (
         <div className="space-y-3">
           {filtered.map((comment) => (

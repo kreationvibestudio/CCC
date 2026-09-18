@@ -10,6 +10,7 @@ import { sendVolunteerTrainingCodes } from "./send-training-code";
 import {
   TRAINING_REMINDER_DETAIL,
   reminderChannels,
+  trainingReminderLearnUrl,
   trainingReminderSms,
 } from "./training-reminder-copy";
 
@@ -65,7 +66,7 @@ export async function sendVolunteerTrainingReminder(input: {
     };
   }
 
-  const learnUrl = input.learnUrl.trim();
+  const learnUrl = trainingReminderLearnUrl(input.learnUrl.trim(), input.phone);
   const trainingCode = input.trainingCode.trim();
   if (!learnUrl) {
     return {
@@ -110,7 +111,12 @@ export async function sendVolunteerTrainingReminder(input: {
   if (channels.sms && input.phone?.trim()) {
     const result = await sendTermiiSms(
       input.phone,
-      trainingReminderSms({ name: input.name, learnUrl, trainingCode })
+      trainingReminderSms({
+        name: input.name,
+        phone: input.phone,
+        learnUrl,
+        trainingCode,
+      })
     );
     if (result.ok) {
       smsSent = true;
@@ -119,7 +125,7 @@ export async function sendVolunteerTrainingReminder(input: {
         volunteerId: input.volunteerId,
         actorId: input.actorId ?? null,
         action: "training.reminder_sms",
-        detail: "Overdue training reminder sent by SMS",
+        detail: "Training reminder sent by SMS with phone and training code",
         metadata: { message_id: result.messageId ?? null, channel: "sms" },
       });
     } else {

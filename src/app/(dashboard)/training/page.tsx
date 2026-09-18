@@ -24,6 +24,7 @@ export default async function TrainingManagementPage() {
       byRole={overview.byRole}
       byLga={overview.byLga}
       overdue={overview.overdue}
+      notStarted={overview.notStarted}
       sessions={overview.sessions}
       logs={overview.logs}
       modules={overview.modules}

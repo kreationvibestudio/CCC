@@ -234,6 +234,7 @@ export async function sendTrainingReminders(volunteerIds?: string[]) {
   const picked = reminderRecipients({
     selectedIds: volunteerIds,
     volunteers: overview.volunteers,
+    notStarted: overview.notStarted,
     overdue: overview.overdue,
   });
   if (picked.audience === "none" || !picked.people.length) {

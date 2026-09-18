@@ -7,7 +7,7 @@ import type { AuthUser } from "@/lib/auth/session";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import { ensureLmsCatalog, type CourseRow } from "./ensure-catalog";
 import { enrollIfNeeded, syncVolunteerReadiness } from "./enroll";
-import { effectiveTrainingStatus, isOverdue, percentComplete } from "./progress";
+import { effectiveTrainingStatus, hasNotOpenedTraining, isOverdue, percentComplete } from "./progress";
 import { parseSupportRoles, supportRoleLabel, VOLUNTEER_SUPPORT_ROLES } from "./roles";
 import type { EnrollmentRow, ProgressRow } from "./complete";
 import { LMS_CATALOG } from "./catalog";
@@ -150,6 +150,9 @@ export async function getTrainingOverview() {
       const rows = byVolunteer.get(v.id) ?? [];
       return rows.some((e) => isOverdue(e.due_at, e.status));
     });
+    const notStarted = peopleWithStatus.filter((v) =>
+      hasNotOpenedTraining(v.training_status, byVolunteer.get(v.id) ?? [])
+    );
 
     const byRole = VOLUNTEER_SUPPORT_ROLES.map((role) => {
       const members = peopleWithStatus.filter((v) => (v.support_roles ?? []).includes(role.slug));
@@ -188,9 +191,11 @@ export async function getTrainingOverview() {
         trained,
         ready,
         overdue: overdue.length,
+        notStarted: notStarted.length,
         inProgress: peopleWithStatus.filter((v) => v.training_status === "in_progress").length,
       },
       overdue,
+      notStarted,
       byRole,
       byLga: [...byLga.entries()].map(([lga, n]) => ({ lga, ...n, pct: percentComplete(n.ready, n.total) })),
       catalogSize: LMS_CATALOG.length,

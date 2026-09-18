@@ -11,6 +11,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { PageHeader, StatCard } from "@/components/shared/page-shell";
+import { MorningBriefing } from "@/components/dashboard/morning-briefing";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/utils";
 import type { DashboardData } from "@/lib/dashboard-data";
@@ -135,6 +136,12 @@ export function DashboardView({ data, canSeeDonations = false }: { data: Dashboa
   return (
     <div className="space-y-6">
       <PageHeader title="Executive Dashboard" description={`${data.tenantName} — Live campaign intelligence`} />
+
+      <MorningBriefing
+        tenantName={data.tenantName}
+        electionDate={data.electionDate}
+        briefing={briefing}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Countdown label="Election Countdown" targetDate={data.electionDate} href="/admin" />

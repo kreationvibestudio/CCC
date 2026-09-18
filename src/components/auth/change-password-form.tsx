@@ -38,7 +38,7 @@ export function ChangePasswordForm({
       }
       toast.success(
         firstLogin
-          ? "Password saved. You can use HQ with this password from now on."
+          ? "Password saved. Opening your campaign briefing…"
           : "Password updated."
       );
       form.reset();

@@ -43,6 +43,8 @@ export interface FacebookSyncResult {
   tokenSource?: string;
   authorsNamed?: number;
   authorsHidden?: number;
+  /** True when the sync stopped early to stay under the serverless time budget. */
+  partial?: boolean;
 }
 
 export class FacebookApiError extends Error {
@@ -464,10 +466,11 @@ export async function fetchCommentAuthorsByIds(
 export async function fetchPostComments(
   postId: string,
   pageToken: string,
-  opts?: { userToken?: string | null }
+  opts?: { userToken?: string | null; enrichAuthors?: boolean }
 ): Promise<FacebookComment[]> {
   const tokens = uniqueTokens([pageToken, opts?.userToken]);
   let lastError: unknown;
+  const enrich = opts?.enrichAuthors !== false;
 
   const attempts: Array<Record<string, string>> = [
     { fields: COMMENT_LIST_FIELDS, filter: "stream", limit: "100" },
@@ -477,7 +480,7 @@ export async function fetchPostComments(
     try {
       const result = await graphGet<{ data: FacebookComment[] }>(`/${postId}/comments`, pageToken, params);
       const comments = result.data ?? [];
-      await enrichCommentAuthors(comments, tokens);
+      if (enrich) await enrichCommentAuthors(comments, tokens);
       return comments;
     } catch (err) {
       lastError = err;

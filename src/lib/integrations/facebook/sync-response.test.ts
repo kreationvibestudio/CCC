@@ -26,5 +26,6 @@ test("facebook sync toast never tells HQ to edit .env.local", () => {
 
   const timeout = facebookSyncFailureMessage({ status: 504, statusText: "Gateway Timeout" }, null);
   assert.match(timeout, /timed out/i);
+  assert.match(timeout, /Sync again/i);
   assert.doesNotMatch(timeout, /\.env\.local/i);
 });

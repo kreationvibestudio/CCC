@@ -18,6 +18,12 @@ import {
   resolveFacebookCommentAuthor,
 } from "./comment-author";
 import { isHandledCommentStatus } from "@/lib/comments/status-filter";
+import {
+  facebookSyncProfile,
+  createSyncDeadline,
+  partialCommentsWarning,
+  type FacebookSyncMode,
+} from "./sync-budget";
 
 const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
@@ -97,7 +103,11 @@ async function getDbClient() {
 
 export async function syncFacebookToDatabase(
   tenantId: string,
-  opts?: { validatedPageToken?: string; validatedPageId?: string }
+  opts?: {
+    validatedPageToken?: string;
+    validatedPageId?: string;
+    mode?: FacebookSyncMode;
+  }
 ): Promise<FacebookSyncResult> {
   let hasTenantTokens = false;
   try {
@@ -128,8 +138,14 @@ export async function syncFacebookToDatabase(
 
 async function syncFacebookLive(
   tenantId: string,
-  opts?: { validatedPageToken?: string; validatedPageId?: string }
+  opts?: {
+    validatedPageToken?: string;
+    validatedPageId?: string;
+    mode?: FacebookSyncMode;
+  }
 ): Promise<FacebookSyncResult> {
+  const profile = facebookSyncProfile(opts?.mode ?? "interactive");
+  const deadline = createSyncDeadline(profile.budgetMs);
   const config = await getFacebookConfig(tenantId);
   const pageId = opts?.validatedPageId?.trim() || config.pageId;
   const supabase = await getDbClient();
@@ -156,7 +172,7 @@ async function syncFacebookLive(
   }
 
   const page = await fetchPageInfo(pageId, pageToken);
-  const posts = await fetchPosts(pageId, pageToken, 25);
+  const posts = await fetchPosts(pageId, pageToken, profile.maxPosts);
   const followers = page.followers_count ?? page.fan_count ?? 0;
 
   let accountId = existingAccount?.id;
@@ -198,6 +214,7 @@ async function syncFacebookLive(
   let commentFailures = 0;
   let skipRemainingComments = false;
   let commentsSkippedReason: string | undefined;
+  let partial = false;
 
   for (const post of posts) {
     const likes = post.likes?.summary?.total_count ?? 0;
@@ -246,8 +263,21 @@ async function syncFacebookLive(
     // Keep going per-post — one comment failure must not abort the whole sync
     if (skipRemainingComments) continue;
 
+    if (!deadline.hasMs(profile.commentReserveMs)) {
+      partial = true;
+      skipRemainingComments = true;
+      commentsSkippedReason = partialCommentsWarning(posts.length - postsSynced + 1);
+      continue;
+    }
+
+    // Empty threads: no Graph comment call.
+    if (commentsCount === 0) continue;
+
     try {
-      const comments = await fetchPostComments(post.id, pageToken, { userToken: config.userToken });
+      const comments = await fetchPostComments(post.id, pageToken, {
+        userToken: config.userToken,
+        enrichAuthors: profile.enrichAuthorsInline && deadline.hasMs(15_000),
+      });
 
       for (const comment of comments) {
         const { data: existingComment } = await supabase
@@ -332,10 +362,16 @@ async function syncFacebookLive(
     }
   }
 
-  const authors = await refreshStoredFacebookCommentAuthors(tenantId, {
-    pageToken,
-    userToken: config.userToken,
-  });
+  let authors = { updated: 0, hidden: 0, checked: 0 };
+  if (deadline.hasMs(8_000)) {
+    authors = await refreshStoredFacebookCommentAuthors(tenantId, {
+      pageToken,
+      userToken: config.userToken,
+      limit: profile.authorRefreshLimit,
+    });
+  } else {
+    partial = true;
+  }
   if (!commentsSkippedReason && authors.hidden > 0 && authors.updated === 0) {
     commentsSkippedReason =
       `Facebook hid ${authors.hidden} commenter name${authors.hidden === 1 ? "" : "s"}. ` +
@@ -346,7 +382,15 @@ async function syncFacebookLive(
     tenant_id: tenantId,
     action: "facebook.sync",
     description: `Synced ${postsSynced} Facebook posts from ${page.name}`,
-    metadata: { postsSynced, commentsSynced, tokenSource, commentFailures, ...authors },
+    metadata: {
+      postsSynced,
+      commentsSynced,
+      tokenSource,
+      commentFailures,
+      partial,
+      mode: profile.mode,
+      ...authors,
+    },
   });
 
   return {
@@ -357,21 +401,23 @@ async function syncFacebookLive(
     tokenSource,
     authorsNamed: authors.updated,
     authorsHidden: authors.hidden,
+    partial,
   };
 }
 
 export async function refreshStoredFacebookCommentAuthors(
   tenantId: string,
-  tokens?: { pageToken?: string; userToken?: string | null }
+  tokens?: { pageToken?: string; userToken?: string | null; limit?: number }
 ): Promise<{ updated: number; hidden: number; checked: number }> {
   const supabase = await getDbClient();
+  const limit = Math.max(1, Math.min(200, tokens?.limit ?? 200));
   const { data: rows } = await supabase
     .from("comments")
     .select("id, platform_comment_id, author_name, author_avatar")
     .eq("tenant_id", tenantId)
     .eq("platform", "facebook")
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(limit);
 
   const placeholders = (rows ?? []).filter((row) => isPlaceholderFacebookAuthor(row.author_name));
   if (placeholders.length === 0) {
@@ -451,7 +497,7 @@ export async function syncFacebookForConfiguredTenants(): Promise<
   const results = [];
   for (const tenantId of ids) {
     try {
-      results.push({ tenantId, ...(await syncFacebookToDatabase(tenantId)) });
+      results.push({ tenantId, ...(await syncFacebookToDatabase(tenantId, { mode: "cron" })) });
     } catch (err) {
       results.push({
         tenantId,

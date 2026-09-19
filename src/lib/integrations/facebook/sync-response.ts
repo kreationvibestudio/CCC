@@ -31,7 +31,7 @@ export function facebookSyncFailureMessage(
   if (error) return error;
 
   if (res.status === 504 || res.status === 408 || res.status === 524) {
-    return "Facebook sync timed out. Try again, or open Page posts → Connect Facebook if the page token expired.";
+    return "Facebook sync timed out before it finished. Tap Sync again — HQ now pulls recent posts in shorter batches. If it keeps failing, open Page posts → Connect Facebook to refresh the page token.";
   }
 
   if (!data) {

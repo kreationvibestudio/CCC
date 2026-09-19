@@ -19,11 +19,14 @@ export function FacebookSyncButton() {
 
   async function handleSync() {
     setLoading(true);
+    const controller = new AbortController();
+    const abortTimer = window.setTimeout(() => controller.abort(), 70_000);
     try {
       const res = await fetch("/api/sync/facebook", {
         method: "POST",
         credentials: "same-origin",
         headers: { Accept: "application/json" },
+        signal: controller.signal,
       });
       const data = await readJsonObject(res);
 
@@ -40,11 +43,16 @@ export function FacebookSyncButton() {
       const demo = data.tokenSource === "demo" || data.demo;
       const named = Number(data.authorsNamed ?? 0);
       const hidden = Number(data.authorsHidden ?? 0);
+      const commentsSynced = Number(data.commentsSynced ?? 0);
+      const partial = Boolean(data.partial);
       toast.success(
         demo
           ? `Loaded ${data.postsSynced} demo posts for ${data.pageName} (connect a live page token to sync real Facebook)`
-          : `Synced ${data.postsSynced} live posts from ${data.pageName} (${Number(data.followers ?? 0).toLocaleString()} followers)` +
-            (named ? `. Recovered ${named} commenter name${named === 1 ? "" : "s"}` : "")
+          : `Synced ${data.postsSynced} live posts` +
+            (commentsSynced ? ` and ${commentsSynced} comment${commentsSynced === 1 ? "" : "s"}` : "") +
+            ` from ${data.pageName}` +
+            (named ? `. Recovered ${named} commenter name${named === 1 ? "" : "s"}` : "") +
+            (partial ? " (more comments on the next sync)" : "")
       );
       if (!demo && hidden > 0 && named === 0) {
         toast.warning(
@@ -58,12 +66,20 @@ export function FacebookSyncButton() {
       }
 
       router.refresh();
-    } catch {
-      toast.error(
-        "Could not reach Facebook sync. Check your connection, then try Page posts → Connect Facebook.",
-        { duration: 12000 }
-      );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        toast.error(
+          "Facebook sync took too long in the browser. Tap Sync again — it continues from recent posts.",
+          { duration: 12000 }
+        );
+      } else {
+        toast.error(
+          "Could not reach Facebook sync. Check your connection, then try Page posts → Connect Facebook.",
+          { duration: 12000 }
+        );
+      }
     } finally {
+      window.clearTimeout(abortTimer);
       setLoading(false);
     }
   }

@@ -23,7 +23,7 @@ export async function POST() {
     const blocked = denyWriteIfRestricted(user.role);
     if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
-    const result = await syncFacebookToDatabase(user.profile.tenant_id);
+    const result = await syncFacebookToDatabase(user.profile.tenant_id, { mode: "interactive" });
     const isDemo = result.tokenSource === "demo";
     if (!isDemo) {
       await recordFacebookSyncOutcome(user.profile.tenant_id, { ok: true });
@@ -40,6 +40,7 @@ export async function POST() {
       warning: result.commentsSkippedReason,
       tokenSource: result.tokenSource,
       demo: isDemo,
+      partial: Boolean(result.partial),
     });
   } catch (err) {
     const message =

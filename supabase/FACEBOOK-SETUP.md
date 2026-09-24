@@ -72,9 +72,11 @@ Then redeploy.
 
 Graph returns the Page's own name (e.g. Hon Akhakon Anenih) but **hides visitor names**. Sync cannot invent them.
 
+**You do not need a government ID that prints a phone number.** Use CAC + bank/utility for name+address, then confirm phone/website with OTP or domain verification. Full Nigeria playbook: [docs/FACEBOOK-COMMENTER-NAMES.md](../docs/FACEBOOK-COMMENTER-NAMES.md) (also on Comments when names are hidden).
+
 Unlock them in Meta (app **campaign commander center**):
 
-1. App must be **Live**, and the Business must be **verified**
+1. **Business verification** in Security Center (Live business, verified)
 2. App Review → Permissions and features → Advanced Access for:
    - [Business Asset User Profile Access](https://developers.facebook.com/docs/features-reference/business-asset-user-profile-access/)
    - `pages_read_user_content`

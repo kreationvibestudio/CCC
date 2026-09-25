@@ -3,16 +3,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { safeInternalPath } from "@/lib/auth/bearer";
 import { jsonUnauthorizedBody, wantsJsonUnauthorized } from "@/lib/auth/json-unauthorized";
 import { mustChangePassword, passwordChangeAllowedPath } from "@/lib/auth/password";
-import { buildCsp } from "@/lib/security/headers";
+import { buildCsp, allowsSameOriginFraming } from "@/lib/security/headers";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 export async function updateSession(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const sameOriginFrames = allowsSameOriginFraming(request.nextUrl.pathname);
   const csp = buildCsp({
     nonce,
     dev: process.env.NODE_ENV !== "production",
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    sameOriginFrames,
   });
 
   const requestHeaders = new Headers(request.headers);
@@ -26,6 +28,9 @@ export async function updateSession(request: NextRequest) {
     request: { headers: requestHeaders },
   });
   supabaseResponse.headers.set("content-security-policy", csp);
+  if (sameOriginFrames) {
+    supabaseResponse.headers.set("x-frame-options", "SAMEORIGIN");
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,6 +46,9 @@ export async function updateSession(request: NextRequest) {
             request: { headers: requestHeaders },
           });
           supabaseResponse.headers.set("content-security-policy", csp);
+          if (sameOriginFrames) {
+            supabaseResponse.headers.set("x-frame-options", "SAMEORIGIN");
+          }
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );

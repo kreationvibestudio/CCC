@@ -14,6 +14,11 @@ export type CspOptions = {
   supabaseUrl?: string;
   /** Extra origins the deployment needs to reach, e.g. a self-hosted tile server. */
   extraConnectSrc?: string[];
+  /**
+   * Allow this response to be framed by the same origin (e.g. Sales pitch print iframe).
+   * Default stays clickjack-safe (`'none'`).
+   */
+  sameOriginFrames?: boolean;
 };
 
 /** Map tiles, Facebook/Instagram media and Paystack checkout are all cross-origin. */
@@ -39,7 +44,13 @@ function originOf(raw: string | undefined): string | null {
   }
 }
 
-export function buildCsp({ nonce, dev = false, supabaseUrl, extraConnectSrc = [] }: CspOptions): string {
+export function buildCsp({
+  nonce,
+  dev = false,
+  supabaseUrl,
+  extraConnectSrc = [],
+  sameOriginFrames = false,
+}: CspOptions): string {
   const supabase = originOf(supabaseUrl);
   const supabaseWs = supabase ? supabase.replace(/^http/, "ws") : null;
 
@@ -72,7 +83,7 @@ export function buildCsp({ nonce, dev = false, supabaseUrl, extraConnectSrc = []
     ["object-src", ["'none'"]],
     ["base-uri", ["'self'"]],
     ["form-action", ["'self'", ...FORM_ORIGINS]],
-    ["frame-ancestors", ["'none'"]],
+    ["frame-ancestors", [sameOriginFrames ? "'self'" : "'none'"]],
     ["frame-src", ["'self'"]],
   ];
 
@@ -119,3 +130,16 @@ export const STATIC_SECURITY_HEADERS: Array<{ key: string; value: string }> = [
     value: "max-age=63072000; includeSubDomains; preload",
   },
 ];
+
+/** Same as STATIC_SECURITY_HEADERS but allow same-origin iframes (Sales pitch print). */
+export const SAME_ORIGIN_FRAME_SECURITY_HEADERS: Array<{ key: string; value: string }> =
+  STATIC_SECURITY_HEADERS.map((header) =>
+    header.key === "X-Frame-Options" ? { key: "X-Frame-Options", value: "SAMEORIGIN" } : header
+  );
+
+/** Path that may be embedded by HQ's pitch print view. */
+export const PITCH_DECK_FRAME_PATH = "/api/sales/pitch-deck";
+
+export function allowsSameOriginFraming(pathname: string): boolean {
+  return pathname === PITCH_DECK_FRAME_PATH;
+}

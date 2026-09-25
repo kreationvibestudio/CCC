@@ -3,7 +3,8 @@
  *
  * The static ones are attached in next.config.ts so they cover every route,
  * including the paths the middleware matcher skips. The Content-Security-Policy
- * carries a per-request nonce, so it has to be built in middleware instead.
+ * and X-Frame-Options are set in middleware so they can vary per path (Sales
+ * pitch print needs same-origin framing).
  */
 
 export type CspOptions = {
@@ -100,10 +101,12 @@ export function buildCsp({
 /**
  * Headers that never vary per request. `geolocation` and `camera` stay enabled
  * because the field agent portal needs both to capture a polling unit report.
+ *
+ * X-Frame-Options is set in middleware (not here) so the Sales pitch route can
+ * use SAMEORIGIN without a catch-all `/:path*` header overwriting it.
  */
 export const STATIC_SECURITY_HEADERS: Array<{ key: string; value: string }> = [
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-DNS-Prefetch-Control", value: "off" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
@@ -131,15 +134,14 @@ export const STATIC_SECURITY_HEADERS: Array<{ key: string; value: string }> = [
   },
 ];
 
-/** Same as STATIC_SECURITY_HEADERS but allow same-origin iframes (Sales pitch print). */
-export const SAME_ORIGIN_FRAME_SECURITY_HEADERS: Array<{ key: string; value: string }> =
-  STATIC_SECURITY_HEADERS.map((header) =>
-    header.key === "X-Frame-Options" ? { key: "X-Frame-Options", value: "SAMEORIGIN" } : header
-  );
-
 /** Path that may be embedded by HQ's pitch print view. */
 export const PITCH_DECK_FRAME_PATH = "/api/sales/pitch-deck";
 
 export function allowsSameOriginFraming(pathname: string): boolean {
   return pathname === PITCH_DECK_FRAME_PATH;
+}
+
+/** Clickjack header for a path — SAMEORIGIN only for the Sales pitch HTML. */
+export function frameOptionsForPath(pathname: string): "DENY" | "SAMEORIGIN" {
+  return allowsSameOriginFraming(pathname) ? "SAMEORIGIN" : "DENY";
 }

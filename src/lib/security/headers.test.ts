@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { STATIC_SECURITY_HEADERS, SAME_ORIGIN_FRAME_SECURITY_HEADERS, buildCsp, allowsSameOriginFraming } from "./headers.ts";
+import { STATIC_SECURITY_HEADERS, buildCsp, allowsSameOriginFraming, frameOptionsForPath } from "./headers.ts";
 
 function directive(csp: string, name: string): string {
   const found = csp
@@ -91,10 +91,17 @@ test("the field agent portal keeps geolocation and camera", () => {
   assert.match(permissions.value, /microphone=\(\)/);
 });
 
-test("static headers cover sniffing, framing and transport", () => {
+test("static headers cover sniffing and transport (XFO is middleware-owned)", () => {
   const byKey = new Map(STATIC_SECURITY_HEADERS.map((h) => [h.key, h.value]));
   assert.equal(byKey.get("X-Content-Type-Options"), "nosniff");
-  assert.equal(byKey.get("X-Frame-Options"), "DENY");
+  assert.equal(byKey.has("X-Frame-Options"), false);
   assert.equal(byKey.get("Referrer-Policy"), "strict-origin-when-cross-origin");
   assert.match(byKey.get("Strict-Transport-Security") ?? "", /max-age=\d{7,}/);
+});
+
+test("pitch deck route may be framed same-origin only", () => {
+  assert.equal(allowsSameOriginFraming("/api/sales/pitch-deck"), true);
+  assert.equal(allowsSameOriginFraming("/sales"), false);
+  assert.equal(frameOptionsForPath("/api/sales/pitch-deck"), "SAMEORIGIN");
+  assert.equal(frameOptionsForPath("/dashboard"), "DENY");
 });

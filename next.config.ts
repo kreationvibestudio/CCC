@@ -1,8 +1,5 @@
 import type { NextConfig } from "next";
-import {
-  SAME_ORIGIN_FRAME_SECURITY_HEADERS,
-  STATIC_SECURITY_HEADERS,
-} from "./src/lib/security/headers";
+import { STATIC_SECURITY_HEADERS } from "./src/lib/security/headers";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -23,14 +20,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.instagram.com" },
     ],
   },
-  // Content-Security-Policy is set in middleware instead: it carries a
-  // per-request nonce, which a static header cannot.
+  // Content-Security-Policy and X-Frame-Options are set in middleware so the
+  // Sales pitch route can allow same-origin framing without a catch-all overwrite.
   async headers() {
-    return [
-      // More specific first: Sales pitch HTML may be iframed by HQ print view.
-      { source: "/api/sales/pitch-deck", headers: SAME_ORIGIN_FRAME_SECURITY_HEADERS },
-      { source: "/:path*", headers: STATIC_SECURITY_HEADERS },
-    ];
+    return [{ source: "/:path*", headers: STATIC_SECURITY_HEADERS }];
   },
 };
 

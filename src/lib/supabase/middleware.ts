@@ -3,13 +3,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { safeInternalPath } from "@/lib/auth/bearer";
 import { jsonUnauthorizedBody, wantsJsonUnauthorized } from "@/lib/auth/json-unauthorized";
 import { mustChangePassword, passwordChangeAllowedPath } from "@/lib/auth/password";
-import { buildCsp, allowsSameOriginFraming } from "@/lib/security/headers";
+import { buildCsp, allowsSameOriginFraming, frameOptionsForPath } from "@/lib/security/headers";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 export async function updateSession(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const sameOriginFrames = allowsSameOriginFraming(request.nextUrl.pathname);
+  const path = request.nextUrl.pathname;
+  const sameOriginFrames = allowsSameOriginFraming(path);
+  const frameOptions = frameOptionsForPath(path);
   const csp = buildCsp({
     nonce,
     dev: process.env.NODE_ENV !== "production",
@@ -17,20 +19,24 @@ export async function updateSession(request: NextRequest) {
     sameOriginFrames,
   });
 
+  const stamp = (response: NextResponse) => {
+    response.headers.set("content-security-policy", csp);
+    response.headers.set("x-frame-options", frameOptions);
+    return response;
+  };
+
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  requestHeaders.set("x-pathname", path);
   requestHeaders.set("x-nonce", nonce);
   // Next reads the nonce back out of the request-side CSP to stamp its own
   // <script> tags; without this the bootstrap chunk is blocked.
   requestHeaders.set("content-security-policy", csp);
 
-  let supabaseResponse = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
-  supabaseResponse.headers.set("content-security-policy", csp);
-  if (sameOriginFrames) {
-    supabaseResponse.headers.set("x-frame-options", "SAMEORIGIN");
-  }
+  let supabaseResponse = stamp(
+    NextResponse.next({
+      request: { headers: requestHeaders },
+    })
+  );
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,13 +48,11 @@ export async function updateSession(request: NextRequest) {
         },
         setAll(cookiesToSet: CookieToSet[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({
-            request: { headers: requestHeaders },
-          });
-          supabaseResponse.headers.set("content-security-policy", csp);
-          if (sameOriginFrames) {
-            supabaseResponse.headers.set("x-frame-options", "SAMEORIGIN");
-          }
+          supabaseResponse = stamp(
+            NextResponse.next({
+              request: { headers: requestHeaders },
+            })
+          );
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
@@ -61,7 +65,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
   const isResetPassword = path.startsWith("/reset-password");
   const isAuthRoute =
     path.startsWith("/login") ||
@@ -87,16 +90,14 @@ export async function updateSession(request: NextRequest) {
     isAgentCodeLogin;
 
   const redirectTo = (url: URL) => {
-    const response = NextResponse.redirect(url);
-    response.headers.set("content-security-policy", csp);
+    const response = stamp(NextResponse.redirect(url));
     supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
     return response;
   };
 
   if (!user && !isPublicRoute) {
     if (wantsJsonUnauthorized(path)) {
-      const response = NextResponse.json(jsonUnauthorizedBody(), { status: 401 });
-      response.headers.set("content-security-policy", csp);
+      const response = stamp(NextResponse.json(jsonUnauthorizedBody(), { status: 401 }));
       supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
       return response;
     }
@@ -108,11 +109,12 @@ export async function updateSession(request: NextRequest) {
 
   if (user && mustChangePassword(user) && !passwordChangeAllowedPath(path)) {
     if (wantsJsonUnauthorized(path)) {
-      const response = NextResponse.json(
-        { error: "Set a permanent password before using HQ" },
-        { status: 403 }
+      const response = stamp(
+        NextResponse.json(
+          { error: "Set a permanent password before using HQ" },
+          { status: 403 }
+        )
       );
-      response.headers.set("content-security-policy", csp);
       supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
       return response;
     }

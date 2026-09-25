@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import type { Profile } from "@/types/database";
 import { platformOperatorEmails } from "@/lib/tenancy";
 import { parseBearer } from "@/lib/auth/bearer";
+import { canAccessPitchDeck as pitchDeckAccess } from "@/lib/pitch-deck/access";
 
 export type WorkspaceInfo = {
   id: string;
@@ -34,6 +35,8 @@ export interface AuthUser {
   workspace: WorkspaceInfo | null;
   isPlatformOperator: boolean;
   supportAccess: SupportAccess | null;
+  /** Sales / pitch deck — Akin Anenih super administrator only. */
+  canAccessPitchDeck: boolean;
 }
 
 /**
@@ -189,23 +192,24 @@ async function assembleAuthUser(user: User, db: SupabaseClient): Promise<AuthUse
     if (!isOperator || !supportAccess) return null;
     const workspace = await loadWorkspace(supportAccess.tenantId);
     const synth = syntheticSupportProfile(user.id, email, supportAccess.tenantId);
-    return {
+    const shell = {
       id: user.id,
       email,
       profile: synth,
-      role: "super_administrator",
+      role: "super_administrator" as const,
       permissions: ROLE_PERMISSIONS.super_administrator ?? [],
       workspace,
       isPlatformOperator: true,
       supportAccess,
     };
+    return { ...shell, canAccessPitchDeck: pitchDeckAccess(shell) };
   }
 
   const effectiveTenantId = supportAccess?.tenantId ?? profile.tenant_id;
   const role = (supportAccess ? "super_administrator" : profile.role) as UserRole;
   const workspace = await loadWorkspace(effectiveTenantId);
 
-  return {
+  const assembled = {
     id: user.id,
     email: user.email ?? profile.email,
     profile: { ...(profile as Profile), tenant_id: effectiveTenantId },
@@ -215,6 +219,7 @@ async function assembleAuthUser(user: User, db: SupabaseClient): Promise<AuthUse
     isPlatformOperator: isOperator,
     supportAccess,
   };
+  return { ...assembled, canAccessPitchDeck: pitchDeckAccess(assembled) };
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
@@ -311,6 +316,7 @@ export function platformOperatorShellUser(operator: {
     workspace: null,
     isPlatformOperator: true,
     supportAccess: null,
+    canAccessPitchDeck: false,
   };
 }
 

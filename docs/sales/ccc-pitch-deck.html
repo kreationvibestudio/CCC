@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Campaign Command Center — Client Pitch Deck</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap");
+
+    :root {
+      --bg: #0c1210;
+      --panel: #121a17;
+      --ink: #f2f5f1;
+      --muted: #a7b5ae;
+      --line: #24302b;
+      --accent: #1f9d6a;
+      --accent-soft: rgba(31, 157, 106, 0.16);
+      --warn: #c9a227;
+      --card: #17211d;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: #070b09;
+      color: var(--ink);
+      font-family: "Source Sans 3", system-ui, sans-serif;
+    }
+
+    .deck {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px 16px 64px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(12, 18, 16, 0.92);
+      backdrop-filter: blur(10px);
+    }
+    .toolbar p { margin: 0; color: var(--muted); font-size: 14px; }
+    .toolbar .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    button, .btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    button.primary, .btn.primary {
+      background: var(--accent);
+      border-color: transparent;
+      color: #04140d;
+    }
+
+    .slide {
+      position: relative;
+      overflow: hidden;
+      min-height: 640px;
+      margin: 0 0 28px;
+      padding: 48px 52px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background:
+        radial-gradient(ellipse at top right, rgba(31,157,106,0.18), transparent 45%),
+        linear-gradient(165deg, #121a17, #0c1210 55%, #0a100e);
+      page-break-after: always;
+      break-after: page;
+    }
+    .slide.cover {
+      padding: 0;
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      min-height: 680px;
+    }
+    .slide.cover .copy {
+      padding: 56px 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .slide.cover .visual {
+      min-height: 680px;
+      background-size: cover;
+      background-position: center;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 18px;
+      color: #8fd9b5;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 16px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    h1, h2 {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 14px;
+      line-height: 1.08;
+    }
+    h1 { font-size: clamp(2.4rem, 4vw, 3.6rem); max-width: 12ch; }
+    h2 { font-size: clamp(1.8rem, 3vw, 2.6rem); max-width: 18ch; }
+    .lede {
+      margin: 0 0 22px;
+      max-width: 42ch;
+      color: var(--muted);
+      font-size: 1.08rem;
+      line-height: 1.55;
+    }
+    .meta {
+      margin-top: auto;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 28px;
+      align-items: center;
+      height: 100%;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .card {
+      background: rgba(23, 33, 29, 0.88);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px 18px 16px;
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+    }
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+    .pill {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #8fd9b5;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .price {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 2rem;
+      margin: 8px 0 4px;
+    }
+    .price span {
+      display: block;
+      font-family: "Source Sans 3", sans-serif;
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-weight: 500;
+      margin-top: 4px;
+    }
+    .list {
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .list li {
+      position: relative;
+      padding: 10px 0 10px 22px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 18px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .list strong { color: var(--ink); }
+    .shot {
+      width: 100%;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      display: block;
+      object-fit: cover;
+      max-height: 420px;
+    }
+    .footnote {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .featured {
+      border-color: rgba(31,157,106,0.55);
+      box-shadow: 0 0 0 1px rgba(31,157,106,0.2) inset;
+    }
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 26px;
+    }
+
+    @media (max-width: 900px) {
+      .slide { padding: 28px 22px; min-height: auto; }
+      .slide.cover { grid-template-columns: 1fr; }
+      .slide.cover .visual { min-height: 260px; }
+      .slide.cover .copy { padding: 28px 22px 36px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      h1 { max-width: none; }
+    }
+
+    @media print {
+      .toolbar { display: none !important; }
+      body { background: #000; }
+      .deck { max-width: none; padding: 0; }
+      .slide {
+        margin: 0;
+        border-radius: 0;
+        border: none;
+        min-height: 100vh;
+        page-break-after: always;
+      }
+      .slide.cover { min-height: 100vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <div class="toolbar">
+      <p>Campaign Command Center · Client pitch · Print to PDF or share this file</p>
+      <div class="actions">
+        <button class="primary" type="button" onclick="window.print()">Download / Print PDF</button>
+        <a class="btn" href="mailto:hello@sdkoncepts.com?subject=CCC%20demo%20request">Request a demo</a>
+      </div>
+    </div>
+
+    <!-- 1 Cover -->
+    <section class="slide cover">
+      <div class="copy">
+        <img class="logo" src="./pitch-assets/ccc-logo.webp" alt="Campaign Command Center" />
+        <p class="eyebrow">Campaign Command Center</p>
+        <h1>Run the campaign from one war room.</h1>
+        <p class="lede">
+          CCC is the AI-powered HQ for Nigerian elections — media, ground game,
+          fundraising, training, and election night — in one secure platform.
+        </p>
+        <p class="meta">Confidential client pitch · 2026–2027 cycle</p>
+      </div>
+      <div class="visual" style="background-image:url('./pitch-assets/pitch_cover_war_room.png')"></div>
+    </section>
+
+    <!-- 2 Problem -->
+    <section class="slide">
+      <div class="grid-2">
+        <div>
+          <p class="eyebrow">The problem</p>
+          <h2>Campaigns lose elections in the gaps between tools.</h2>
+          <p class="lede">
+            Facebook lives in one tab. Volunteers in a spreadsheet. Agents on WhatsApp.
+            Donations in Paystack. Election night on paper. Nobody sees the same picture.
+          </p>
+          <ul class="list">
+            <li><strong>Slow replies</strong> — comment heat dies before HQ answers.</li>
+            <li><strong>Blind ground game</strong> — no live map of who is at which PU.</li>
+            <li><strong>Untrained volunteers</strong> — codes and courses scattered.</li>
+            <li><strong>No election desk</strong> — results arrive too late to act.</li>
+          </ul>
+        </div>
+        <img class="shot" src="./pitch-assets/pitch_problem_chaos.png" alt="Fragmented campaign tools versus one command desk" />
+      </div>
+    </section>
+
+    <!-- 3 Solution -->
+    <section class="slide">
+      <p class="eyebrow">The solution</p>
+      <h2>One command center for the whole campaign.</h2>
+      <p class="lede">
+        CCC gives your directors, media team, field agents, and finance one shared
+        source of truth — with permissions so each role only sees what they should.
+      </p>
+      <div class="grid-3">
+        <div class="card">
+          <p class="pill">Narrative</p>
+          <h3>Media &amp; comments</h3>
+          <p>Live Facebook sync, reply queue, sentiment, AI drafts, and a morning huddle for the desk.</p>
+        </div>
+        <div class="card">
+          <p class="pill">People</p>
+          <h3>Volunteers &amp; CRM</h3>
+          <p>Signup, training codes, Learn LMS, donors, and role-based HQ seats.</p>
+        </div>
+        <div class="card">
+          <p class="pill">Ground</p>
+          <h3>PU agents &amp; maps</h3>
+          <p>GPS-checked agent login, field status map, and Situation Room race board.</p>
+        </div>
+      </div>
+      <img class="shot" style="margin-top:24px;max-height:260px" src="./pitch-assets/pitch_product_modules.png" alt="CCC product modules collage" />
+    </section>
+
+    <!-- 4 Modules -->
+    <section class="slide">
+      <p class="eyebrow">What you get</p>
+      <h2>Built for Nigerian campaign ops — not generic CRM.</h2>
+      <div class="grid-3" style="margin-top:20px">
+        <div class="card"><h3>Executive Dashboard</h3><p>Countdowns, fundraising progress, live briefing.</p></div>
+        <div class="card"><h3>Media Command</h3><p>Reply-first desk, huddle copy, post calendar.</p></div>
+        <div class="card"><h3>Comments inbox</h3><p>Needs-response queue; replied threads archived by filter.</p></div>
+        <div class="card"><h3>AI Assistant</h3><p>Drafts, classification, and talking points for HQ.</p></div>
+        <div class="card"><h3>Volunteer Training</h3><p>WhatsApp/email codes, LMS, deployment-ready status.</p></div>
+        <div class="card"><h3>Donations</h3><p>Paystack checkout + public progress meter.</p></div>
+        <div class="card"><h3>Communications</h3><p>Termii SMS / WhatsApp / email broadcasts.</p></div>
+        <div class="card"><h3>Field Status Map</h3><p>Live PU pins and filters for LGA / ward focus.</p></div>
+        <div class="card"><h3>Situation Room</h3><p>Election-day race desk with live pulse.</p></div>
+      </div>
+    </section>
+
+    <!-- 5 Field -->
+    <section class="slide">
+      <div class="grid-2">
+        <div>
+          <p class="eyebrow">Ground game</p>
+          <h2>Agents checked in. HQ watching live.</h2>
+          <p class="lede">
+            Issue PU agent codes from HQ. Agents sign in on phone within 100 feet of
+            the unit pin. Status, incidents, and results flow back to the map and Situation Room.
+          </p>
+          <ul class="list">
+            <li><strong>Agent Portal</strong> + optional Android app</li>
+            <li><strong>Offline queue</strong> when network drops</li>
+            <li><strong>Role permissions</strong> so field data stays controlled</li>
+          </ul>
+        </div>
+        <img class="shot" src="./pitch-assets/pitch_field_agents.png" alt="Field agent with HQ map oversight" />
+      </div>
+    </section>
+
+    <!-- 6 Proof -->
+    <section class="slide">
+      <p class="eyebrow">In production</p>
+      <h2>Already running a live state campaign HQ.</h2>
+      <p class="lede">
+        CCC powers Progressive Alliance / Hon Akhakon Anenih operations in Edo —
+        full polling-unit register, Facebook desk, volunteer training, and donations.
+      </p>
+      <div class="grid-3">
+        <div class="card"><h3>4,700+ PUs</h3><p>Edo State register imported and mapped for field ops.</p></div>
+        <div class="card"><h3>Live social desk</h3><p>Facebook sync, comment queue, and media huddle in one place.</p></div>
+        <div class="card"><h3>Secure by role</h3><p>HQ invites, first-login password gate, permissioned modules.</p></div>
+      </div>
+      <p class="footnote">Reference deployment: ccc-three-kappa.vercel.app (demo on request).</p>
+    </section>
+
+    <!-- 7 Pricing -->
+    <section class="slide">
+      <p class="eyebrow">Pricing</p>
+      <h2>Election-cycle packages. Clear Naira pricing.</h2>
+      <p class="lede">
+        Priced for Nigerian campaigns. SMS/WhatsApp (Termii) and Paystack fees are
+        pass-through — you fund those wallets directly. Setup &amp; training included.
+      </p>
+      <div class="grid-3">
+        <div class="card">
+          <p class="pill">Local</p>
+          <h3>LGA / House</h3>
+          <p class="price">₦3.5M<span>per election cycle (up to 6 months)</span></p>
+          <ul class="list">
+            <li>1 campaign workspace</li>
+            <li>Up to 15 HQ seats</li>
+            <li>Media, CRM, donations, training</li>
+            <li>1 LGA field map focus</li>
+            <li>Email support</li>
+          </ul>
+        </div>
+        <div class="card featured">
+          <p class="pill">Most chosen</p>
+          <h3>State Campaign</h3>
+          <p class="price">₦9.5M<span>per election cycle (up to 8 months)</span></p>
+          <ul class="list">
+            <li>Everything in Local</li>
+            <li>Up to 40 HQ seats</li>
+            <li>Full-state PU register &amp; agents</li>
+            <li>Situation Room + analytics</li>
+            <li>Onboarding workshop + WhatsApp desk</li>
+          </ul>
+        </div>
+        <div class="card">
+          <p class="pill">Command</p>
+          <h3>Party / Multi-seat</h3>
+          <p class="price">From ₦18M<span>custom cycle · multi-workspace</span></p>
+          <ul class="list">
+            <li>Multiple candidates / states</li>
+            <li>Custom roles &amp; branding</li>
+            <li>Priority SLA &amp; dedicated operator</li>
+            <li>Custom integrations</li>
+            <li>On-site election-night support</li>
+          </ul>
+        </div>
+      </div>
+      <p class="footnote">
+        Monthly option available: Local ₦650k/mo · State ₦1.75M/mo · Command custom.
+        50% at kickoff, 50% at 60 days (or as agreed). Prices exclude VAT where applicable.
+      </p>
+    </section>
+
+    <!-- 8 Why us -->
+    <section class="slide">
+      <p class="eyebrow">Why CCC</p>
+      <h2>Not another foreign SaaS bolted onto Nigeria.</h2>
+      <div class="grid-3">
+        <div class="card"><h3>Built for INEC geography</h3><p>LGA, ward, and PU-native — not zip codes and precincts.</p></div>
+        <div class="card"><h3>Channels that work here</h3><p>Facebook desk, Termii SMS/WhatsApp, Paystack donations.</p></div>
+        <div class="card"><h3>Election-night ready</h3><p>Situation Room and agent reporting when minutes matter.</p></div>
+      </div>
+      <ul class="list" style="margin-top:28px">
+        <li><strong>Fast stand-up</strong> — workspace, roles, and branding in days, not quarters.</li>
+        <li><strong>Secure HQ</strong> — invite-only staff, permission gates, audit-friendly actions.</li>
+        <li><strong>You own the relationships</strong> — your Page, your Paystack, your Termii wallet.</li>
+      </ul>
+    </section>
+
+    <!-- 9 Next steps -->
+    <section class="slide">
+      <p class="eyebrow">Next step</p>
+      <h2>See your campaign on CCC in one working session.</h2>
+      <p class="lede">
+        We load a sandbox with your branding, walk Media + Comments + Map + Training,
+        and leave you with a fixed quote for your cycle.
+      </p>
+      <div class="grid-3">
+        <div class="card"><h3>1. Intro call</h3><p>30 minutes — goals, geography, team size.</p></div>
+        <div class="card"><h3>2. Live demo</h3><p>60 minutes on production-grade CCC.</p></div>
+        <div class="card"><h3>3. Proposal</h3><p>Package, timeline, kickoff checklist.</p></div>
+      </div>
+      <div class="cta-row">
+        <a class="btn primary" href="mailto:hello@sdkoncepts.com?subject=CCC%20demo%20request&body=We%20are%20interested%20in%20Campaign%20Command%20Center.%0A%0ACampaign%20%2F%20office%3A%0AState%20%2F%20LGA%3A%0AApprox.%20HQ%20users%3A%0AElection%20date%3A%0A">Email to book a demo</a>
+        <button type="button" onclick="window.print()">Save as PDF</button>
+      </div>
+      <p class="meta" style="margin-top:36px">
+        Campaign Command Center · SDKoncepts Multi Kreations Limited<br />
+        Pricing valid for discussions opened in 2026 · Subject to signed proposal
+      </p>
+    </section>
+  </div>
+</body>
+</html>

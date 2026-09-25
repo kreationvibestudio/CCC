@@ -10,5 +10,7 @@ describe("buildSelfContainedPitchHtml", () => {
     assert.doesNotMatch(html, /\.\/pitch-assets\//);
     assert.match(html, /Run the campaign from one war room/);
     assert.match(html, /₦9\.5M/);
+    assert.match(html, /0813 374 7224/);
+    assert.match(html, /hello@sdkoncepts\.com/);
   });
 });

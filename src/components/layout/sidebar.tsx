@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { BrandLogo } from "@/components/brand/logo";
-import { Shield, Layers, ChevronLeft, ChevronRight } from "lucide-react";
+import { Shield, Layers, ChevronLeft, ChevronRight, FolderOpen } from "lucide-react";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -30,8 +30,10 @@ export function Sidebar() {
   );
   const showAdmin = can("admin.users");
   const showPlatform = Boolean(user?.isPlatformOperator);
+  const showSales = Boolean(user?.canAccessPitchDeck);
   const adminActive = pathname.startsWith("/admin");
   const platformActive = pathname.startsWith("/platform");
+  const salesActive = pathname.startsWith("/sales");
 
   const footerLinkClass = (active: boolean) =>
     cn(
@@ -53,6 +55,13 @@ export function Sidebar() {
     <Link href="/platform" className={footerLinkClass(platformActive)}>
       <Layers className="h-4 w-4 shrink-0" />
       {!collapsed && <span className="flex-1">Platform</span>}
+    </Link>
+  ) : null;
+
+  const salesLink = showSales ? (
+    <Link href="/sales" className={footerLinkClass(salesActive)}>
+      <FolderOpen className="h-4 w-4 shrink-0" />
+      {!collapsed && <span className="flex-1">Sales</span>}
     </Link>
   ) : null;
 
@@ -121,6 +130,16 @@ export function Sidebar() {
         </nav>
       </ScrollArea>
       <div className="space-y-1 border-t border-border p-2">
+        {showSales && (
+          collapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>{salesLink}</TooltipTrigger>
+              <TooltipContent side="right">Sales</TooltipContent>
+            </Tooltip>
+          ) : (
+            salesLink
+          )
+        )}
         {showPlatform && (
           collapsed ? (
             <Tooltip>

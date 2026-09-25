@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
     },
     middlewareClientMaxBodySize: "50mb",
   },
+  // Keep pitch deck HTML + images available to the authenticated Sales API on Vercel.
+  outputFileTracingIncludes: {
+    "/api/sales/pitch-deck": ["./docs/sales/**/*"],
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.supabase.co" },

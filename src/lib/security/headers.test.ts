@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { STATIC_SECURITY_HEADERS, buildCsp } from "./headers.ts";
+import { STATIC_SECURITY_HEADERS, SAME_ORIGIN_FRAME_SECURITY_HEADERS, buildCsp, allowsSameOriginFraming } from "./headers.ts";
 
 function directive(csp: string, name: string): string {
   const found = csp
@@ -64,6 +64,11 @@ test("clickjacking and base-tag injection are closed off", () => {
   assert.equal(directive(csp, "frame-ancestors"), "frame-ancestors 'none'");
   assert.equal(directive(csp, "base-uri"), "base-uri 'self'");
   assert.equal(directive(csp, "object-src"), "object-src 'none'");
+});
+
+test("Sales pitch HTML may be framed by the same origin only", () => {
+  const csp = buildCsp({ nonce: "n", sameOriginFrames: true });
+  assert.equal(directive(csp, "frame-ancestors"), "frame-ancestors 'self'");
 });
 
 test("Paystack can receive checkout form posts", () => {

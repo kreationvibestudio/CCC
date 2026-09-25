@@ -27,6 +27,8 @@ export async function GET(request: Request) {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "private, no-store",
     "X-Robots-Tag": "noindex, nofollow",
+    // HQ print view embeds this HTML in a same-origin iframe.
+    "X-Frame-Options": "SAMEORIGIN",
   });
   if (download) {
     headers.set(

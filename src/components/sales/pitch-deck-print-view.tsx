@@ -2,21 +2,24 @@
 
 import Link from "next/link";
 import { useCallback, useRef } from "react";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, ExternalLink, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function PitchDeckPrintView() {
   const frameRef = useRef<HTMLIFrameElement>(null);
 
   const printDeck = useCallback(() => {
-    const frame = frameRef.current;
-    const win = frame?.contentWindow;
+    const win = frameRef.current?.contentWindow;
     if (win) {
-      win.focus();
-      win.print();
-      return;
+      try {
+        win.focus();
+        win.print();
+        return;
+      } catch {
+        // Fall through.
+      }
     }
-    window.print();
+    window.open("/api/sales/pitch-deck", "_blank", "noopener,noreferrer");
   }, []);
 
   return (
@@ -34,6 +37,12 @@ export function PitchDeckPrintView() {
             Use Print / Save PDF — images are embedded in the file.
           </p>
         </div>
+        <Button asChild variant="outline" size="sm">
+          <a href="/api/sales/pitch-deck" target="_blank" rel="noreferrer">
+            <ExternalLink className="mr-1.5 h-4 w-4" />
+            Open in tab
+          </a>
+        </Button>
         <Button type="button" size="sm" onClick={printDeck}>
           <Printer className="mr-1.5 h-4 w-4" />
           Print / Save PDF

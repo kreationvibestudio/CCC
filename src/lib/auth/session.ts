@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
@@ -82,8 +83,11 @@ export async function isPlatformOperatorUser(
   return true;
 }
 
-async function loadWorkspace(tenantId: string): Promise<WorkspaceInfo | null> {
-  const supabase = await createClient();
+async function loadWorkspace(
+  tenantId: string,
+  db?: SupabaseClient
+): Promise<WorkspaceInfo | null> {
+  const supabase = db ?? (await createClient());
   const [{ data: tenant }, { data: settings }] = await Promise.all([
     supabase.from("tenants").select("id, name, slug").eq("id", tenantId).maybeSingle(),
     supabase
@@ -183,14 +187,17 @@ function syntheticSupportProfile(userId: string, email: string, tenantId: string
 
 async function assembleAuthUser(user: User, db: SupabaseClient): Promise<AuthUser | null> {
   const email = user.email ?? "";
-  const isOperator = await isPlatformOperatorUser(user.id, email, db);
+  // Profile + operator check in parallel — sequential round-trips made HQ navigations feel stuck.
+  const [isOperator, profileResult] = await Promise.all([
+    isPlatformOperatorUser(user.id, email, db),
+    db.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+  ]);
+  const profile = profileResult.data;
   const supportAccess = isOperator ? await loadSupportAccess(user.id, db) : null;
-
-  const { data: profile } = await db.from("profiles").select("*").eq("id", user.id).single();
 
   if (!profile) {
     if (!isOperator || !supportAccess) return null;
-    const workspace = await loadWorkspace(supportAccess.tenantId);
+    const workspace = await loadWorkspace(supportAccess.tenantId, db);
     const synth = syntheticSupportProfile(user.id, email, supportAccess.tenantId);
     const shell = {
       id: user.id,
@@ -207,7 +214,7 @@ async function assembleAuthUser(user: User, db: SupabaseClient): Promise<AuthUse
 
   const effectiveTenantId = supportAccess?.tenantId ?? profile.tenant_id;
   const role = (supportAccess ? "super_administrator" : profile.role) as UserRole;
-  const workspace = await loadWorkspace(effectiveTenantId);
+  const workspace = await loadWorkspace(effectiveTenantId, db);
 
   const assembled = {
     id: user.id,
@@ -222,7 +229,8 @@ async function assembleAuthUser(user: User, db: SupabaseClient): Promise<AuthUse
   return { ...assembled, canAccessPitchDeck: pitchDeckAccess(assembled) };
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
+/** One auth assemble per RSC request (layout + page share this). */
+export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
   let bearer: string | null = null;
   try {
     bearer = parseBearer((await headers()).get("authorization"));
@@ -237,7 +245,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   } = bearer ? await supabase.auth.getUser(bearer) : await supabase.auth.getUser();
   if (error || !user) return null;
   return assembleAuthUser(user, supabase);
-}
+});
 
 export async function requireAuth(): Promise<AuthUser> {
   const user = await getCurrentUser();

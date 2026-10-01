@@ -45,21 +45,21 @@ export function Sidebar() {
     );
 
   const adminLink = showAdmin ? (
-    <Link href="/admin" className={footerLinkClass(adminActive)}>
+    <Link href="/admin" prefetch={false} className={footerLinkClass(adminActive)}>
       <Shield className="h-4 w-4 shrink-0" />
       {!collapsed && <span className="flex-1">Admin</span>}
     </Link>
   ) : null;
 
   const platformLink = showPlatform ? (
-    <Link href="/platform" className={footerLinkClass(platformActive)}>
+    <Link href="/platform" prefetch={false} className={footerLinkClass(platformActive)}>
       <Layers className="h-4 w-4 shrink-0" />
       {!collapsed && <span className="flex-1">Platform</span>}
     </Link>
   ) : null;
 
   const salesLink = showSales ? (
-    <Link href="/sales" className={footerLinkClass(salesActive)}>
+    <Link href="/sales" prefetch={false} className={footerLinkClass(salesActive)}>
       <FolderOpen className="h-4 w-4 shrink-0" />
       {!collapsed && <span className="flex-1">Sales</span>}
     </Link>
@@ -95,6 +95,8 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                // Default viewport prefetch storms ~20 RSC routes and delays the click the user actually made.
+                prefetch={false}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                   isActive

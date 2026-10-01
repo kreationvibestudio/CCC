@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, Plus } from "lucide-react";
 import { format } from "date-fns";
@@ -15,6 +16,11 @@ export function EventsView({ events }: { events: CampaignEvent[] }) {
   const router = useRouter();
   const { canCreate, can } = usePermissions();
   const canManageEvents = canCreate && can("events.manage");
+
+  useEffect(() => {
+    if (canManageEvents) router.prefetch("/events/new");
+  }, [canManageEvents, router]);
+
   const now = Date.now();
   const sorted = [...events].sort(
     (a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime()

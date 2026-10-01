@@ -8,7 +8,6 @@ import {
   refreshFacebookCommentAuthors, updateCommentAuthor,
 } from "@/lib/comments/actions";
 import { FacebookSyncButton } from "@/components/social/facebook-sync-button";
-import { FacebookCommenterNamesCard } from "@/components/social/facebook-commenter-names-card";
 import { PageHeader, EmptyState } from "@/components/shared/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -239,8 +238,6 @@ export function CommentsInbox({
         </NativeSelect>
         <Badge variant="secondary">{filtered.length} shown</Badge>
       </div>
-
-      <FacebookCommenterNamesCard hiddenCount={hiddenAuthors} canWrite={canWrite} />
 
       {filtered.length === 0 ? (
         <EmptyState

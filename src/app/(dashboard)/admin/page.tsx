@@ -1,6 +1,7 @@
 ﻿import { requirePermission } from "@/lib/auth/session";
 import { getAdminData } from "@/lib/admin/data";
 import { getSecretsStatus } from "@/lib/admin/actions";
+import { getAdminSystemLog } from "@/lib/admin/system-log";
 import { AdminView } from "@/components/admin/admin-view";
 import { appBaseUrl, paystackPaymentLinkFromSetting } from "@/lib/campaign";
 import { createClient } from "@/lib/supabase/server";
@@ -19,7 +20,7 @@ function settingText(value: unknown): string {
 export default async function AdminPage() {
   const user = await requirePermission("admin.users");
   const supabase = await createClient();
-  const [{ profiles, auditCount }, secrets, { data: settings }] = await Promise.all([
+  const [{ profiles, auditCount }, secrets, { data: settings }, systemLog] = await Promise.all([
     getAdminData(user.profile.tenant_id),
     getSecretsStatus(),
     supabase
@@ -27,6 +28,7 @@ export default async function AdminPage() {
       .select("key, value")
       .eq("tenant_id", user.profile.tenant_id)
       .in("key", ["paystack_payment_link", "campaign_website"]),
+    getAdminSystemLog(user.profile.tenant_id),
   ]);
   const byKey = new Map((settings ?? []).map((row) => [row.key as string, row.value]));
   const storedLink = settingText(byKey.get("paystack_payment_link"));
@@ -71,6 +73,8 @@ export default async function AdminPage() {
       electionDate={tenant?.election_date ?? null}
       needsCampaignStartMigration={needsCampaignStartMigration}
       currentUserId={user.id}
+      systemLogCount={systemLog.length}
+      systemWarningCount={systemLog.filter((e) => e.level === "warning" || e.level === "error").length}
     />
   );
 }

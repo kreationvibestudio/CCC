@@ -30,6 +30,7 @@ import { toErrorMessage } from "@/lib/public-error";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 import { formatTermiiWallet } from "@/lib/integrations/termii/wallet";
+import { AlertTriangle, ScrollText } from "lucide-react";
 
 function TestTermiiButton() {
   const [pending, start] = useTransition();
@@ -224,6 +225,8 @@ export function AdminView({
   electionDate,
   needsCampaignStartMigration = false,
   currentUserId,
+  systemLogCount = 0,
+  systemWarningCount = 0,
 }: {
   profiles: ProfileRow[];
   auditCount: number;
@@ -237,6 +240,8 @@ export function AdminView({
   electionDate: string | null;
   needsCampaignStartMigration?: boolean;
   currentUserId: string;
+  systemLogCount?: number;
+  systemWarningCount?: number;
 }) {
   const router = useRouter();
   const { canCreate, canDelete } = usePermissions();
@@ -450,6 +455,34 @@ export function AdminView({
             : "View-only Admin access — team, roles, and production secrets"
         }
       />
+
+      <Card className={systemWarningCount > 0 ? "border-amber-400/50" : undefined}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ScrollText className="h-4 w-4" />
+            System log
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <p>Events, errors, and integration warnings (kept off Comments and other work screens).</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">{systemLogCount} active</Badge>
+              {systemWarningCount > 0 ? (
+                <Badge variant="warning" className="inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {systemWarningCount} need attention
+                </Badge>
+              ) : (
+                <Badge variant="success">Clear</Badge>
+              )}
+            </div>
+          </div>
+          <Button asChild>
+            <Link href="/admin/logs">Open system log</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

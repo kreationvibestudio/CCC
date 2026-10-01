@@ -13,7 +13,8 @@ import { usePermissions } from "@/components/providers/auth-provider";
 
 export function EventsView({ events }: { events: CampaignEvent[] }) {
   const router = useRouter();
-  const { canCreate } = usePermissions();
+  const { canCreate, can } = usePermissions();
+  const canManageEvents = canCreate && can("events.manage");
   const now = Date.now();
   const sorted = [...events].sort(
     (a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime()
@@ -24,8 +25,13 @@ export function EventsView({ events }: { events: CampaignEvent[] }) {
       <PageHeader title="Campaign Events" description="Schedule and manage rallies, town halls, and ward meetings">
         <div className="flex gap-2">
           <Button variant="outline" asChild><Link href="/events/calendar">Calendar</Link></Button>
-          {canCreate ? (
-          <Button asChild><Link href="/events/new"><Plus className="mr-2 h-4 w-4" />Create Event</Link></Button>
+          {canManageEvents ? (
+          <Button asChild>
+            <a href="/events/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Event
+            </a>
+          </Button>
           ) : null}
         </div>
       </PageHeader>

@@ -9,6 +9,8 @@ import { denyCreateIfRestricted, denyDeleteIfRestricted } from "@/types/auth";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import type { CampaignEvent } from "@/types/database";
 import { assertEventInTenant } from "@/lib/tenancy";
+import { formDateTimeToIso, omitUnmigratedEventColumns } from "@/lib/events/event-columns";
+import { isMissingColumnError } from "@/lib/public-error";
 
 export type EventAttendee = {
   id: string;
@@ -21,32 +23,82 @@ export type EventAttendee = {
   created_at: string | null;
 };
 
+async function insertCampaignEvent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  payload: Record<string, unknown>
+) {
+  let current = payload;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error } = await supabase.from("campaign_events").insert(current);
+    if (!error) return { success: true as const };
+    const stripped = omitUnmigratedEventColumns(current, error.message);
+    if (!stripped) return { error: error.message };
+    current = stripped;
+  }
+  return { error: "Could not create event" };
+}
+
+async function updateCampaignEvent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  id: string,
+  tenantId: string,
+  payload: Record<string, unknown>
+) {
+  let current = payload;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error } = await supabase
+      .from("campaign_events")
+      .update(current)
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
+    if (!error) return { success: true as const };
+    const stripped = omitUnmigratedEventColumns(current, error.message);
+    if (!stripped) return { error: error.message };
+    current = stripped;
+  }
+  return { error: "Could not update event" };
+}
+
 export async function createEvent(formData: FormData) {
   const gate = await authorize("events.manage");
   if (!gate.ok) return { error: gate.error };
   const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
   if (blocked) return { error: blocked };
+
+  const title = String(formData.get("title") ?? "").trim();
+  const location = String(formData.get("location") ?? "").trim();
+  const startsAt = formDateTimeToIso(formData.get("starts_at"));
+  if (!title || !location || !startsAt) {
+    return { error: "Title, location, and start time are required." };
+  }
+  const endsAtRaw = formData.get("ends_at");
+  const endsAt = String(endsAtRaw ?? "").trim() ? formDateTimeToIso(endsAtRaw) : null;
+  if (String(endsAtRaw ?? "").trim() && !endsAt) {
+    return { error: "End time is invalid." };
+  }
+
   const supabase = await createClient();
   const qrCode = `evt-${crypto.randomUUID().slice(0, 8)}`;
-  const { error } = await supabase.from("campaign_events").insert({
+  const result = await insertCampaignEvent(supabase, {
     tenant_id: user.profile.tenant_id,
-    title: formData.get("title") as string,
-    event_type: formData.get("event_type") as string,
-    description: formData.get("description") as string || null,
-    location: formData.get("location") as string,
-    ward: formData.get("ward") as string || null,
-    lga: formData.get("lga") as string || null,
-    starts_at: formData.get("starts_at") as string,
-    ends_at: formData.get("ends_at") as string || null,
+    title,
+    event_type: String(formData.get("event_type") ?? "town_hall") || "town_hall",
+    description: String(formData.get("description") ?? "").trim() || null,
+    location,
+    ward: String(formData.get("ward") ?? "").trim() || null,
+    lga: String(formData.get("lga") ?? "").trim() || null,
+    starts_at: startsAt,
+    ends_at: endsAt,
     max_attendees: formData.get("max_attendees") ? Number(formData.get("max_attendees")) : null,
     qr_code: qrCode,
     created_by: user.id,
     requires_trained: formData.get("requires_trained") === "on",
     required_role_slug: String(formData.get("required_role_slug") ?? "") || null,
   });
-  if (error) return { error: error.message };
+  if ("error" in result && result.error) return { error: result.error };
   revalidatePath("/events");
+  revalidatePath("/events/calendar");
   return { success: true };
 }
 
@@ -94,22 +146,36 @@ export async function updateEvent(id: string, formData: FormData) {
   const user = gate.user;
   const blocked = denyCreateIfRestricted(user.role);
   if (blocked) return { error: blocked };
+
+  const title = String(formData.get("title") ?? "").trim();
+  const location = String(formData.get("location") ?? "").trim();
+  const startsAt = formDateTimeToIso(formData.get("starts_at"));
+  if (!title || !location || !startsAt) {
+    return { error: "Title, location, and start time are required." };
+  }
+  const endsAtRaw = formData.get("ends_at");
+  const endsAt = String(endsAtRaw ?? "").trim() ? formDateTimeToIso(endsAtRaw) : null;
+  if (String(endsAtRaw ?? "").trim() && !endsAt) {
+    return { error: "End time is invalid." };
+  }
+
   const supabase = await createClient();
-  const { error } = await supabase.from("campaign_events").update({
-    title: formData.get("title"),
-    event_type: formData.get("event_type"),
-    description: formData.get("description") || null,
-    location: formData.get("location"),
-    ward: formData.get("ward") || null,
-    lga: formData.get("lga") || null,
-    starts_at: formData.get("starts_at"),
-    ends_at: formData.get("ends_at") || null,
+  const result = await updateCampaignEvent(supabase, id, user.profile.tenant_id, {
+    title,
+    event_type: formData.get("event_type") || "town_hall",
+    description: String(formData.get("description") ?? "").trim() || null,
+    location,
+    ward: String(formData.get("ward") ?? "").trim() || null,
+    lga: String(formData.get("lga") ?? "").trim() || null,
+    starts_at: startsAt,
+    ends_at: endsAt,
     max_attendees: formData.get("max_attendees") ? Number(formData.get("max_attendees")) : null,
     requires_trained: formData.get("requires_trained") === "on",
     required_role_slug: String(formData.get("required_role_slug") ?? "") || null,
-  }).eq("id", id).eq("tenant_id", user.profile.tenant_id);
-  if (error) return { error: error.message };
+  });
+  if ("error" in result && result.error) return { error: result.error };
   revalidatePath("/events");
+  revalidatePath("/events/calendar");
   revalidatePath(`/events/${id}`);
   return { success: true };
 }
@@ -124,6 +190,7 @@ export async function deleteEvent(id: string) {
   const { error } = await supabase.from("campaign_events").delete().eq("id", id).eq("tenant_id", user.profile.tenant_id);
   if (error) return { error: error.message };
   revalidatePath("/events");
+  revalidatePath("/events/calendar");
   return { success: true };
 }
 
@@ -187,17 +254,39 @@ export async function inviteEligibleVolunteers(eventId: string) {
   const eventError = await assertEventInTenant(gate.user.profile.tenant_id, eventId);
   if (eventError) return { error: eventError };
   const supabase = await createClient();
-  const { data: event } = await supabase
-    .from("campaign_events")
-    .select("id, requires_trained, required_role_slug")
-    .eq("id", eventId)
-    .eq("tenant_id", gate.user.profile.tenant_id)
-    .maybeSingle();
+  let event: { id: string; requires_trained?: boolean | null; required_role_slug?: string | null } | null =
+    null;
+  {
+    const full = await supabase
+      .from("campaign_events")
+      .select("id, requires_trained, required_role_slug")
+      .eq("id", eventId)
+      .eq("tenant_id", gate.user.profile.tenant_id)
+      .maybeSingle();
+    if (
+      full.error &&
+      (isMissingColumnError(full.error.message, "requires_trained") ||
+        isMissingColumnError(full.error.message, "required_role_slug"))
+    ) {
+      const basic = await supabase
+        .from("campaign_events")
+        .select("id")
+        .eq("id", eventId)
+        .eq("tenant_id", gate.user.profile.tenant_id)
+        .maybeSingle();
+      if (basic.error) return { error: basic.error.message };
+      event = basic.data;
+    } else if (full.error) {
+      return { error: full.error.message };
+    } else {
+      event = full.data;
+    }
+  }
   if (!event) return { error: "Event not found" };
   const { getEligibleVolunteers } = await import("@/lib/lms/hq-data");
   const eligible = await getEligibleVolunteers({
-    roleSlug: event.required_role_slug,
-    requireReady: true,
+    roleSlug: event.required_role_slug ?? null,
+    requireReady: event.requires_trained !== false,
   });
   const { data: existing } = await supabase.from("event_attendees").select("volunteer_id").eq("event_id", eventId);
   const have = new Set((existing ?? []).map((a) => a.volunteer_id).filter(Boolean));

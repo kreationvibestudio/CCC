@@ -11,7 +11,13 @@ import { fetchAllRows } from "@/lib/supabase/paginate";
 import type { CampaignEvent } from "@/types/database";
 import { assertEventInTenant } from "@/lib/tenancy";
 import { formDateTimeToIso, omitUnmigratedEventColumns } from "@/lib/events/event-columns";
+import {
+  EVENT_TYPE_TEXT_MIGRATION_SQL,
+  isInvalidEventTypeEnumError,
+  normalizeEventType,
+} from "@/lib/events/event-types";
 import { isMissingColumnError } from "@/lib/public-error";
+import { createServiceClient } from "@/lib/supabase/admin";
 
 export type EventAttendee = {
   id: string;
@@ -79,12 +85,13 @@ export async function createEvent(formData: FormData) {
     return { error: "End time is invalid." };
   }
 
+  const eventType = normalizeEventType(formData.get("event_type"));
   const supabase = await createClient();
   const qrCode = `evt-${crypto.randomUUID().slice(0, 8)}`;
   const result = await insertCampaignEvent(supabase, {
     tenant_id: user.profile.tenant_id,
     title,
-    event_type: String(formData.get("event_type") ?? "town_hall") || "town_hall",
+    event_type: eventType,
     description: String(formData.get("description") ?? "").trim() || null,
     location,
     ward: String(formData.get("ward") ?? "").trim() || null,
@@ -97,7 +104,16 @@ export async function createEvent(formData: FormData) {
     requires_trained: formData.get("requires_trained") === "on",
     required_role_slug: String(formData.get("required_role_slug") ?? "") || null,
   });
-  if ("error" in result && result.error) return { error: result.error };
+  if ("error" in result && result.error) {
+    if (isInvalidEventTypeEnumError(result.error)) {
+      return {
+        error:
+          "This event type needs a one-time database update. Use Copy event-type SQL on the New Event page, run it in Supabase, then try again.",
+        needsEventTypeMigration: true as const,
+      };
+    }
+    return { error: result.error };
+  }
   revalidatePath("/events");
   revalidatePath("/events/calendar");
   return { success: true };
@@ -108,9 +124,44 @@ export async function createEventFormAction(formData: FormData) {
   "use server";
   const result = await createEvent(formData);
   if (result.error) {
-    redirect(`/events/new?error=${encodeURIComponent(result.error)}`);
+    const flag = "needsEventTypeMigration" in result && result.needsEventTypeMigration ? "&needsMigration=1" : "";
+    redirect(`/events/new?error=${encodeURIComponent(result.error)}${flag}`);
   }
   redirect("/events/calendar");
+}
+
+/** True when production still has the closed event_type enum (new presets / custom blocked). */
+export async function eventTypeColumnNeedsMigration(): Promise<boolean> {
+  try {
+    const admin = createServiceClient();
+    const { data: tenant } = await admin.from("tenants").select("id").limit(1).maybeSingle();
+    if (!tenant?.id) return false;
+    const probe = await admin
+      .from("campaign_events")
+      .insert({
+        tenant_id: tenant.id,
+        title: "__event_type_probe__",
+        event_type: "family_meeting",
+        location: "probe",
+        starts_at: new Date().toISOString(),
+        qr_code: `probe-${crypto.randomUUID().slice(0, 8)}`,
+      })
+      .select("id")
+      .maybeSingle();
+    if (probe.data?.id) {
+      await admin.from("campaign_events").delete().eq("id", probe.data.id);
+      return false;
+    }
+    return isInvalidEventTypeEnumError(probe.error?.message);
+  } catch {
+    return false;
+  }
+}
+
+export async function getEventTypeMigrationSql() {
+  const gate = await authorize("events.manage");
+  if (!gate.ok) return { error: gate.error };
+  return { sql: EVENT_TYPE_TEXT_MIGRATION_SQL };
 }
 
 /** Tenant comes from the session, never from a caller-supplied argument. */
@@ -173,7 +224,7 @@ export async function updateEvent(id: string, formData: FormData) {
   const supabase = await createClient();
   const result = await updateCampaignEvent(supabase, id, user.profile.tenant_id, {
     title,
-    event_type: formData.get("event_type") || "town_hall",
+    event_type: normalizeEventType(formData.get("event_type") || "town_hall"),
     description: String(formData.get("description") ?? "").trim() || null,
     location,
     ward: String(formData.get("ward") ?? "").trim() || null,

@@ -4,27 +4,36 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
-import { createEventFormAction } from "@/lib/events/actions";
+import { EventTypeFields } from "@/components/events/event-type-fields";
+import { EventTypeSchemaSetup } from "@/components/events/event-type-schema-setup";
+import {
+  createEventFormAction,
+  eventTypeColumnNeedsMigration,
+} from "@/lib/events/actions";
 import { requireCanCreateOrRedirect } from "@/lib/auth/session";
 
 export default async function NewEventPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ error?: string }>;
+  searchParams?: Promise<{ error?: string; needsMigration?: string }>;
 }) {
   await requireCanCreateOrRedirect("/events");
   const params = (await searchParams) ?? {};
   const error = typeof params.error === "string" ? params.error : "";
+  const needsMigration =
+    params.needsMigration === "1" || (await eventTypeColumnNeedsMigration());
 
   return (
     <div className="mx-auto max-w-lg space-y-6 pb-28">
       <PageHeader title="New Event" description="Schedule an upcoming campaign event with QR check-in">
         <Button variant="outline" asChild>
-          <Link href="/events/calendar">Calendar</Link>
+          <Link href="/events">Cancel</Link>
         </Button>
       </PageHeader>
+
+      {needsMigration ? <EventTypeSchemaSetup /> : null}
+
       <Card>
         <CardContent className="pt-6">
           <form action={createEventFormAction} className="space-y-4">
@@ -45,17 +54,9 @@ export default async function NewEventPage({
               <Label htmlFor="location">Location</Label>
               <Input id="location" name="location" required placeholder="Venue or meeting point" />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="event_type">Event type</Label>
-              <NativeSelect id="event_type" name="event_type">
-                <option value="town_hall">Town hall</option>
-                <option value="rally">Rally</option>
-                <option value="ward_meeting">Ward meeting</option>
-                <option value="door_to_door">Door to door</option>
-                <option value="fundraising_dinner">Fundraising dinner</option>
-                <option value="press_conference">Press conference</option>
-              </NativeSelect>
-            </div>
+
+            <EventTypeFields />
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="ends_at">Ends at</Label>
@@ -95,13 +96,12 @@ export default async function NewEventPage({
               <span>Only show volunteers who finished required training (ready for assignment)</span>
             </label>
 
-            {/* Keep inside <form> for useFormStatus; fixed so it stays on screen */}
             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-8">
               <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
-                <p className="hidden text-xs text-muted-foreground sm:block">
-                  Title, start time, and location are required.
-                </p>
-                <SubmitButton label="Schedule Event" className="ml-auto min-w-40" />
+                <Button type="button" variant="outline" asChild className="min-w-28">
+                  <Link href="/events">Cancel</Link>
+                </Button>
+                <SubmitButton label="Schedule Event" className="min-w-40" />
               </div>
             </div>
           </form>

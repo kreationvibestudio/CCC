@@ -42,10 +42,14 @@ export type ContactType =
 export type EventType =
   | "town_hall"
   | "rally"
+  | "family_meeting"
+  | "lga_meeting"
   | "ward_meeting"
+  | "unit_meeting"
   | "door_to_door"
   | "fundraising_dinner"
-  | "press_conference";
+  | "press_conference"
+  | (string & {});
 
 export type PollingUnitStatus =
   | "not_active"

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { authorize } from "@/lib/auth/session";
@@ -100,6 +101,16 @@ export async function createEvent(formData: FormData) {
   revalidatePath("/events");
   revalidatePath("/events/calendar");
   return { success: true };
+}
+
+/** Form action for /events/new — keeps the Server Action id on a stable module. */
+export async function createEventFormAction(formData: FormData) {
+  "use server";
+  const result = await createEvent(formData);
+  if (result.error) {
+    redirect(`/events/new?error=${encodeURIComponent(result.error)}`);
+  }
+  redirect("/events/calendar");
 }
 
 /** Tenant comes from the session, never from a caller-supplied argument. */

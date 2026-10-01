@@ -43,10 +43,10 @@ export default async function EventsCalendarPage() {
           </Button>
           {canWrite ? (
             <Button asChild>
-              <a href="/events/new">
+              <Link href="/events/new">
                 <Plus className="mr-2 h-4 w-4" />
                 Schedule event
-              </a>
+              </Link>
             </Button>
           ) : null}
         </div>
@@ -61,7 +61,7 @@ export default async function EventsCalendarPage() {
             </p>
             {canWrite ? (
               <Button asChild>
-                <a href="/events/new">Create event</a>
+                <Link href="/events/new">Create event</Link>
               </Button>
             ) : null}
           </CardContent>
@@ -81,7 +81,7 @@ export default async function EventsCalendarPage() {
                   </p>
                   {canWrite ? (
                     <Button asChild size="sm">
-                      <a href="/events/new">Schedule event</a>
+                      <Link href="/events/new">Schedule event</Link>
                     </Button>
                   ) : null}
                 </CardContent>

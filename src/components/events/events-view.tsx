@@ -27,10 +27,10 @@ export function EventsView({ events }: { events: CampaignEvent[] }) {
           <Button variant="outline" asChild><Link href="/events/calendar">Calendar</Link></Button>
           {canManageEvents ? (
           <Button asChild>
-            <a href="/events/new">
+            <Link href="/events/new">
               <Plus className="mr-2 h-4 w-4" />
               Create Event
-            </a>
+            </Link>
           </Button>
           ) : null}
         </div>

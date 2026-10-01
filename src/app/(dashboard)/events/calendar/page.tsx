@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canWriteRecords } from "@/types/auth";
+import { labelForEventType } from "@/lib/events/event-types";
 
 function eventDate(value: string) {
   const d = new Date(value);
@@ -100,7 +101,7 @@ export default async function EventsCalendarPage() {
                               <span className="text-muted-foreground"> · {e.location}</span>
                             </div>
                             <div className="flex items-center gap-2 text-muted-foreground">
-                              <Badge variant="outline">{e.event_type.replace(/_/g, " ")}</Badge>
+                              <Badge variant="outline">{labelForEventType(e.event_type)}</Badge>
                               <span>{format(at, "PPp")}</span>
                             </div>
                           </CardContent>

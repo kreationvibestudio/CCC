@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CampaignEvent } from "@/types/database";
 import { usePermissions } from "@/components/providers/auth-provider";
+import { labelForEventType } from "@/lib/events/event-types";
 
 export function EventsView({ events }: { events: CampaignEvent[] }) {
   const router = useRouter();
@@ -68,7 +69,11 @@ export function EventsView({ events }: { events: CampaignEvent[] }) {
               );
             },
           },
-          { key: "event_type", header: "Type", render: (e) => <Badge variant="secondary">{e.event_type.replace(/_/g, " ")}</Badge> },
+          {
+            key: "event_type",
+            header: "Type",
+            render: (e) => <Badge variant="secondary">{labelForEventType(e.event_type)}</Badge>,
+          },
         ]}
       />
     </div>

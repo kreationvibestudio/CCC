@@ -15,6 +15,13 @@ import { isMissingColumnError, isMissingRelationError } from "@/lib/public-error
 import { formatPollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
 import { findPollingUnitByCode, pollingUnitSearchOrFilter } from "@/lib/polling-units/lookup";
 import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
+import {
+  AGENT_IDENTITY_COLUMNS,
+  AGENT_IDENTITY_MIGRATION_SQL,
+  collationFlags,
+  normalizeCollationRole,
+  type AgentCollationRole,
+} from "@/lib/agents/identity-fields";
 
 const PU_COLS =
   "id, code, pu_code, name, ward, lga, state, assigned_agent_id, latitude, longitude, state_code, lg_code, ward_code";
@@ -77,6 +84,10 @@ export type AssignmentRow = {
   agent_name: string | null;
   agent_email: string | null;
   agent_phone: string | null;
+  agent_membership_card_number: string | null;
+  agent_voters_card_number: string | null;
+  agent_passport_photo_url: string | null;
+  agent_collation_role: AgentCollationRole;
   agent_code: string | null;
   agent_code_hint: string | null;
   has_coordinates: boolean;
@@ -84,6 +95,52 @@ export type AssignmentRow = {
   last_login_distance_m: number | null;
   last_login_gps_verified: boolean | null;
 };
+
+type AgentProfileRow = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  membership_card_number?: string | null;
+  voters_card_number?: string | null;
+  passport_photo_url?: string | null;
+  is_lga_collation_agent?: boolean | null;
+  is_ward_collation_agent?: boolean | null;
+};
+
+const PROFILE_IDENTITY_SELECT =
+  "id, full_name, email, phone, membership_card_number, voters_card_number, passport_photo_url, is_lga_collation_agent, is_ward_collation_agent";
+const PROFILE_BASIC_SELECT = "id, full_name, email, phone";
+
+async function loadAgentProfiles(
+  supabase: ReturnType<typeof db>,
+  tenantId: string,
+  agentIds: string[]
+): Promise<{ profiles: AgentProfileRow[]; identityColumnsMissing: boolean }> {
+  const full = await supabase
+    .from("profiles")
+    .select(PROFILE_IDENTITY_SELECT)
+    .eq("tenant_id", tenantId)
+    .in("id", agentIds);
+  if (!full.error) {
+    return { profiles: (full.data ?? []) as AgentProfileRow[], identityColumnsMissing: false };
+  }
+  const missingIdentity = AGENT_IDENTITY_COLUMNS.some((col) =>
+    isMissingColumnError(full.error.message, col)
+  );
+  if (!missingIdentity) {
+    return { profiles: [], identityColumnsMissing: false };
+  }
+  const basic = await supabase
+    .from("profiles")
+    .select(PROFILE_BASIC_SELECT)
+    .eq("tenant_id", tenantId)
+    .in("id", agentIds);
+  return {
+    profiles: (basic.data ?? []) as AgentProfileRow[],
+    identityColumnsMissing: true,
+  };
+}
 
 export type AgentCheckinRow = {
   id: string;
@@ -231,15 +288,15 @@ export async function listAgentAssignments(input?: {
   const { data, count } = await q.range(from, to);
   const units = data ?? [];
   const agentIds = [...new Set(units.map((u) => u.assigned_agent_id).filter(Boolean))] as string[];
-  const names = new Map<string, { full_name: string; email: string; phone: string | null }>();
+  const names = new Map<string, AgentProfileRow>();
   let codes = new Map<string, StoredCode>();
   let codesTableMissing = false;
   if (agentIds.length) {
-    const [{ data: profiles }, loaded] = await Promise.all([
-      supabase.from("profiles").select("id, full_name, email, phone").eq("tenant_id", tenantId).in("id", agentIds),
+    const [loadedProfiles, loaded] = await Promise.all([
+      loadAgentProfiles(supabase, tenantId, agentIds),
       loadActiveCodes(supabase, tenantId, agentIds),
     ]);
-    for (const p of profiles ?? []) names.set(p.id, p);
+    for (const p of loadedProfiles.profiles) names.set(p.id, p);
     codes = loaded.codes;
     codesTableMissing = loaded.missingTable;
   } else {
@@ -266,6 +323,13 @@ export async function listAgentAssignments(input?: {
         agent_name: agent?.full_name ?? null,
         agent_email: agent?.email ?? null,
         agent_phone: agent?.phone ?? null,
+        agent_membership_card_number: agent?.membership_card_number ?? null,
+        agent_voters_card_number: agent?.voters_card_number ?? null,
+        agent_passport_photo_url: agent?.passport_photo_url ?? null,
+        agent_collation_role: normalizeCollationRole({
+          isLgaCollationAgent: Boolean(agent?.is_lga_collation_agent),
+          isWardCollationAgent: Boolean(agent?.is_ward_collation_agent),
+        }),
         agent_code: code?.display ?? null,
         agent_code_hint: code?.hint ?? null,
         has_coordinates: u.latitude != null && u.longitude != null,
@@ -484,6 +548,13 @@ export async function assignPollingAgent(input: {
   email?: string;
   fullName?: string;
   phone?: string;
+  ward?: string;
+  membershipCardNumber?: string;
+  votersCardNumber?: string;
+  passportPhotoUrl?: string;
+  collationRole?: string;
+  isLgaCollationAgent?: boolean;
+  isWardCollationAgent?: boolean;
 }): Promise<{
       error?: string;
       created?: boolean;
@@ -492,6 +563,7 @@ export async function assignPollingAgent(input: {
       email?: string;
       fullName?: string;
       missingCoordinates?: boolean;
+      needsIdentityMigration?: boolean;
     }> {
   try {
     const auth = await requireStaff();
@@ -502,13 +574,29 @@ export async function assignPollingAgent(input: {
     const emailInput = (input.email ?? "").trim().toLowerCase();
     const puCode = input.puCode.trim();
     const phone = (input.phone ?? "").trim() || null;
-    if (!puCode) return { error: "PU code is required" };
+    const membershipCardNumber = (input.membershipCardNumber ?? "").trim() || null;
+    const votersCardNumber = (input.votersCardNumber ?? "").trim() || null;
+    const passportPhotoUrl = (input.passportPhotoUrl ?? "").trim() || null;
+    const wardInput = (input.ward ?? "").trim();
+    const collationRole = normalizeCollationRole({
+      collationRole: input.collationRole,
+      isLgaCollationAgent: Boolean(input.isLgaCollationAgent),
+      isWardCollationAgent: Boolean(input.isWardCollationAgent),
+    });
+    if (!puCode) return { error: "Polling unit is required" };
+    if (!phone) return { error: "Phone number is required" };
     if (emailInput && !emailInput.includes("@")) return { error: "Valid email is required" };
 
     const supabase = db();
     const tenantId = auth.user.profile.tenant_id;
     const pu = await findPuByCode(supabase, tenantId, puCode);
     if (!pu) return { error: `No polling unit matches ${puCode}` };
+
+    if (wardInput && pu.ward && wardInput.toLowerCase() !== String(pu.ward).toLowerCase()) {
+      return {
+        error: `Ward "${wardInput}" does not match polling unit ${pu.code} (ward ${pu.ward})`,
+      };
+    }
 
     const fullName =
       (input.fullName ?? "").trim() ||
@@ -569,20 +657,35 @@ export async function assignPollingAgent(input: {
       created = Boolean(invited.created);
     }
 
-    const { error: profileError } = await supabase.from("profiles").upsert(
-      {
-        id: userId,
-        tenant_id: tenantId,
-        email,
-        full_name: fullName,
-        phone,
-        role: "polling_agent",
-        ward: pu.ward,
-        lga: pu.lga,
-      },
-      { onConflict: "id" }
-    );
-    if (profileError) return { error: profileError.message };
+    const identity = collationFlags(collationRole);
+    const profilePayload: Record<string, unknown> = {
+      id: userId,
+      tenant_id: tenantId,
+      email,
+      full_name: fullName,
+      phone,
+      role: "polling_agent",
+      ward: wardInput || pu.ward,
+      lga: pu.lga,
+      membership_card_number: membershipCardNumber,
+      voters_card_number: votersCardNumber,
+      passport_photo_url: passportPhotoUrl,
+      ...identity,
+    };
+
+    let profileError = (await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" })).error;
+    let needsIdentityMigration = false;
+    if (profileError) {
+      const missingIdentity = AGENT_IDENTITY_COLUMNS.some((col) =>
+        isMissingColumnError(profileError?.message, col)
+      );
+      if (missingIdentity) {
+        needsIdentityMigration = true;
+        for (const col of AGENT_IDENTITY_COLUMNS) delete profilePayload[col];
+        profileError = (await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" })).error;
+      }
+    }
+    if (profileError) return { error: profileError.message, needsIdentityMigration };
 
     await supabase
       .from("polling_units")
@@ -613,10 +716,55 @@ export async function assignPollingAgent(input: {
       email,
       fullName,
       missingCoordinates: pu.latitude == null || pu.longitude == null,
+      needsIdentityMigration,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create agent login" };
   }
+}
+
+export async function getAgentIdentityMigrationSql() {
+  const auth = await requireStaff();
+  if (!auth.user) return { error: "Unauthorized" as const, sql: "" };
+  return { sql: AGENT_IDENTITY_MIGRATION_SQL };
+}
+
+const PASSPORT_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
+const MAX_PASSPORT_BYTES = 8 * 1024 * 1024;
+
+export async function uploadAgentPassportPhoto(formData: FormData): Promise<{
+  error?: string;
+  url?: string;
+  path?: string;
+}> {
+  const auth = await requireStaff();
+  if (!auth.user) return { error: "Unauthorized" };
+  const blocked = denyCreateIfRestricted(auth.user.role);
+  if (blocked) return { error: blocked };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a passport photograph" };
+  const type = (file.type || "").toLowerCase();
+  if (!PASSPORT_TYPES.has(type) && !/\.(jpe?g|png|webp)$/i.test(file.name)) {
+    return { error: "Upload a JPEG or PNG passport photo" };
+  }
+  if (file.size > MAX_PASSPORT_BYTES) return { error: "Photo must be under 8 MB" };
+
+  const ext =
+    file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") ||
+    (type.includes("png") ? "png" : "jpg");
+  const path = `${auth.user.profile.tenant_id}/agent-passports/${crypto.randomUUID()}.${ext}`;
+  const admin = db();
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const { error } = await admin.storage.from("election-media").upload(path, buffer, {
+    contentType: type || "image/jpeg",
+    upsert: false,
+  });
+  if (error) return { error: error.message };
+  const { data: signed } = await admin.storage
+    .from("election-media")
+    .createSignedUrl(path, 60 * 60 * 24 * 365);
+  return { path, url: signed?.signedUrl ?? path };
 }
 
 export async function getAgentAccessCodesSql() {

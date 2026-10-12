@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   assignPollingAgent,
   getAgentAccessCodesSql,
+  getAgentIdentityMigrationSql,
   listAgentAssignments,
   listAgentCodesByName,
   listRecentAgentCheckins,
@@ -27,10 +28,13 @@ import {
   IssueCodesCallout,
   IssuePinnedCodesButton,
 } from "@/components/polling-units/issue-pinned-codes-button";
+import { PassportPhotoField } from "@/components/polling-units/passport-photo-field";
 import { AGENT_CSV_TEMPLATE, parseAgentAssignmentCsv } from "@/lib/agents/csv";
+import { collationLabel } from "@/lib/agents/identity-fields";
 import { queryPollingUnits, type PollingUnitListItem } from "@/lib/polling-units/actions";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { formatDateTime } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 type IssuedCode = { code: string; puCode: string; name: string };
 
@@ -93,6 +97,10 @@ export function AgentRosterView({
   const [gapLga, setGapLga] = useState("");
   const [gaps, setGaps] = useState<PollingUnitListItem[]>([]);
   const [importing, setImporting] = useState("");
+  const [needsIdentityMigration, setNeedsIdentityMigration] = useState(false);
+  const [collationRole, setCollationRole] = useState<"none" | "ward" | "lga">("none");
+  const [photoFieldKey, setPhotoFieldKey] = useState(0);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 300);
@@ -190,6 +198,16 @@ export function AgentRosterView({
     toast.success("SQL copied. Paste it in the Supabase SQL editor.");
   }
 
+  async function copyIdentitySql() {
+    const result = await getAgentIdentityMigrationSql();
+    if ("error" in result && result.error) {
+      toast.error(result.error);
+      return;
+    }
+    await copyText(result.sql);
+    toast.success("Identity-fields SQL copied. Paste it in the Supabase SQL editor, then Run.");
+  }
+
   function handleAssign(formData: FormData) {
     startTransition(async () => {
       const result = await assignPollingAgent({
@@ -197,7 +215,13 @@ export function AgentRosterView({
         email: String(formData.get("email") ?? ""),
         fullName: String(formData.get("full_name") ?? ""),
         phone: String(formData.get("phone") ?? ""),
+        ward: String(formData.get("ward") ?? ""),
+        membershipCardNumber: String(formData.get("membership_card_number") ?? ""),
+        votersCardNumber: String(formData.get("voters_card_number") ?? ""),
+        passportPhotoUrl: String(formData.get("passport_photo_url") ?? ""),
+        collationRole: String(formData.get("collation_role") ?? "none"),
       });
+      if (result.needsIdentityMigration) setNeedsIdentityMigration(true);
       if (result.error) {
         toast.error(result.error);
         return;
@@ -212,6 +236,12 @@ export function AgentRosterView({
       if (result.missingCoordinates) {
         toast.warning("This polling unit has no map pin. Geocode it or the agent cannot sign in with GPS.");
       }
+      if (result.needsIdentityMigration) {
+        toast.warning("Agent saved, but identity columns are missing. Copy the SQL below and run it in Supabase.");
+      }
+      setCollationRole("none");
+      setPhotoFieldKey((k) => k + 1);
+      formRef.current?.reset();
       await reloadRoster();
     });
   }
@@ -233,6 +263,7 @@ export function AgentRosterView({
       setImporting(`${i + 1}/${parsed.length}`);
       const row = parsed[i];
       const result = await assignPollingAgent(row);
+      if (result.needsIdentityMigration) setNeedsIdentityMigration(true);
       if (result.error) failed += 1;
       else {
         ok += 1;
@@ -447,31 +478,99 @@ export function AgentRosterView({
 
       {canCreate ? (
       <>
+      {needsIdentityMigration ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <p className="font-medium">One SQL apply unlocks the new agent identity fields</p>
+          <p className="mt-1 text-muted-foreground">
+            Membership card, voter card, passport photo, and collation-agent flags need new columns on{" "}
+            <code>profiles</code>.
+          </p>
+          <div className="mt-3">
+            <Button type="button" size="sm" onClick={() => void copyIdentitySql()}>
+              Copy identity-fields SQL
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <CardHeader>
-          <CardTitle>Assign one agent</CardTitle>
+          <CardTitle>Capture agent</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={handleAssign} className="grid gap-3 sm:grid-cols-2">
+          <form ref={formRef} action={handleAssign} className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor="pu_code">PU code</Label>
-              <Input id="pu_code" name="pu_code" placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001" required disabled={pending} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="full_name">Agent name</Label>
+              <Label htmlFor="full_name">Name</Label>
               <Input id="full_name" name="full_name" required disabled={pending} />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" name="phone" disabled={pending} />
+              <Label htmlFor="membership_card_number">Membership card number</Label>
+              <Input id="membership_card_number" name="membership_card_number" disabled={pending} />
             </div>
             <div className="space-y-1">
+              <Label htmlFor="ward">Ward</Label>
+              <Input id="ward" name="ward" required disabled={pending} placeholder="Must match the polling unit ward" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pu_code">Polling unit</Label>
+              <Input
+                id="pu_code"
+                name="pu_code"
+                placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
+                required
+                disabled={pending}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="phone">Phone number</Label>
+              <Input id="phone" name="phone" required disabled={pending} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="voters_card_number">Voter&apos;s card number</Label>
+              <Input id="voters_card_number" name="voters_card_number" disabled={pending} />
+            </div>
+            <PassportPhotoField key={photoFieldKey} disabled={pending} />
+            <fieldset className="space-y-2 sm:col-span-2">
+              <legend className="text-sm font-medium">Collation agent role</legend>
+              <p className="text-xs text-muted-foreground">
+                Tick one if this person will also serve as a collation agent. Leave both unchecked for a
+                regular polling-unit agent.
+              </p>
+              <input type="hidden" name="collation_role" value={collationRole} />
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-input"
+                  checked={collationRole === "ward"}
+                  disabled={pending}
+                  onChange={(e) => setCollationRole(e.target.checked ? "ward" : "none")}
+                />
+                <span>Ward collation agent</span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-input"
+                  checked={collationRole === "lga"}
+                  disabled={pending}
+                  onChange={(e) => setCollationRole(e.target.checked ? "lga" : "none")}
+                />
+                <span>LGA collation agent</span>
+              </label>
+            </fieldset>
+            <div className="space-y-1 sm:col-span-2">
               <Label htmlFor="email">Email (optional)</Label>
-              <Input id="email" name="email" type="email" disabled={pending} placeholder="Only if you still want email login" />
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                disabled={pending}
+                placeholder="Only if you still want email login"
+              />
             </div>
             <div className="sm:col-span-2">
               <Button type="submit" disabled={pending}>
-                {pending ? "Saving…" : "Issue code / tie to this PU"}
+                {pending ? "Saving…" : "Save agent / issue code"}
               </Button>
             </div>
           </form>
@@ -484,8 +583,10 @@ export function AgentRosterView({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Upload a sheet with <code>pu_code,full_name,phone,email</code>. Email is optional. Each row gets an
-            agent code tied to that unit.
+            Upload a sheet with{" "}
+            <code>full_name,membership_card_number,ward,pu_code,phone,voters_card_number,collation_role</code>
+            . <code>collation_role</code> may be <code>ward</code>, <code>lga</code>, or blank. Passport
+            photos are captured one-by-one in the form above.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={downloadTemplate}>
@@ -547,7 +648,16 @@ export function AgentRosterView({
         {rows.map((row) => (
           <Card key={row.id}>
             <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <div>
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                {row.agent_passport_photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={row.agent_passport_photo_url}
+                    alt=""
+                    className="h-14 w-11 shrink-0 rounded object-cover"
+                  />
+                ) : null}
+                <div className="min-w-0">
                 <p className="font-medium">{row.agent_name || "Unnamed agent"}</p>
                 <p className="font-mono text-base tracking-wide">
                   {row.agent_code || (row.agent_code_hint ? `…${row.agent_code_hint}` : "No code yet")}
@@ -559,12 +669,28 @@ export function AgentRosterView({
                   {row.has_coordinates ? "" : " · no map pin"}
                 </p>
                 <p className="text-xs text-muted-foreground">
+                  {[
+                    row.agent_membership_card_number
+                      ? `Membership ${row.agent_membership_card_number}`
+                      : null,
+                    row.agent_voters_card_number ? `PVC ${row.agent_voters_card_number}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "No membership / PVC on file"}
+                </p>
+                {collationLabel(row.agent_collation_role) ? (
+                  <Badge variant="secondary" className="mt-1">
+                    {collationLabel(row.agent_collation_role)}
+                  </Badge>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
                   {checkinSummary({
                     lastSignedInAt: row.last_signed_in_at,
                     lastLoginDistanceM: row.last_login_distance_m,
                     lastLoginGpsVerified: row.last_login_gps_verified,
                   })}
                 </p>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {row.agent_code && isShareableAgentCode(row.agent_code) ? (

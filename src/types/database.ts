@@ -86,6 +86,11 @@ export interface Profile {
   mfa_enabled: boolean;
   ward?: string | null;
   lga?: string | null;
+  membership_card_number?: string | null;
+  voters_card_number?: string | null;
+  passport_photo_url?: string | null;
+  is_lga_collation_agent?: boolean;
+  is_ward_collation_agent?: boolean;
   created_at: string;
 }
 

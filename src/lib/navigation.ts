@@ -42,6 +42,7 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Donations", href: "/donations", icon: CircleDollarSign, permission: "donations.view" },
   { title: "Events", href: "/events", icon: Calendar, permission: "events.view" },
   { title: "Polling Units", href: "/polling-units", icon: MapPin, permission: "polling_units.view" },
+  { title: "Agents", href: "/agents", icon: UserCheck, permission: "polling_units.manage" },
   { title: "PU Agents", href: "/polling-units/agents", icon: UserCheck, permission: "polling_units.manage" },
   { title: "Field Status Map", href: "/maps", icon: Map, permission: "maps.view" },
   { title: "Situation Room", href: "/situation-room", icon: Radio, permission: "situation_room.view", badge: "Live" },
@@ -54,6 +55,7 @@ export const NAV_ITEMS: NavItem[] = [
 
 export const QUICK_ACTIONS = [
   { title: "Media desk", href: "/media", permission: "social.view" as Permission, creates: false },
+  { title: "Register agent", href: "/agents/new", permission: "polling_units.manage" as Permission, creates: true },
   { title: "Issue PU codes", href: "/polling-units/agents", permission: "polling_units.manage" as Permission, creates: true },
   { title: "New Event", href: "/events/new", permission: "events.manage" as Permission, creates: true },
   { title: "Send Broadcast", href: "/communications/campaigns/new", permission: "communications.send" as Permission, creates: true },

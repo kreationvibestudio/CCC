@@ -8,9 +8,7 @@ import { PageHeader, StatCard } from "@/components/shared/page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  assignPollingAgent,
   getAgentAccessCodesSql,
   listAgentAssignments,
   listAgentCodesByName,
@@ -21,6 +19,7 @@ import {
   type AgentCheckinRow,
   type AssignmentRow,
 } from "@/lib/agents/actions";
+import { createAgentRegistration } from "@/lib/agents/registration";
 import { AGENT_LOGIN_RADIUS_FT, formatLoginDistance } from "@/lib/agent/geo";
 import {
   FillMissingCodesButton,
@@ -28,9 +27,12 @@ import {
   IssuePinnedCodesButton,
 } from "@/components/polling-units/issue-pinned-codes-button";
 import { AGENT_CSV_TEMPLATE, parseAgentAssignmentCsv } from "@/lib/agents/csv";
+import { collationLabel } from "@/lib/agents/identity-fields";
 import { queryPollingUnits, type PollingUnitListItem } from "@/lib/polling-units/actions";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { formatDateTime } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Plus } from "lucide-react";
 
 type IssuedCode = { code: string; puCode: string; name: string };
 
@@ -190,58 +192,39 @@ export function AgentRosterView({
     toast.success("SQL copied. Paste it in the Supabase SQL editor.");
   }
 
-  function handleAssign(formData: FormData) {
-    startTransition(async () => {
-      const result = await assignPollingAgent({
-        puCode: String(formData.get("pu_code") ?? ""),
-        email: String(formData.get("email") ?? ""),
-        fullName: String(formData.get("full_name") ?? ""),
-        phone: String(formData.get("phone") ?? ""),
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      rememberCode(result);
-      if (result.agentCode) {
-        await copyText(result.agentCode).catch(() => undefined);
-        toast.success(`Agent code ${result.agentCode} for ${result.puCode}. Copied.`);
-      } else {
-        toast.success(`Tied the agent to ${result.puCode}`);
-      }
-      if (result.missingCoordinates) {
-        toast.warning("This polling unit has no map pin. Geocode it or the agent cannot sign in with GPS.");
-      }
-      await reloadRoster();
-    });
-  }
-
   async function handleCsv(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const parsed = parseAgentAssignmentCsv(await file.text());
     if (!parsed.length) {
-      toast.error("CSV needs a pu_code column. Name is enough; email is optional.");
+      toast.error("CSV needs a pu_code column plus name and phone.");
       e.target.value = "";
       return;
     }
     const created: IssuedCode[] = [];
     let ok = 0;
     let failed = 0;
-    let missingPin = 0;
     for (let i = 0; i < parsed.length; i += 1) {
       setImporting(`${i + 1}/${parsed.length}`);
       const row = parsed[i];
-      const result = await assignPollingAgent(row);
+      const result = await createAgentRegistration({
+        puCode: row.puCode,
+        fullName: row.fullName,
+        phone: row.phone,
+        email: row.email,
+        ward: row.ward,
+        membershipCardNumber: row.membershipCardNumber,
+        votersCardNumber: row.votersCardNumber,
+        collationRole: row.collationRole,
+      });
       if (result.error) failed += 1;
       else {
         ok += 1;
-        if (result.missingCoordinates) missingPin += 1;
         if (result.agentCode) {
           created.push({
             code: result.agentCode,
             puCode: result.puCode ?? row.puCode,
-            name: result.fullName || row.fullName || row.email || "Field Agent",
+            name: row.fullName || row.email || "Field Agent",
           });
         }
       }
@@ -249,10 +232,9 @@ export function AgentRosterView({
     setImporting("");
     e.target.value = "";
     if (created.length) setIssued((prev) => [...created, ...prev]);
-    toast.success(`Tied ${ok} agent${ok === 1 ? "" : "s"} to polling units${failed ? ` (${failed} failed)` : ""}`);
-    if (missingPin) {
-      toast.warning(`${missingPin} unit${missingPin === 1 ? "" : "s"} have no map pin. Agents cannot GPS-check in until you geocode them.`);
-    }
+    toast.success(
+      `Registered ${ok} agent${ok === 1 ? "" : "s"}${failed ? ` (${failed} failed)` : ""}`
+    );
     await reloadRoster();
   }
 
@@ -329,8 +311,19 @@ export function AgentRosterView({
     <div className="space-y-6">
       <PageHeader
         title="Polling agents"
-        description={`Issue an 8-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must be within ${AGENT_LOGIN_RADIUS_FT} ft of the unit pin. 10-character codes already issued still work. Units without a map pin cannot check in.`}
+        description={`Codes, check-ins, and bulk tools for field logins. Register agent paperwork under Agents. GPS must be within ${AGENT_LOGIN_RADIUS_FT} ft of the unit pin.`}
       >
+        {canCreate ? (
+          <Button asChild>
+            <Link href="/agents/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Register agent
+            </Link>
+          </Button>
+        ) : null}
+        <Button variant="outline" asChild>
+          <Link href="/agents">Open Agents</Link>
+        </Button>
         <IssuePinnedCodesButton onIssued={rememberIssued} />
         <FillMissingCodesButton onIssued={rememberIssued} />
         <Button variant="outline" asChild>
@@ -446,46 +439,20 @@ export function AgentRosterView({
       </Card>
 
       {canCreate ? (
-      <>
       <Card>
         <CardHeader>
-          <CardTitle>Assign one agent</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={handleAssign} className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="pu_code">PU code</Label>
-              <Input id="pu_code" name="pu_code" placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001" required disabled={pending} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="full_name">Agent name</Label>
-              <Input id="full_name" name="full_name" required disabled={pending} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" name="phone" disabled={pending} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="email">Email (optional)</Label>
-              <Input id="email" name="email" type="email" disabled={pending} placeholder="Only if you still want email login" />
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving…" : "Issue code / tie to this PU"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Bulk assign (CSV)</CardTitle>
+          <CardTitle>Bulk register (CSV)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Upload a sheet with <code>pu_code,full_name,phone,email</code>. Email is optional. Each row gets an
-            agent code tied to that unit.
+            Upload a sheet with{" "}
+            <code>full_name,membership_card_number,ward,pu_code,phone,voters_card_number,collation_role</code>
+            . Each row creates an Agents registration and issues a field code. Passport photos are added
+            on the{" "}
+            <Link href="/agents/new" className="underline">
+              Register agent
+            </Link>{" "}
+            page.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={downloadTemplate}>
@@ -503,7 +470,6 @@ export function AgentRosterView({
           </div>
         </CardContent>
       </Card>
-      </>
       ) : null}
 
       <Card>
@@ -547,7 +513,16 @@ export function AgentRosterView({
         {rows.map((row) => (
           <Card key={row.id}>
             <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <div>
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                {row.agent_passport_photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={row.agent_passport_photo_url}
+                    alt=""
+                    className="h-14 w-11 shrink-0 rounded object-cover"
+                  />
+                ) : null}
+                <div className="min-w-0">
                 <p className="font-medium">{row.agent_name || "Unnamed agent"}</p>
                 <p className="font-mono text-base tracking-wide">
                   {row.agent_code || (row.agent_code_hint ? `…${row.agent_code_hint}` : "No code yet")}
@@ -559,12 +534,28 @@ export function AgentRosterView({
                   {row.has_coordinates ? "" : " · no map pin"}
                 </p>
                 <p className="text-xs text-muted-foreground">
+                  {[
+                    row.agent_membership_card_number
+                      ? `Membership ${row.agent_membership_card_number}`
+                      : null,
+                    row.agent_voters_card_number ? `PVC ${row.agent_voters_card_number}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "No membership / PVC on file"}
+                </p>
+                {collationLabel(row.agent_collation_role) ? (
+                  <Badge variant="secondary" className="mt-1">
+                    {collationLabel(row.agent_collation_role)}
+                  </Badge>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
                   {checkinSummary({
                     lastSignedInAt: row.last_signed_in_at,
                     lastLoginDistanceM: row.last_login_distance_m,
                     lastLoginGpsVerified: row.last_login_gps_verified,
                   })}
                 </p>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {row.agent_code && isShareableAgentCode(row.agent_code) ? (

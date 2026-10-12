@@ -1,0 +1,208 @@
+"use client";
+
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PassportPhotoField } from "@/components/agents/passport-photo-field";
+import {
+  createAgentRegistration,
+  getAgentsTableMigrationSql,
+} from "@/lib/agents/registration";
+import { getAgentIdentityMigrationSql } from "@/lib/agents/actions";
+
+export function AgentRegistrationForm({
+  needsAgentsMigration = false,
+}: {
+  needsAgentsMigration?: boolean;
+}) {
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [collationRole, setCollationRole] = useState<"none" | "ward" | "lga">("none");
+  const [photoFieldKey, setPhotoFieldKey] = useState(0);
+  const [showAgentsSql, setShowAgentsSql] = useState(needsAgentsMigration);
+  const [showIdentitySql, setShowIdentitySql] = useState(false);
+
+  async function copyAgentsSql() {
+    const result = await getAgentsTableMigrationSql();
+    if ("error" in result && result.error) {
+      toast.error(result.error);
+      return;
+    }
+    await navigator.clipboard.writeText(result.sql);
+    toast.success("Agents table SQL copied. Paste in Supabase SQL editor, then Run.");
+  }
+
+  async function copyIdentitySql() {
+    const result = await getAgentIdentityMigrationSql();
+    if ("error" in result && result.error) {
+      toast.error(result.error);
+      return;
+    }
+    await navigator.clipboard.writeText(result.sql);
+    toast.success("Identity-fields SQL copied. Paste in Supabase SQL editor, then Run.");
+  }
+
+  function handleSubmit(formData: FormData) {
+    startTransition(async () => {
+      const result = await createAgentRegistration({
+        fullName: String(formData.get("full_name") ?? ""),
+        membershipCardNumber: String(formData.get("membership_card_number") ?? ""),
+        ward: String(formData.get("ward") ?? ""),
+        puCode: String(formData.get("pu_code") ?? ""),
+        phone: String(formData.get("phone") ?? ""),
+        votersCardNumber: String(formData.get("voters_card_number") ?? ""),
+        passportPhotoUrl: String(formData.get("passport_photo_url") ?? ""),
+        collationRole: String(formData.get("collation_role") ?? "none"),
+        email: String(formData.get("email") ?? ""),
+      });
+      if (result.needsAgentsMigration) setShowAgentsSql(true);
+      if (result.needsIdentityMigration) setShowIdentitySql(true);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.agentCode) {
+        await navigator.clipboard.writeText(result.agentCode).catch(() => undefined);
+        toast.success(`Registered · code ${result.agentCode} for ${result.puCode}. Copied.`);
+      } else {
+        toast.success(`Registered agent for ${result.puCode}`);
+      }
+      setCollationRole("none");
+      setPhotoFieldKey((k) => k + 1);
+      formRef.current?.reset();
+      if (result.id) router.push(`/agents/${result.id}`);
+      else router.push("/agents");
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      {showAgentsSql ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <p className="font-medium">One SQL apply creates the Agents registration table</p>
+          <p className="mt-1 text-muted-foreground">
+            Cloud Supabase needs the <code>agents</code> table before paperwork records can be stored.
+          </p>
+          <div className="mt-3">
+            <Button type="button" size="sm" onClick={() => void copyAgentsSql()}>
+              Copy Agents table SQL
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {showIdentitySql ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <p className="font-medium">Optional: unlock profile identity columns</p>
+          <p className="mt-1 text-muted-foreground">
+            Membership / PVC / photo / collation also sync onto the system polling-agent profile.
+          </p>
+          <div className="mt-3">
+            <Button type="button" size="sm" onClick={() => void copyIdentitySql()}>
+              Copy identity-fields SQL
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form ref={formRef} action={handleSubmit} className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="full_name">Name</Label>
+              <Input id="full_name" name="full_name" required disabled={pending} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="membership_card_number">Membership card number</Label>
+              <Input id="membership_card_number" name="membership_card_number" disabled={pending} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ward">Ward</Label>
+              <Input
+                id="ward"
+                name="ward"
+                required
+                disabled={pending}
+                placeholder="Must match the polling unit ward"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pu_code">Polling unit</Label>
+              <Input
+                id="pu_code"
+                name="pu_code"
+                placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
+                required
+                disabled={pending}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="phone">Phone number</Label>
+              <Input id="phone" name="phone" required disabled={pending} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="voters_card_number">Voter&apos;s card number</Label>
+              <Input id="voters_card_number" name="voters_card_number" disabled={pending} />
+            </div>
+            <PassportPhotoField key={photoFieldKey} disabled={pending} />
+            <fieldset className="space-y-2 sm:col-span-2">
+              <legend className="text-sm font-medium">Collation agent role</legend>
+              <p className="text-xs text-muted-foreground">
+                Tick one if this person will also serve as a collation agent. Leave both unchecked for a
+                regular polling-unit agent.
+              </p>
+              <input type="hidden" name="collation_role" value={collationRole} />
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-input"
+                  checked={collationRole === "ward"}
+                  disabled={pending}
+                  onChange={(e) => setCollationRole(e.target.checked ? "ward" : "none")}
+                />
+                <span>Ward collation agent</span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-input"
+                  checked={collationRole === "lga"}
+                  disabled={pending}
+                  onChange={(e) => setCollationRole(e.target.checked ? "lga" : "none")}
+                />
+                <span>LGA collation agent</span>
+              </label>
+            </fieldset>
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="email">Email (optional)</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                disabled={pending}
+                placeholder="Only if you still want email login"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 sm:col-span-2">
+              <Button type="submit" disabled={pending}>
+                {pending ? "Saving…" : "Save agent"}
+              </Button>
+              <Button type="button" variant="outline" asChild>
+                <Link href="/agents">Cancel</Link>
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

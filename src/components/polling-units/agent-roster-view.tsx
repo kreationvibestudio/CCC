@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -8,11 +8,8 @@ import { PageHeader, StatCard } from "@/components/shared/page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  assignPollingAgent,
   getAgentAccessCodesSql,
-  getAgentIdentityMigrationSql,
   listAgentAssignments,
   listAgentCodesByName,
   listRecentAgentCheckins,
@@ -22,19 +19,20 @@ import {
   type AgentCheckinRow,
   type AssignmentRow,
 } from "@/lib/agents/actions";
+import { createAgentRegistration } from "@/lib/agents/registration";
 import { AGENT_LOGIN_RADIUS_FT, formatLoginDistance } from "@/lib/agent/geo";
 import {
   FillMissingCodesButton,
   IssueCodesCallout,
   IssuePinnedCodesButton,
 } from "@/components/polling-units/issue-pinned-codes-button";
-import { PassportPhotoField } from "@/components/polling-units/passport-photo-field";
 import { AGENT_CSV_TEMPLATE, parseAgentAssignmentCsv } from "@/lib/agents/csv";
 import { collationLabel } from "@/lib/agents/identity-fields";
 import { queryPollingUnits, type PollingUnitListItem } from "@/lib/polling-units/actions";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { formatDateTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Plus } from "lucide-react";
 
 type IssuedCode = { code: string; puCode: string; name: string };
 
@@ -97,10 +95,6 @@ export function AgentRosterView({
   const [gapLga, setGapLga] = useState("");
   const [gaps, setGaps] = useState<PollingUnitListItem[]>([]);
   const [importing, setImporting] = useState("");
-  const [needsIdentityMigration, setNeedsIdentityMigration] = useState(false);
-  const [collationRole, setCollationRole] = useState<"none" | "ward" | "lga">("none");
-  const [photoFieldKey, setPhotoFieldKey] = useState(0);
-  const formRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 300);
@@ -198,81 +192,39 @@ export function AgentRosterView({
     toast.success("SQL copied. Paste it in the Supabase SQL editor.");
   }
 
-  async function copyIdentitySql() {
-    const result = await getAgentIdentityMigrationSql();
-    if ("error" in result && result.error) {
-      toast.error(result.error);
-      return;
-    }
-    await copyText(result.sql);
-    toast.success("Identity-fields SQL copied. Paste it in the Supabase SQL editor, then Run.");
-  }
-
-  function handleAssign(formData: FormData) {
-    startTransition(async () => {
-      const result = await assignPollingAgent({
-        puCode: String(formData.get("pu_code") ?? ""),
-        email: String(formData.get("email") ?? ""),
-        fullName: String(formData.get("full_name") ?? ""),
-        phone: String(formData.get("phone") ?? ""),
-        ward: String(formData.get("ward") ?? ""),
-        membershipCardNumber: String(formData.get("membership_card_number") ?? ""),
-        votersCardNumber: String(formData.get("voters_card_number") ?? ""),
-        passportPhotoUrl: String(formData.get("passport_photo_url") ?? ""),
-        collationRole: String(formData.get("collation_role") ?? "none"),
-      });
-      if (result.needsIdentityMigration) setNeedsIdentityMigration(true);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      rememberCode(result);
-      if (result.agentCode) {
-        await copyText(result.agentCode).catch(() => undefined);
-        toast.success(`Agent code ${result.agentCode} for ${result.puCode}. Copied.`);
-      } else {
-        toast.success(`Tied the agent to ${result.puCode}`);
-      }
-      if (result.missingCoordinates) {
-        toast.warning("This polling unit has no map pin. Geocode it or the agent cannot sign in with GPS.");
-      }
-      if (result.needsIdentityMigration) {
-        toast.warning("Agent saved, but identity columns are missing. Copy the SQL below and run it in Supabase.");
-      }
-      setCollationRole("none");
-      setPhotoFieldKey((k) => k + 1);
-      formRef.current?.reset();
-      await reloadRoster();
-    });
-  }
-
   async function handleCsv(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const parsed = parseAgentAssignmentCsv(await file.text());
     if (!parsed.length) {
-      toast.error("CSV needs a pu_code column. Name is enough; email is optional.");
+      toast.error("CSV needs a pu_code column plus name and phone.");
       e.target.value = "";
       return;
     }
     const created: IssuedCode[] = [];
     let ok = 0;
     let failed = 0;
-    let missingPin = 0;
     for (let i = 0; i < parsed.length; i += 1) {
       setImporting(`${i + 1}/${parsed.length}`);
       const row = parsed[i];
-      const result = await assignPollingAgent(row);
-      if (result.needsIdentityMigration) setNeedsIdentityMigration(true);
+      const result = await createAgentRegistration({
+        puCode: row.puCode,
+        fullName: row.fullName,
+        phone: row.phone,
+        email: row.email,
+        ward: row.ward,
+        membershipCardNumber: row.membershipCardNumber,
+        votersCardNumber: row.votersCardNumber,
+        collationRole: row.collationRole,
+      });
       if (result.error) failed += 1;
       else {
         ok += 1;
-        if (result.missingCoordinates) missingPin += 1;
         if (result.agentCode) {
           created.push({
             code: result.agentCode,
             puCode: result.puCode ?? row.puCode,
-            name: result.fullName || row.fullName || row.email || "Field Agent",
+            name: row.fullName || row.email || "Field Agent",
           });
         }
       }
@@ -280,10 +232,9 @@ export function AgentRosterView({
     setImporting("");
     e.target.value = "";
     if (created.length) setIssued((prev) => [...created, ...prev]);
-    toast.success(`Tied ${ok} agent${ok === 1 ? "" : "s"} to polling units${failed ? ` (${failed} failed)` : ""}`);
-    if (missingPin) {
-      toast.warning(`${missingPin} unit${missingPin === 1 ? "" : "s"} have no map pin. Agents cannot GPS-check in until you geocode them.`);
-    }
+    toast.success(
+      `Registered ${ok} agent${ok === 1 ? "" : "s"}${failed ? ` (${failed} failed)` : ""}`
+    );
     await reloadRoster();
   }
 
@@ -360,8 +311,19 @@ export function AgentRosterView({
     <div className="space-y-6">
       <PageHeader
         title="Polling agents"
-        description={`Issue an 8-character code per Field Agent, tied to one polling unit. They open CCC Agent with that code — no email or password. GPS must be within ${AGENT_LOGIN_RADIUS_FT} ft of the unit pin. 10-character codes already issued still work. Units without a map pin cannot check in.`}
+        description={`Codes, check-ins, and bulk tools for field logins. Register agent paperwork under Agents. GPS must be within ${AGENT_LOGIN_RADIUS_FT} ft of the unit pin.`}
       >
+        {canCreate ? (
+          <Button asChild>
+            <Link href="/agents/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Register agent
+            </Link>
+          </Button>
+        ) : null}
+        <Button variant="outline" asChild>
+          <Link href="/agents">Open Agents</Link>
+        </Button>
         <IssuePinnedCodesButton onIssued={rememberIssued} />
         <FillMissingCodesButton onIssued={rememberIssued} />
         <Button variant="outline" asChild>
@@ -477,116 +439,20 @@ export function AgentRosterView({
       </Card>
 
       {canCreate ? (
-      <>
-      {needsIdentityMigration ? (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-          <p className="font-medium">One SQL apply unlocks the new agent identity fields</p>
-          <p className="mt-1 text-muted-foreground">
-            Membership card, voter card, passport photo, and collation-agent flags need new columns on{" "}
-            <code>profiles</code>.
-          </p>
-          <div className="mt-3">
-            <Button type="button" size="sm" onClick={() => void copyIdentitySql()}>
-              Copy identity-fields SQL
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
       <Card>
         <CardHeader>
-          <CardTitle>Capture agent</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form ref={formRef} action={handleAssign} className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="full_name">Name</Label>
-              <Input id="full_name" name="full_name" required disabled={pending} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="membership_card_number">Membership card number</Label>
-              <Input id="membership_card_number" name="membership_card_number" disabled={pending} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ward">Ward</Label>
-              <Input id="ward" name="ward" required disabled={pending} placeholder="Must match the polling unit ward" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="pu_code">Polling unit</Label>
-              <Input
-                id="pu_code"
-                name="pu_code"
-                placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
-                required
-                disabled={pending}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="phone">Phone number</Label>
-              <Input id="phone" name="phone" required disabled={pending} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="voters_card_number">Voter&apos;s card number</Label>
-              <Input id="voters_card_number" name="voters_card_number" disabled={pending} />
-            </div>
-            <PassportPhotoField key={photoFieldKey} disabled={pending} />
-            <fieldset className="space-y-2 sm:col-span-2">
-              <legend className="text-sm font-medium">Collation agent role</legend>
-              <p className="text-xs text-muted-foreground">
-                Tick one if this person will also serve as a collation agent. Leave both unchecked for a
-                regular polling-unit agent.
-              </p>
-              <input type="hidden" name="collation_role" value={collationRole} />
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-input"
-                  checked={collationRole === "ward"}
-                  disabled={pending}
-                  onChange={(e) => setCollationRole(e.target.checked ? "ward" : "none")}
-                />
-                <span>Ward collation agent</span>
-              </label>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-input"
-                  checked={collationRole === "lga"}
-                  disabled={pending}
-                  onChange={(e) => setCollationRole(e.target.checked ? "lga" : "none")}
-                />
-                <span>LGA collation agent</span>
-              </label>
-            </fieldset>
-            <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="email">Email (optional)</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                disabled={pending}
-                placeholder="Only if you still want email login"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving…" : "Save agent / issue code"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Bulk assign (CSV)</CardTitle>
+          <CardTitle>Bulk register (CSV)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Upload a sheet with{" "}
             <code>full_name,membership_card_number,ward,pu_code,phone,voters_card_number,collation_role</code>
-            . <code>collation_role</code> may be <code>ward</code>, <code>lga</code>, or blank. Passport
-            photos are captured one-by-one in the form above.
+            . Each row creates an Agents registration and issues a field code. Passport photos are added
+            on the{" "}
+            <Link href="/agents/new" className="underline">
+              Register agent
+            </Link>{" "}
+            page.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={downloadTemplate}>
@@ -604,7 +470,6 @@ export function AgentRosterView({
           </div>
         </CardContent>
       </Card>
-      </>
       ) : null}
 
       <Card>

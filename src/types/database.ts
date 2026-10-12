@@ -94,6 +94,26 @@ export interface Profile {
   created_at: string;
 }
 
+/** HQ field-agent registration (source of truth for agent paperwork). */
+export interface Agent {
+  id: string;
+  tenant_id: string;
+  polling_unit_id: string;
+  profile_id?: string | null;
+  full_name: string;
+  phone: string;
+  email?: string | null;
+  ward?: string | null;
+  membership_card_number?: string | null;
+  voters_card_number?: string | null;
+  passport_photo_url?: string | null;
+  is_lga_collation_agent: boolean;
+  is_ward_collation_agent: boolean;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Comment {
   id: string;
   tenant_id: string;

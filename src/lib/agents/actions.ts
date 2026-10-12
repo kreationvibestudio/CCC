@@ -59,6 +59,7 @@ function db() {
 }
 
 function revalidateAgents() {
+  revalidatePath("/agents");
   revalidatePath("/polling-units/agents");
   revalidatePath("/polling-units");
   revalidatePath("/agent");
@@ -560,6 +561,8 @@ export async function assignPollingAgent(input: {
       created?: boolean;
       agentCode?: string;
       puCode?: string;
+      pollingUnitId?: string;
+      profileId?: string;
       email?: string;
       fullName?: string;
       missingCoordinates?: boolean;
@@ -584,7 +587,6 @@ export async function assignPollingAgent(input: {
       isWardCollationAgent: Boolean(input.isWardCollationAgent),
     });
     if (!puCode) return { error: "Polling unit is required" };
-    if (!phone) return { error: "Phone number is required" };
     if (emailInput && !emailInput.includes("@")) return { error: "Valid email is required" };
 
     const supabase = db();
@@ -713,6 +715,8 @@ export async function assignPollingAgent(input: {
       created,
       agentCode: issued.code,
       puCode: pu.code,
+      pollingUnitId: pu.id,
+      profileId: userId,
       email,
       fullName,
       missingCoordinates: pu.latitude == null || pu.longitude == null,

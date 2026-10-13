@@ -116,7 +116,7 @@ export function AgentRegistrationForm({
           <CardTitle>Agent details</CardTitle>
         </CardHeader>
         <CardContent>
-          <form ref={formRef} action={handleSubmit} className="grid gap-3 sm:grid-cols-2">
+          <form ref={formRef} action={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="full_name">Name</Label>
               <Input id="full_name" name="full_name" required disabled={pending} />

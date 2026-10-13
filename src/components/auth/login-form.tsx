@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandLogo } from "@/components/brand/logo";
+import { InstallHqHint } from "@/components/pwa/install-hq-hint";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { safeInternalPath } from "@/lib/auth/bearer";
@@ -96,6 +97,9 @@ export function LoginForm() {
           <Link href="/forgot-password" className="hover:text-primary">Forgot password?</Link>
           {" · "}
           <Link href="/register" className="hover:text-primary">Create account</Link>
+        </div>
+        <div className="mt-4">
+          <InstallHqHint />
         </div>
       </CardContent>
     </Card>

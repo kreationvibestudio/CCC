@@ -1,0 +1,14 @@
+android-keys/*.keystore
+android-keys/*.jks
+android-keys/keystore.properties
+*.apk
+*.aab
+*.idsig
+app/build/
+build/
+.gradle/
+local.properties
+.idea/
+*.iml
+node_modules/
+.DS_Store

@@ -30,7 +30,8 @@ import { toErrorMessage } from "@/lib/public-error";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 import { formatTermiiWallet } from "@/lib/integrations/termii/wallet";
-import { AlertTriangle, ScrollText } from "lucide-react";
+import { InstallHqHint } from "@/components/pwa/install-hq-hint";
+import { AlertTriangle, ScrollText, Smartphone } from "lucide-react";
 
 function TestTermiiButton() {
   const [pending, start] = useTransition();
@@ -455,6 +456,34 @@ export function AdminView({
             : "View-only Admin access — team, roles, and production secrets"
         }
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4" />
+            CCC HQ on your phone
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Full HQ (Agents, Situation Room, Admin, and the rest) runs as an installable web app — not
+            the field <span className="text-foreground">CCC Agent</span> Play app. On a Samsung Fold,
+            unfold for dense screens; use the drawer on the cover display.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              <span className="text-foreground">Install app</span> — Chrome menu → Install app / Add to
+              Home screen (PWA).
+            </li>
+            <li>
+              <span className="text-foreground">APK</span> — build or download the CCC HQ TWA from{" "}
+              <code className="text-foreground">apps/hq-android</code> (see{" "}
+              <code className="text-foreground">docs/HQ-MOBILE.md</code>), then sideload on the Fold.
+            </li>
+          </ul>
+          <InstallHqHint showAdminLink={false} />
+        </CardContent>
+      </Card>
 
       <Card className={systemWarningCount > 0 ? "border-amber-400/50" : undefined}>
         <CardHeader>

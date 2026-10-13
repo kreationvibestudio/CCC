@@ -25,7 +25,9 @@ Works as soon as production has the PWA bits (`manifest`, icons, service worker)
 
 ## Option B — Sideload the CCC HQ APK (TWA)
 
-Trusted Web Activity wraps the same production URL in an Android package.
+Trusted Web Activity wraps the same production URL in an Android package. Works on **Android 9** and newer (also installs on Android 5+). Keep **Chrome** installed.
+
+Prebuilt files live in [`apks/`](../apks/) (e.g. `ccc-hq-v1.0.1-android9.apk`, `ccc-hq-latest.apk`).
 
 ### Build (developer machine or Cursor Cloud with Android SDK)
 
@@ -39,11 +41,11 @@ export ANDROID_HOME=/path/to/Android/Sdk
 ./build-apk.sh
 ```
 
-Output: `apps/hq-android/app/build/outputs/apk/release/app-release.apk`
+Output: Gradle release APK **and** copies under `apks/`.
 
-### Install on Fold 6
+### Install (Android 9, Fold 6, etc.)
 
-1. Copy the APK to the phone (Drive, USB, Nearby Share).
+1. Copy an APK from `apks/` to the phone (Drive, USB, Nearby Share).
 2. Open the file → Install (allow “Install unknown apps” for your Files app if prompted).
 3. Launch **CCC HQ** → Chrome Custom Tabs / TWA opens HQ → sign in with your HQ account.
 

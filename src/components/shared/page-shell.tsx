@@ -11,14 +11,16 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-start lg:justify-between">
+    <div className="flex flex-col gap-3 border-b border-border pb-4 sm:gap-4 sm:pb-6 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h1>
         {description && (
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         )}
       </div>
-      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+      {children && (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
+      )}
     </div>
   );
 }

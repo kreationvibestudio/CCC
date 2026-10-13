@@ -13,7 +13,7 @@ export default async function NewAgentPage() {
   }
   const needsAgentsMigration = await agentsTableNeedsMigration();
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto w-full max-w-3xl min-w-0 space-y-4 sm:space-y-6">
       <PageHeader
         title="Register agent"
         description="Capture agent paperwork, tie them to a polling unit, and issue a field login code"

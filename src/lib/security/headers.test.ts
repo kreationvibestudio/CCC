@@ -91,6 +91,12 @@ test("the field agent portal keeps geolocation and camera", () => {
   assert.match(permissions.value, /microphone=\(\)/);
 });
 
+test("PWA manifest and service worker origins stay allowed", () => {
+  const csp = buildCsp({ nonce: "n" });
+  assert.equal(directive(csp, "manifest-src"), "manifest-src 'self'");
+  assert.equal(directive(csp, "worker-src"), "worker-src 'self' blob:");
+});
+
 test("static headers cover sniffing and transport (XFO is middleware-owned)", () => {
   const byKey = new Map(STATIC_SECURITY_HEADERS.map((h) => [h.key, h.value]));
   assert.equal(byKey.get("X-Content-Type-Options"), "nosniff");

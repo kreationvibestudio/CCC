@@ -78,6 +78,11 @@ export async function updateSession(request: NextRequest) {
   const isJoinRoute = path.startsWith("/join");
   const isAgentApi = path.startsWith("/api/agent");
   const isAgentCodeLogin = path === "/agent/login";
+  const isPwaAsset =
+    path === "/manifest.webmanifest" ||
+    path === "/sw.js" ||
+    path.startsWith("/icons/") ||
+    path === "/.well-known/assetlinks.json";
   const isPublicRoute =
     path === "/" ||
     isAuthRoute ||
@@ -87,7 +92,8 @@ export async function updateSession(request: NextRequest) {
     isLearnRoute ||
     isJoinRoute ||
     isAgentApi ||
-    isAgentCodeLogin;
+    isAgentCodeLogin ||
+    isPwaAsset;
 
   const redirectTo = (url: URL) => {
     const response = stamp(NextResponse.redirect(url));

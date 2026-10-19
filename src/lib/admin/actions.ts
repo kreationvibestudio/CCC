@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { randomBytes } from "crypto";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { requirePermission, logAudit } from "@/lib/auth/session";
@@ -9,6 +8,8 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { denyCreateIfRestricted, denyDeleteIfRestricted, ROLE_LABELS, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
 import { resolveInviteIdentity } from "@/lib/admin/invite-identity";
+import { easyTempPassword } from "@/lib/auth/easy-temp-password";
+import { appBaseUrl } from "@/lib/campaign";
 import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
 import { openAiConfigured } from "@/lib/ai/openai";
@@ -24,10 +25,6 @@ const KEEP_ROLES = new Set<string>([
 
 function isUserRole(value: string): value is UserRole {
   return ROLES.includes(value as UserRole);
-}
-
-function tempPassword() {
-  return `${randomBytes(9).toString("base64url")}Aa1!`;
 }
 
 export async function inviteUser(formData: FormData) {
@@ -81,7 +78,7 @@ export async function inviteUser(formData: FormData) {
       }
     }
 
-    const password = tempPassword();
+    const password = easyTempPassword();
     const created = await createInvitedAuthUser(admin, {
       tenantId: adminUser.profile.tenant_id,
       email,
@@ -128,22 +125,21 @@ export async function inviteUser(formData: FormData) {
     revalidatePath("/polling-units/agents");
     revalidatePath("/agent");
     const who = emailProvided || phoneProvided ? loginUsername : fullName;
+    const base = appBaseUrl();
+    const loginUrl = base ? `${base}/login` : undefined;
     return {
       success: true as const,
       temporaryPassword: created.created ? password : undefined,
       loginEmail: created.created ? loginUsername : undefined,
+      loginUrl: created.created ? loginUrl : undefined,
       emailProvided,
       phoneProvided,
       message: created.created
         ? roleRaw === "polling_agent"
           ? emailProvided || phoneProvided
-            ? `Invited ${who} as Field Agent. Copy the temporary password, then tie them to a polling unit under Polling units → PU Agents.`
-            : `Invited ${who} as Field Agent (no email/phone). Copy the login id and temporary password, then tie them to a polling unit under Polling units → PU Agents.`
-          : emailProvided
-            ? `Invited ${who}. Copy the temporary password and send it securely. They must set a permanent password at first sign-in.`
-            : phoneProvided
-              ? `Invited ${who}. They sign in with phone ${loginUsername} and the temporary password (must change at first sign-in).`
-              : `Invited ${who} without email or phone. Copy the login id and temporary password — they use that login id on the sign-in screen.`
+            ? `Invited ${who} as Field Agent. Copy their login details below, then tie them to a polling unit under Polling units → PU Agents.`
+            : `Invited ${who} as Field Agent (no email/phone). Copy their login details below, then tie them to a polling unit under Polling units → PU Agents.`
+          : `Invited ${who}. Copy their login details below and send them securely. They must set a permanent password at first sign-in.`
         : `Updated ${who} in this campaign workspace.`,
     };
   } catch (e) {

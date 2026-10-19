@@ -28,11 +28,12 @@ import {
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
 import { displayInviteLogin } from "@/lib/admin/invite-identity";
+import { formatInviteCredentials } from "@/lib/auth/invite-credentials";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 import { formatTermiiWallet } from "@/lib/integrations/termii/wallet";
 import { InstallHqHint } from "@/components/pwa/install-hq-hint";
-import { AlertTriangle, ScrollText, Smartphone } from "lucide-react";
+import { AlertTriangle, Copy, ScrollText, Smartphone } from "lucide-react";
 
 function TestTermiiButton() {
   const [pending, start] = useTransition();
@@ -250,7 +251,34 @@ export function AdminView({
   const [pending, startTransition] = useTransition();
   const [invitePassword, setInvitePassword] = useState<string | null>(null);
   const [inviteLoginEmail, setInviteLoginEmail] = useState<string | null>(null);
+  const [inviteLoginUrl, setInviteLoginUrl] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  function resolveInviteLoginUrl(fromServer?: string | null) {
+    if (fromServer) return fromServer;
+    if (typeof window !== "undefined") return `${window.location.origin}/login`;
+    return "/login";
+  }
+
+  function copyInviteField(label: string, value: string) {
+    void navigator.clipboard.writeText(value).then(
+      () => toast.success(`${label} copied`),
+      () => toast.error(`Could not copy ${label.toLowerCase()}`)
+    );
+  }
+
+  function copyAllInviteCredentials() {
+    if (!inviteLoginEmail || !invitePassword || !inviteLoginUrl) return;
+    const text = formatInviteCredentials({
+      username: inviteLoginEmail,
+      password: invitePassword,
+      loginUrl: inviteLoginUrl,
+    });
+    void navigator.clipboard.writeText(text).then(
+      () => toast.success("Login details copied"),
+      () => toast.error("Could not copy login details")
+    );
+  }
 
   const deletableProfiles = profiles.filter((p) => p.id !== currentUserId);
   const allSelected =
@@ -354,10 +382,16 @@ export function AdminView({
         setInviteLoginEmail(
           "loginEmail" in result && typeof result.loginEmail === "string" ? result.loginEmail : null
         );
+        setInviteLoginUrl(
+          resolveInviteLoginUrl(
+            "loginUrl" in result && typeof result.loginUrl === "string" ? result.loginUrl : null
+          )
+        );
         toast.success(result.message ?? "User invited");
       } else {
         setInvitePassword(null);
         setInviteLoginEmail(null);
+        setInviteLoginUrl(null);
         toast.success(result.message ?? "User invited");
       }
       router.refresh();
@@ -749,23 +783,68 @@ export function AdminView({
               </Button>
             </div>
           </form>
-          {invitePassword && (
-            <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 p-3 text-sm">
-              {inviteLoginEmail ? (
-                <p>
-                  Username (copy now):{" "}
-                  <code className="font-mono text-foreground">{inviteLoginEmail}</code>
-                </p>
-              ) : null}
-              <p>
-                Temporary password (copy now):{" "}
-                <code className="font-mono text-foreground">{invitePassword}</code>
-              </p>
-              <p className="text-muted-foreground">
-                They must replace the password at first sign-in before HQ opens.
+          {invitePassword && inviteLoginEmail && inviteLoginUrl ? (
+            <div className="mt-3 space-y-3 rounded-md border border-border bg-muted/40 p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium text-foreground">Send these login details now</p>
+                <Button type="button" size="sm" variant="secondary" onClick={copyAllInviteCredentials}>
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  Copy all
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Username</p>
+                    <code className="break-all font-mono text-foreground">{inviteLoginEmail}</code>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyInviteField("Username", inviteLoginEmail)}
+                  >
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    Copy
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Temporary password</p>
+                    <code className="break-all font-mono text-foreground">{invitePassword}</code>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyInviteField("Password", invitePassword)}
+                  >
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    Copy
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Login URL</p>
+                    <code className="break-all font-mono text-foreground">{inviteLoginUrl}</code>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyInviteField("Login URL", inviteLoginUrl)}
+                  >
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    Copy
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Password looks like <span className="font-mono">mango-river-47</span> — easy to read aloud.
+                They must set a new password at first sign-in.
               </p>
             </div>
-          )}
+          ) : null}
           <p className="mt-3 text-xs text-muted-foreground">
             If invite shows “Database error creating new user”, the cloud signup trigger needs a one-time
             SQL fix.{" "}

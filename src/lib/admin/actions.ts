@@ -8,6 +8,7 @@ import { requirePermission, logAudit } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { denyCreateIfRestricted, denyDeleteIfRestricted, ROLE_LABELS, type UserRole } from "@/types/auth";
 import { createInvitedAuthUser } from "@/lib/invites";
+import { resolveInviteIdentity } from "@/lib/admin/invite-identity";
 import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
 import { openAiConfigured } from "@/lib/ai/openai";
@@ -34,28 +35,33 @@ export async function inviteUser(formData: FormData) {
     const adminUser = await requirePermission("admin.users");
     const blocked = denyCreateIfRestricted(adminUser.role);
     if (blocked) return { error: blocked };
-    const email = String(formData.get("email") ?? "").trim().toLowerCase();
-    const fullName = String(formData.get("full_name") ?? "").trim() || email.split("@")[0];
+    const identity = resolveInviteIdentity({
+      email: String(formData.get("email") ?? ""),
+      fullName: String(formData.get("full_name") ?? ""),
+    });
+    if ("error" in identity) return { error: identity.error };
+    const { email, fullName, emailProvided } = identity;
     const roleRaw = String(formData.get("role") ?? "supporter");
     const ward = String(formData.get("ward") ?? "").trim() || null;
     const lga = String(formData.get("lga") ?? "").trim() || null;
 
-    if (!email || !email.includes("@")) return { error: "Valid email is required" };
     if (!isUserRole(roleRaw)) return { error: "Invalid role" };
     if (roleRaw === "super_administrator" && adminUser.role !== "super_administrator") {
       return { error: "Only a super administrator can create another super administrator" };
     }
 
     const admin = createServiceClient();
-    const { data: existing } = await admin
-      .from("profiles")
-      .select("id, role, email")
-      .eq("tenant_id", adminUser.profile.tenant_id)
-      .ilike("email", email)
-      .limit(5);
-    const already = (existing ?? []).find((row) => row.email?.toLowerCase() === email);
-    if (already && KEEP_ROLES.has(already.role) && already.role !== roleRaw) {
-      return { error: `${email} is already ${already.role.replace(/_/g, " ")} — pick a different email` };
+    if (emailProvided) {
+      const { data: existing } = await admin
+        .from("profiles")
+        .select("id, role, email")
+        .eq("tenant_id", adminUser.profile.tenant_id)
+        .ilike("email", email)
+        .limit(5);
+      const already = (existing ?? []).find((row) => row.email?.toLowerCase() === email);
+      if (already && KEEP_ROLES.has(already.role) && already.role !== roleRaw) {
+        return { error: `${email} is already ${already.role.replace(/_/g, " ")} — pick a different email` };
+      }
     }
 
     const password = tempPassword();
@@ -91,18 +97,30 @@ export async function inviteUser(formData: FormData) {
     );
     if (profileError) return { error: toErrorMessage(profileError, "Could not save the team profile") };
 
-    await logAudit("admin.invite", "user", created.userId, { email, role: roleRaw });
+    await logAudit("admin.invite", "user", created.userId, {
+      email: emailProvided ? email : null,
+      login_email: email,
+      email_provided: emailProvided,
+      role: roleRaw,
+    });
     revalidatePath("/admin");
     revalidatePath("/polling-units/agents");
     revalidatePath("/agent");
+    const who = emailProvided ? email : fullName;
     return {
       success: true as const,
       temporaryPassword: created.created ? password : undefined,
+      loginEmail: created.created ? email : undefined,
+      emailProvided,
       message: created.created
         ? roleRaw === "polling_agent"
-          ? `Invited ${email} as Field Agent. Copy the temporary password, then tie them to a polling unit under Polling units → PU Agents.`
-          : `Invited ${email}. Copy the temporary password and send it securely. They must set a permanent password at first sign-in.`
-        : `Updated ${email} in this campaign workspace.`,
+          ? emailProvided
+            ? `Invited ${who} as Field Agent. Copy the temporary password, then tie them to a polling unit under Polling units → PU Agents.`
+            : `Invited ${who} as Field Agent (no email). Copy the login id and temporary password, then tie them to a polling unit under Polling units → PU Agents.`
+          : emailProvided
+            ? `Invited ${who}. Copy the temporary password and send it securely. They must set a permanent password at first sign-in.`
+            : `Invited ${who} without an email. Copy the login id and temporary password — they use that login id on the sign-in screen.`
+        : `Updated ${who} in this campaign workspace.`,
     };
   } catch (e) {
     return { error: toErrorMessage(e, "Invite failed") };

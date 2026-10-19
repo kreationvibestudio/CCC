@@ -10,13 +10,15 @@ function form(values: Record<string, string>) {
 
 describe("readLoginCredentials", () => {
   it("rejects empty fields", () => {
-    assert.deepEqual(readLoginCredentials(form({})), { error: "Email and password are required" });
+    assert.deepEqual(readLoginCredentials(form({})), {
+      error: "Email or phone and password are required",
+    });
     assert.deepEqual(readLoginCredentials(form({ email: "  ", password: "secret" })), {
-      error: "Email and password are required",
+      error: "Email or phone and password are required",
     });
     assert.deepEqual(
       readLoginCredentials(form({ email: "admin@demo.campaign.ng", password: "" })),
-      { error: "Email and password are required" }
+      { error: "Email or phone and password are required" }
     );
   });
 
@@ -26,6 +28,16 @@ describe("readLoginCredentials", () => {
       {
         email: "admin@demo.campaign.ng",
         password: "DemoPassword123!",
+      }
+    );
+  });
+
+  it("maps an 11-digit phone username to the Auth email", () => {
+    assert.deepEqual(
+      readLoginCredentials(form({ email: "0813 374 7224", password: "Passw0rd!" })),
+      {
+        email: "08133747224@phone.ccc.local",
+        password: "Passw0rd!",
       }
     );
   });

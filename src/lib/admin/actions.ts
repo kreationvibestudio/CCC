@@ -37,10 +37,11 @@ export async function inviteUser(formData: FormData) {
     if (blocked) return { error: blocked };
     const identity = resolveInviteIdentity({
       email: String(formData.get("email") ?? ""),
+      phone: String(formData.get("phone") ?? ""),
       fullName: String(formData.get("full_name") ?? ""),
     });
     if ("error" in identity) return { error: identity.error };
-    const { email, fullName, emailProvided } = identity;
+    const { email, fullName, phone, emailProvided, phoneProvided, loginUsername } = identity;
     const roleRaw = String(formData.get("role") ?? "supporter");
     const ward = String(formData.get("ward") ?? "").trim() || null;
     const lga = String(formData.get("lga") ?? "").trim() || null;
@@ -51,16 +52,32 @@ export async function inviteUser(formData: FormData) {
     }
 
     const admin = createServiceClient();
-    if (emailProvided) {
-      const { data: existing } = await admin
+    if (emailProvided || phoneProvided) {
+      const { data: byEmail } = await admin
         .from("profiles")
-        .select("id, role, email")
+        .select("id, role, email, phone")
         .eq("tenant_id", adminUser.profile.tenant_id)
-        .ilike("email", email)
+        .eq("email", email)
         .limit(5);
-      const already = (existing ?? []).find((row) => row.email?.toLowerCase() === email);
+      let candidates = byEmail ?? [];
+      if (phoneProvided && phone) {
+        const { data: byPhone } = await admin
+          .from("profiles")
+          .select("id, role, email, phone")
+          .eq("tenant_id", adminUser.profile.tenant_id)
+          .eq("phone", phone)
+          .limit(5);
+        candidates = [...candidates, ...(byPhone ?? [])];
+      }
+      const already = candidates.find(
+        (row) =>
+          row.email?.toLowerCase() === email ||
+          (phone && (row.phone ?? "").replace(/\D/g, "") === phone)
+      );
       if (already && KEEP_ROLES.has(already.role) && already.role !== roleRaw) {
-        return { error: `${email} is already ${already.role.replace(/_/g, " ")} — pick a different email` };
+        return {
+          error: `${loginUsername} is already ${already.role.replace(/_/g, " ")} — pick a different email or phone`,
+        };
       }
     }
 
@@ -92,6 +109,7 @@ export async function inviteUser(formData: FormData) {
         role: roleRaw,
         ward,
         lga,
+        ...(phone ? { phone } : {}),
       },
       { onConflict: "id" }
     );
@@ -99,27 +117,33 @@ export async function inviteUser(formData: FormData) {
 
     await logAudit("admin.invite", "user", created.userId, {
       email: emailProvided ? email : null,
+      phone: phoneProvided ? phone : null,
+      login_username: loginUsername,
       login_email: email,
       email_provided: emailProvided,
+      phone_provided: phoneProvided,
       role: roleRaw,
     });
     revalidatePath("/admin");
     revalidatePath("/polling-units/agents");
     revalidatePath("/agent");
-    const who = emailProvided ? email : fullName;
+    const who = emailProvided || phoneProvided ? loginUsername : fullName;
     return {
       success: true as const,
       temporaryPassword: created.created ? password : undefined,
-      loginEmail: created.created ? email : undefined,
+      loginEmail: created.created ? loginUsername : undefined,
       emailProvided,
+      phoneProvided,
       message: created.created
         ? roleRaw === "polling_agent"
-          ? emailProvided
+          ? emailProvided || phoneProvided
             ? `Invited ${who} as Field Agent. Copy the temporary password, then tie them to a polling unit under Polling units → PU Agents.`
-            : `Invited ${who} as Field Agent (no email). Copy the login id and temporary password, then tie them to a polling unit under Polling units → PU Agents.`
+            : `Invited ${who} as Field Agent (no email/phone). Copy the login id and temporary password, then tie them to a polling unit under Polling units → PU Agents.`
           : emailProvided
             ? `Invited ${who}. Copy the temporary password and send it securely. They must set a permanent password at first sign-in.`
-            : `Invited ${who} without an email. Copy the login id and temporary password — they use that login id on the sign-in screen.`
+            : phoneProvided
+              ? `Invited ${who}. They sign in with phone ${loginUsername} and the temporary password (must change at first sign-in).`
+              : `Invited ${who} without email or phone. Copy the login id and temporary password — they use that login id on the sign-in screen.`
         : `Updated ${who} in this campaign workspace.`,
     };
   } catch (e) {

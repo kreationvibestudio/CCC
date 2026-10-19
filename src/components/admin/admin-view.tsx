@@ -27,7 +27,7 @@ import {
 } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
-import { isSyntheticInviteEmail } from "@/lib/admin/invite-identity";
+import { displayInviteLogin } from "@/lib/admin/invite-identity";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 import { formatTermiiWallet } from "@/lib/integrations/termii/wallet";
@@ -687,11 +687,27 @@ export function AdminView({
               <Input
                 id="email"
                 name="email"
-                type="email"
+                type="text"
+                inputMode="email"
                 autoComplete="off"
-                placeholder="Leave blank if they have no email"
+                placeholder="Email or leave blank"
                 disabled={pending}
               />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="phone">Phone (optional)</Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="11-digit mobile e.g. 08133747224"
+                disabled={pending}
+              />
+              <p className="text-xs text-muted-foreground">
+                If set, they can sign in with this phone number as their username.
+              </p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="role">Role</Label>
@@ -713,7 +729,8 @@ export function AdminView({
                   PU Agents
                 </Link>{" "}
                 and click <span className="font-medium">Issue codes for pinned units</span> to create a
-                login code per mapped unit. GPS is checked at sign-in. Email is optional.
+                login code per mapped unit. GPS is checked at sign-in. Email and phone are optional;
+                phone can be used as the HQ username.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -736,7 +753,7 @@ export function AdminView({
             <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 p-3 text-sm">
               {inviteLoginEmail ? (
                 <p>
-                  Login id (copy now):{" "}
+                  Username (copy now):{" "}
                   <code className="font-mono text-foreground">{inviteLoginEmail}</code>
                 </p>
               ) : null}
@@ -829,11 +846,7 @@ export function AdminView({
                       <dl className="mt-1 grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-3">
                         <div>
                           <dt className="inline font-medium text-foreground/70">Email: </dt>
-                          <dd className="inline break-all">
-                            {isSyntheticInviteEmail(p.email)
-                              ? `No email · login ${p.email}`
-                              : p.email || "—"}
-                          </dd>
+                          <dd className="inline break-all">{displayInviteLogin(p.email)}</dd>
                         </div>
                         <div>
                           <dt className="inline font-medium text-foreground/70">Ward: </dt>

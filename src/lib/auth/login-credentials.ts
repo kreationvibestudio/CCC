@@ -1,11 +1,13 @@
+import { resolveLoginAuthEmail } from "./phone-username.ts";
+
 /** Read HQ login fields from the live form DOM (including browser autofill). */
 export function readLoginCredentials(formData: FormData):
   | { email: string; password: string }
   | { error: string } {
-  const email = String(formData.get("email") ?? "").trim();
+  const identifier = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  if (!email || !password) {
-    return { error: "Email and password are required" };
+  if (!identifier || !password) {
+    return { error: "Email or phone and password are required" };
   }
-  return { email, password };
+  return { email: resolveLoginAuthEmail(identifier), password };
 }

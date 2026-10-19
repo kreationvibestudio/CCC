@@ -67,13 +67,14 @@ export function LoginForm() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">Email or phone</Label>
             <Input
               id="email"
               name="email"
-              type="email"
+              type="text"
+              inputMode="email"
               autoComplete="username"
-              placeholder="you@campaign.ng"
+              placeholder="you@campaign.ng or 0813…"
               required
             />
           </div>

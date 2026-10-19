@@ -91,6 +91,8 @@ export interface Profile {
   passport_photo_url?: string | null;
   is_lga_collation_agent?: boolean;
   is_ward_collation_agent?: boolean;
+  /** Ward coordinator also gets Field Agent / polling-unit portal access. */
+  also_field_agent?: boolean;
   created_at: string;
 }
 

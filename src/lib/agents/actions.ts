@@ -245,7 +245,7 @@ export async function getAgentCoverage() {
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .eq("role", "polling_agent"),
+      .or("role.eq.polling_agent,also_field_agent.eq.true"),
   ]);
   return { assignedPus: assignedPus ?? 0, agents: agents ?? 0 };
 }
@@ -278,7 +278,7 @@ export async function listAgentAssignments(input?: {
       .from("profiles")
       .select("id")
       .eq("tenant_id", tenantId)
-      .eq("role", "polling_agent")
+      .or("role.eq.polling_agent,also_field_agent.eq.true")
       .ilike("full_name", `%${safe}%`);
     const nameIds = (nameHits ?? []).map((p) => p.id);
     const puMatch = pollingUnitSearchOrFilter(safe);

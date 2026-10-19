@@ -19,6 +19,7 @@ import {
   purgeNonEdoSampleData,
   getPurgeNonEdoMigrationSql,
   getInviteRepairSql,
+  getAlsoFieldAgentMigrationSql,
   updateCampaignDates,
   updateCampaignWebsite,
   getCampaignDatesMigrationSql,
@@ -185,12 +186,63 @@ type ProfileRow = {
   role: string;
   ward: string | null;
   lga: string | null;
+  also_field_agent?: boolean;
   created_at: string;
 };
 
 type SecretsStatus = Record<string, boolean>;
 
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS) as [UserRole, string][];
+
+function TeamMemberRoleForm({
+  profile,
+  pending,
+  onSubmit,
+}: {
+  profile: ProfileRow;
+  pending: boolean;
+  onSubmit: (formData: FormData) => void;
+}) {
+  const [role, setRole] = useState(profile.role as UserRole);
+  return (
+    <form action={onSubmit} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="user_id" value={profile.id} />
+      <NativeSelect
+        name="role"
+        value={role}
+        className="w-auto"
+        disabled={pending}
+        onChange={(e) => setRole(e.target.value as UserRole)}
+      >
+        {ROLE_OPTIONS.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </NativeSelect>
+      {role === "ward_coordinator" ? (
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            name="also_field_agent"
+            value="true"
+            defaultChecked={Boolean(profile.also_field_agent)}
+            className="h-3.5 w-3.5 accent-primary"
+            disabled={pending}
+          />
+          Also PU agent
+        </label>
+      ) : null}
+      <Button type="submit" size="sm" variant="secondary" disabled={pending}>
+        Save
+      </Button>
+      <Badge variant="secondary">{profile.role.replace(/_/g, " ")}</Badge>
+      {profile.role === "ward_coordinator" && profile.also_field_agent ? (
+        <Badge variant="outline">+ PU agent</Badge>
+      ) : null}
+    </form>
+  );
+}
 
 const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boolean }[] = [
   { key: "supabaseUrl", label: "Supabase URL", critical: true },
@@ -252,6 +304,7 @@ export function AdminView({
   const [invitePassword, setInvitePassword] = useState<string | null>(null);
   const [inviteLoginEmail, setInviteLoginEmail] = useState<string | null>(null);
   const [inviteLoginUrl, setInviteLoginUrl] = useState<string | null>(null);
+  const [inviteRole, setInviteRole] = useState<UserRole>("supporter");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   function resolveInviteLoginUrl(fromServer?: string | null) {
@@ -354,6 +407,18 @@ export function AdminView({
         toast.success("SQL copied. Paste it in the Supabase SQL editor and click Run.");
       } catch {
         toast.error("Could not copy the repair SQL");
+      }
+    });
+  }
+
+  function copyAlsoFieldAgentSql() {
+    startTransition(async () => {
+      try {
+        const sql = await getAlsoFieldAgentMigrationSql();
+        await navigator.clipboard.writeText(sql);
+        toast.success("SQL copied. Paste it in the Supabase SQL editor and click Run.");
+      } catch {
+        toast.error("Could not copy the also-field-agent SQL");
       }
     });
   }
@@ -748,8 +813,9 @@ export function AdminView({
               <NativeSelect
                 id="role"
                 name="role"
-                defaultValue="supporter"
+                value={inviteRole}
                 disabled={pending}
+                onChange={(e) => setInviteRole(e.target.value as UserRole)}
               >
                 {ROLE_OPTIONS.map(([value, label]) => (
                   <option key={value} value={value}>
@@ -767,6 +833,24 @@ export function AdminView({
                 phone can be used as the HQ username.
               </p>
             </div>
+            {inviteRole === "ward_coordinator" ? (
+              <label className="sm:col-span-2 flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <input
+                  type="checkbox"
+                  name="also_field_agent"
+                  value="true"
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                  disabled={pending}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Also polling unit agent</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    They keep the Ward Coordinator HQ views and also get Agent Portal / polling-unit
+                    access. Assign their unit under PU Agents after invite.
+                  </span>
+                </span>
+              </label>
+            ) : null}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="ward">Ward</Label>
@@ -850,6 +934,11 @@ export function AdminView({
             SQL fix.{" "}
             <button type="button" className="underline" onClick={copyInviteRepairSql} disabled={pending}>
               Copy SQL
+            </button>
+            {" · "}
+            For ward coordinator + PU agent,{" "}
+            <button type="button" className="underline" onClick={copyAlsoFieldAgentSql} disabled={pending}>
+              Copy also-field-agent SQL
             </button>
             {" · "}
             <a
@@ -939,27 +1028,18 @@ export function AdminView({
                     </div>
                   </div>
                   {canCreate ? (
-                  <form action={handleRoleChange} className="flex items-center gap-2">
-                    <input type="hidden" name="user_id" value={p.id} />
-                    <NativeSelect
-                      name="role"
-                      defaultValue={p.role}
-                      className="w-auto"
-                      disabled={pending}
-                    >
-                      {ROLE_OPTIONS.map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </NativeSelect>
-                    <Button type="submit" size="sm" variant="secondary" disabled={pending}>
-                      Save
-                    </Button>
-                    <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
-                  </form>
+                  <TeamMemberRoleForm
+                    profile={p}
+                    pending={pending}
+                    onSubmit={handleRoleChange}
+                  />
                   ) : (
-                    <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{p.role.replace(/_/g, " ")}</Badge>
+                      {p.role === "ward_coordinator" && p.also_field_agent ? (
+                        <Badge variant="outline">+ PU agent</Badge>
+                      ) : null}
+                    </div>
                   )}
                 </div>
               );

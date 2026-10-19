@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -29,7 +29,13 @@ import {
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
 import { displayInviteLogin } from "@/lib/admin/invite-identity";
-import { formatInviteCredentials } from "@/lib/auth/invite-credentials";
+import {
+  clearStoredInviteCredentials,
+  formatInviteCredentials,
+  readStoredInviteCredentials,
+  resolvePublicLoginUrl,
+  writeStoredInviteCredentials,
+} from "@/lib/auth/invite-credentials";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 import { formatTermiiWallet } from "@/lib/integrations/termii/wallet";
@@ -307,10 +313,40 @@ export function AdminView({
   const [inviteRole, setInviteRole] = useState<UserRole>("supporter");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  function resolveInviteLoginUrl(fromServer?: string | null) {
-    if (fromServer) return fromServer;
-    if (typeof window !== "undefined") return `${window.location.origin}/login`;
-    return "/login";
+  useEffect(() => {
+    const stored = readStoredInviteCredentials();
+    if (!stored) return;
+    setInvitePassword(stored.password);
+    setInviteLoginEmail(stored.username);
+    setInviteLoginUrl(
+      resolvePublicLoginUrl(stored.loginUrl, typeof window !== "undefined" ? window.location.origin : null)
+    );
+  }, []);
+
+  function applyInviteCredentials(input: {
+    username: string;
+    password: string;
+    loginUrl?: string | null;
+  }) {
+    const loginUrl = resolvePublicLoginUrl(
+      input.loginUrl,
+      typeof window !== "undefined" ? window.location.origin : null
+    );
+    setInvitePassword(input.password);
+    setInviteLoginEmail(input.username);
+    setInviteLoginUrl(loginUrl);
+    writeStoredInviteCredentials({
+      username: input.username,
+      password: input.password,
+      loginUrl,
+    });
+  }
+
+  function dismissInviteCredentials() {
+    setInvitePassword(null);
+    setInviteLoginEmail(null);
+    setInviteLoginUrl(null);
+    clearStoredInviteCredentials();
   }
 
   function copyInviteField(label: string, value: string) {
@@ -321,11 +357,14 @@ export function AdminView({
   }
 
   function copyAllInviteCredentials() {
-    if (!inviteLoginEmail || !invitePassword || !inviteLoginUrl) return;
+    if (!inviteLoginEmail || !invitePassword) return;
+    const loginUrl =
+      inviteLoginUrl ||
+      resolvePublicLoginUrl(null, typeof window !== "undefined" ? window.location.origin : null);
     const text = formatInviteCredentials({
       username: inviteLoginEmail,
       password: invitePassword,
-      loginUrl: inviteLoginUrl,
+      loginUrl,
     });
     void navigator.clipboard.writeText(text).then(
       () => toast.success("Login details copied"),
@@ -442,23 +481,24 @@ export function AdminView({
         toast.error(toErrorMessage(result.error, "Could not invite that user"));
         return;
       }
-      if ("temporaryPassword" in result && result.temporaryPassword) {
-        setInvitePassword(result.temporaryPassword);
-        setInviteLoginEmail(
-          "loginEmail" in result && typeof result.loginEmail === "string" ? result.loginEmail : null
-        );
-        setInviteLoginUrl(
-          resolveInviteLoginUrl(
-            "loginUrl" in result && typeof result.loginUrl === "string" ? result.loginUrl : null
-          )
-        );
+      if (
+        "temporaryPassword" in result &&
+        result.temporaryPassword &&
+        "loginEmail" in result &&
+        typeof result.loginEmail === "string" &&
+        result.loginEmail
+      ) {
+        applyInviteCredentials({
+          username: result.loginEmail,
+          password: result.temporaryPassword,
+          loginUrl: "loginUrl" in result && typeof result.loginUrl === "string" ? result.loginUrl : null,
+        });
         toast.success(result.message ?? "User invited");
       } else {
-        setInvitePassword(null);
-        setInviteLoginEmail(null);
-        setInviteLoginUrl(null);
+        dismissInviteCredentials();
         toast.success(result.message ?? "User invited");
       }
+      // Refresh the team list after credentials are stored so a remount can restore the panel.
       router.refresh();
     });
   }
@@ -867,14 +907,19 @@ export function AdminView({
               </Button>
             </div>
           </form>
-          {invitePassword && inviteLoginEmail && inviteLoginUrl ? (
+          {invitePassword && inviteLoginEmail ? (
             <div className="mt-3 space-y-3 rounded-md border border-border bg-muted/40 p-3 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-medium text-foreground">Send these login details now</p>
-                <Button type="button" size="sm" variant="secondary" onClick={copyAllInviteCredentials}>
-                  <Copy className="mr-1.5 h-3.5 w-3.5" />
-                  Copy all
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="secondary" onClick={copyAllInviteCredentials}>
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    Copy all
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={dismissInviteCredentials}>
+                    Dismiss
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -910,13 +955,28 @@ export function AdminView({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Login URL</p>
-                    <code className="break-all font-mono text-foreground">{inviteLoginUrl}</code>
+                    <code className="break-all font-mono text-foreground">
+                      {inviteLoginUrl ||
+                        resolvePublicLoginUrl(
+                          null,
+                          typeof window !== "undefined" ? window.location.origin : null
+                        )}
+                    </code>
                   </div>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => copyInviteField("Login URL", inviteLoginUrl)}
+                    onClick={() =>
+                      copyInviteField(
+                        "Login URL",
+                        inviteLoginUrl ||
+                          resolvePublicLoginUrl(
+                            null,
+                            typeof window !== "undefined" ? window.location.origin : null
+                          )
+                      )
+                    }
                   >
                     <Copy className="mr-1.5 h-3.5 w-3.5" />
                     Copy

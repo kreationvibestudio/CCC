@@ -142,12 +142,19 @@ export async function inviteUser(formData: FormData) {
     revalidatePath("/agent");
     const who = emailProvided || phoneProvided ? loginUsername : fullName;
     const base = appBaseUrl();
-    const loginUrl = base ? `${base}/login` : undefined;
+    const vercelHost = (process.env.VERCEL_URL ?? "").trim().replace(/\/$/, "");
+    const loginUrl = created.created
+      ? base
+        ? `${base}/login`
+        : vercelHost
+          ? `https://${vercelHost}/login`
+          : undefined
+      : undefined;
     return {
       success: true as const,
       temporaryPassword: created.created ? password : undefined,
       loginEmail: created.created ? loginUsername : undefined,
-      loginUrl: created.created ? loginUrl : undefined,
+      loginUrl,
       emailProvided,
       phoneProvided,
       message: created.created

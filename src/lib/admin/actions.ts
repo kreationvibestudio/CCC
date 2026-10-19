@@ -9,6 +9,11 @@ import { denyCreateIfRestricted, denyDeleteIfRestricted, ROLE_LABELS, type UserR
 import { createInvitedAuthUser } from "@/lib/invites";
 import { resolveInviteIdentity } from "@/lib/admin/invite-identity";
 import { easyTempPassword } from "@/lib/auth/easy-temp-password";
+import {
+  ALSO_FIELD_AGENT_MIGRATION_SQL,
+  readAlsoFieldAgentFlag,
+  resolveAlsoFieldAgent,
+} from "@/lib/auth/also-field-agent";
 import { appBaseUrl } from "@/lib/campaign";
 import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
@@ -47,6 +52,7 @@ export async function inviteUser(formData: FormData) {
     if (roleRaw === "super_administrator" && adminUser.role !== "super_administrator") {
       return { error: "Only a super administrator can create another super administrator" };
     }
+    const alsoFieldAgent = resolveAlsoFieldAgent(roleRaw, readAlsoFieldAgentFlag(formData));
 
     const admin = createServiceClient();
     if (emailProvided || phoneProvided) {
@@ -97,19 +103,28 @@ export async function inviteUser(formData: FormData) {
       return { error: raw };
     }
 
-    const { error: profileError } = await admin.from("profiles").upsert(
-      {
-        id: created.userId,
-        tenant_id: adminUser.profile.tenant_id,
-        email,
-        full_name: fullName,
-        role: roleRaw,
-        ward,
-        lga,
-        ...(phone ? { phone } : {}),
-      },
-      { onConflict: "id" }
-    );
+    const profilePayload: Record<string, unknown> = {
+      id: created.userId,
+      tenant_id: adminUser.profile.tenant_id,
+      email,
+      full_name: fullName,
+      role: roleRaw,
+      ward,
+      lga,
+      also_field_agent: alsoFieldAgent,
+      ...(phone ? { phone } : {}),
+    };
+    let profileError = (await admin.from("profiles").upsert(profilePayload, { onConflict: "id" })).error;
+    if (isMissingColumnError(profileError?.message, "also_field_agent")) {
+      if (alsoFieldAgent) {
+        return {
+          error:
+            "Dual ward coordinator + field agent needs a one-time SQL update. Use Copy also-field-agent SQL on Admin, run it in Supabase, then invite again.",
+        };
+      }
+      delete profilePayload.also_field_agent;
+      profileError = (await admin.from("profiles").upsert(profilePayload, { onConflict: "id" })).error;
+    }
     if (profileError) return { error: toErrorMessage(profileError, "Could not save the team profile") };
 
     await logAudit("admin.invite", "user", created.userId, {
@@ -120,6 +135,7 @@ export async function inviteUser(formData: FormData) {
       email_provided: emailProvided,
       phone_provided: phoneProvided,
       role: roleRaw,
+      also_field_agent: alsoFieldAgent,
     });
     revalidatePath("/admin");
     revalidatePath("/polling-units/agents");
@@ -139,7 +155,9 @@ export async function inviteUser(formData: FormData) {
           ? emailProvided || phoneProvided
             ? `Invited ${who} as Field Agent. Copy their login details below, then tie them to a polling unit under Polling units → PU Agents.`
             : `Invited ${who} as Field Agent (no email/phone). Copy their login details below, then tie them to a polling unit under Polling units → PU Agents.`
-          : `Invited ${who}. Copy their login details below and send them securely. They must set a permanent password at first sign-in.`
+          : alsoFieldAgent
+            ? `Invited ${who} as Ward Coordinator with polling-unit agent access. Copy their login details below, then assign a PU under Polling units → PU Agents.`
+            : `Invited ${who}. Copy their login details below and send them securely. They must set a permanent password at first sign-in.`
         : `Updated ${who} in this campaign workspace.`,
     };
   } catch (e) {
@@ -278,6 +296,7 @@ export async function updateUserRole(formData: FormData) {
     if (roleRaw === "super_administrator" && adminUser.role !== "super_administrator") {
       return { error: "Only a super administrator can assign that role" };
     }
+    const alsoFieldAgent = resolveAlsoFieldAgent(roleRaw, readAlsoFieldAgentFlag(formData));
 
     const admin = createServiceClient();
     const { data: existing, error: findError } = await admin
@@ -288,17 +307,32 @@ export async function updateUserRole(formData: FormData) {
       .maybeSingle();
     if (findError || !existing) return { error: "User not found in this campaign" };
 
-    const { error } = await admin
+    const payload: Record<string, unknown> = { role: roleRaw, also_field_agent: alsoFieldAgent };
+    let { error } = await admin
       .from("profiles")
-      .update({ role: roleRaw })
+      .update(payload)
       .eq("id", userId)
       .eq("tenant_id", adminUser.profile.tenant_id);
+    if (isMissingColumnError(error?.message, "also_field_agent")) {
+      if (alsoFieldAgent) {
+        return {
+          error:
+            "Dual ward coordinator + field agent needs a one-time SQL update. Use Copy also-field-agent SQL on Admin, run it in Supabase, then save again.",
+        };
+      }
+      ({ error } = await admin
+        .from("profiles")
+        .update({ role: roleRaw })
+        .eq("id", userId)
+        .eq("tenant_id", adminUser.profile.tenant_id));
+    }
     if (error) return { error: toErrorMessage(error, "Could not update that role") };
 
     await logAudit("admin.role_change", "user", userId, {
       email: existing.email,
       from: existing.role,
       to: roleRaw,
+      also_field_agent: alsoFieldAgent,
     });
     revalidatePath("/admin");
     revalidatePath("/agent");
@@ -306,6 +340,11 @@ export async function updateUserRole(formData: FormData) {
   } catch (e) {
     return { error: toErrorMessage(e, "Role update failed") };
   }
+}
+
+export async function getAlsoFieldAgentMigrationSql() {
+  await requirePermission("admin.users");
+  return ALSO_FIELD_AGENT_MIGRATION_SQL;
 }
 
 async function clearProfileReferences(admin: ReturnType<typeof createServiceClient>, userId: string, tenantId: string) {

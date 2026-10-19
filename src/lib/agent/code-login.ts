@@ -201,15 +201,30 @@ export async function loginWithAgentCode(input: {
     return { error: "That agent code has expired. Ask HQ to issue a new one." };
   }
 
-  const [{ data: profile }, { data: pu }] = await Promise.all([
-    admin.from("profiles").select("id, email, full_name, role, tenant_id").eq("id", row.profile_id).maybeSingle(),
+  let profileQuery = await admin
+    .from("profiles")
+    .select("id, email, full_name, role, tenant_id, also_field_agent")
+    .eq("id", row.profile_id)
+    .maybeSingle();
+  if (isMissingColumnError(profileQuery.error?.message, "also_field_agent")) {
+    profileQuery = await admin
+      .from("profiles")
+      .select("id, email, full_name, role, tenant_id")
+      .eq("id", row.profile_id)
+      .maybeSingle();
+  }
+  const [{ data: pu }] = await Promise.all([
     admin
       .from("polling_units")
       .select("id, code, pu_code, name, ward, lga, state, latitude, longitude, assigned_agent_id, tenant_id, state_code, lg_code, ward_code")
       .eq("id", row.polling_unit_id)
       .maybeSingle(),
   ]);
-  if (!profile || profile.role !== "polling_agent") {
+  const profile = profileQuery.data as
+    | { id: string; email: string; full_name: string; role: string; tenant_id: string; also_field_agent?: boolean }
+    | null;
+  const alsoAgent = profile?.role === "ward_coordinator" && Boolean(profile.also_field_agent);
+  if (!profile || (profile.role !== "polling_agent" && !alsoAgent)) {
     return { error: "That code is not a Field Agent login" };
   }
   if (!pu || pu.tenant_id !== profile.tenant_id) {

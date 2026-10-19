@@ -4,7 +4,8 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { UserRole, Permission } from "@/types/auth";
-import { canCreateRecords, hasPermission, hasAnyPermission, ROLE_PERMISSIONS } from "@/types/auth";
+import { canCreateRecords, ROLE_PERMISSIONS } from "@/types/auth";
+import { permissionsForRole } from "@/lib/auth/also-field-agent";
 import { redirect } from "next/navigation";
 import type { Profile } from "@/types/database";
 import { platformOperatorEmails } from "@/lib/tenancy";
@@ -216,12 +217,15 @@ async function assembleAuthUser(user: User, db: SupabaseClient): Promise<AuthUse
   const role = (supportAccess ? "super_administrator" : profile.role) as UserRole;
   const workspace = await loadWorkspace(effectiveTenantId, db);
 
+  const profileRow = { ...(profile as Profile), tenant_id: effectiveTenantId };
   const assembled = {
     id: user.id,
     email: user.email ?? profile.email,
-    profile: { ...(profile as Profile), tenant_id: effectiveTenantId },
+    profile: profileRow,
     role,
-    permissions: ROLE_PERMISSIONS[role] ?? [],
+    permissions: permissionsForRole(role, {
+      alsoFieldAgent: supportAccess ? false : Boolean(profileRow.also_field_agent),
+    }),
     workspace,
     isPlatformOperator: isOperator,
     supportAccess,
@@ -255,7 +259,7 @@ export async function requireAuth(): Promise<AuthUser> {
 
 export async function requirePermission(permission: Permission): Promise<AuthUser> {
   const user = await requireAuth();
-  if (!hasPermission(user.role, permission)) throw new Error("Forbidden");
+  if (!user.permissions.includes(permission)) throw new Error("Forbidden");
   return user;
 }
 
@@ -277,7 +281,7 @@ export type ActionGate = { ok: true; user: AuthUser } | { ok: false; error: stri
 export async function authorize(...permissions: Permission[]): Promise<ActionGate> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "Unauthorized" };
-  if (permissions.length > 0 && !hasAnyPermission(user.role, permissions)) {
+  if (permissions.length > 0 && !permissions.some((p) => user.permissions.includes(p))) {
     return { ok: false, error: FORBIDDEN_MESSAGE };
   }
   return { ok: true, user };

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Build a signed CCC HQ TWA APK for sideload on Android (Samsung Fold, etc.).
+# Build a signed CCC HQ TWA APK for sideload (Android 9+ / API 21+).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$ROOT/../.." && pwd)"
+APKS_DIR="$REPO/apks"
 cd "$ROOT"
 
 if [[ ! -f android-keys/ccc-hq-upload.keystore ]]; then
@@ -24,5 +26,14 @@ echo "sdk.dir=${ANDROID_HOME}" > local.properties
 
 ./gradlew assembleRelease
 APK="$ROOT/app/build/outputs/apk/release/app-release.apk"
+VERSION="$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' app/build.gradle | head -1)"
+VERSION="${VERSION:-1.0.0}"
+mkdir -p "$APKS_DIR"
+OUT_HQ="$APKS_DIR/ccc-hq-v${VERSION}-android9.apk"
+OUT_LATEST="$APKS_DIR/ccc-hq-latest.apk"
+cp -f "$APK" "$OUT_HQ"
+ln -sfn "$(basename "$OUT_HQ")" "$OUT_LATEST"
+
 echo "Built: $APK"
-ls -la "$APK"
+echo "Copied into apks/:"
+ls -la "$OUT_HQ" "$OUT_LATEST"

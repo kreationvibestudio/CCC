@@ -27,6 +27,7 @@ import {
 } from "@/lib/admin/actions";
 import { ROLE_LABELS, type UserRole } from "@/types/auth";
 import { toErrorMessage } from "@/lib/public-error";
+import { isSyntheticInviteEmail } from "@/lib/admin/invite-identity";
 import { usePermissions } from "@/components/providers/auth-provider";
 import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 import { formatTermiiWallet } from "@/lib/integrations/termii/wallet";
@@ -248,6 +249,7 @@ export function AdminView({
   const { canCreate, canDelete } = usePermissions();
   const [pending, startTransition] = useTransition();
   const [invitePassword, setInvitePassword] = useState<string | null>(null);
+  const [inviteLoginEmail, setInviteLoginEmail] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const deletableProfiles = profiles.filter((p) => p.id !== currentUserId);
@@ -349,9 +351,14 @@ export function AdminView({
       }
       if ("temporaryPassword" in result && result.temporaryPassword) {
         setInvitePassword(result.temporaryPassword);
+        setInviteLoginEmail(
+          "loginEmail" in result && typeof result.loginEmail === "string" ? result.loginEmail : null
+        );
         toast.success(result.message ?? "User invited");
       } else {
-        toast.success("User invited");
+        setInvitePassword(null);
+        setInviteLoginEmail(null);
+        toast.success(result.message ?? "User invited");
       }
       router.refresh();
     });
@@ -676,8 +683,15 @@ export function AdminView({
               <Input id="full_name" name="full_name" required disabled={pending} />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" required disabled={pending} />
+              <Label htmlFor="email">Email (optional)</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="off"
+                placeholder="Leave blank if they have no email"
+                disabled={pending}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="role">Role</Label>
@@ -719,11 +733,21 @@ export function AdminView({
             </div>
           </form>
           {invitePassword && (
-            <p className="mt-3 rounded-md border border-border bg-muted/40 p-3 text-sm">
-              Temporary password (copy now):{" "}
-              <code className="font-mono text-foreground">{invitePassword}</code>
-              . They must replace it at first sign-in before HQ opens.
-            </p>
+            <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 p-3 text-sm">
+              {inviteLoginEmail ? (
+                <p>
+                  Login id (copy now):{" "}
+                  <code className="font-mono text-foreground">{inviteLoginEmail}</code>
+                </p>
+              ) : null}
+              <p>
+                Temporary password (copy now):{" "}
+                <code className="font-mono text-foreground">{invitePassword}</code>
+              </p>
+              <p className="text-muted-foreground">
+                They must replace the password at first sign-in before HQ opens.
+              </p>
+            </div>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
             If invite shows “Database error creating new user”, the cloud signup trigger needs a one-time
@@ -805,7 +829,11 @@ export function AdminView({
                       <dl className="mt-1 grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-3">
                         <div>
                           <dt className="inline font-medium text-foreground/70">Email: </dt>
-                          <dd className="inline break-all">{p.email || "—"}</dd>
+                          <dd className="inline break-all">
+                            {isSyntheticInviteEmail(p.email)
+                              ? `No email · login ${p.email}`
+                              : p.email || "—"}
+                          </dd>
                         </div>
                         <div>
                           <dt className="inline font-medium text-foreground/70">Ward: </dt>

@@ -7,6 +7,10 @@ export type UserRole =
   | "social_media_team"
   | "volunteer_coordinator"
   | "ward_coordinator"
+  | "ward_woman_leader"
+  | "unit_woman_leader"
+  | "lga_woman_leader"
+  | "senatorial_woman_leader"
   | "polling_unit_supervisor"
   | "polling_agent"
   | "data_analyst"
@@ -58,6 +62,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   social_media_team: "Social Media Team",
   volunteer_coordinator: "Volunteer Coordinator",
   ward_coordinator: "Ward Coordinator",
+  ward_woman_leader: "Ward Woman Leader",
+  unit_woman_leader: "Unit Woman Leader",
+  lga_woman_leader: "LGA Woman Leader",
+  senatorial_woman_leader: "Senatorial Woman Leader",
   polling_unit_supervisor: "Polling Unit Supervisor",
   polling_agent: "Field Agent",
   data_analyst: "Data Analyst",
@@ -117,6 +125,22 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "events.manage", "communications.view", "communications.send",
   ],
   ward_coordinator: [
+    "dashboard.view", "volunteers.view", "training.view", "events.view", "polling_units.view",
+    "maps.view", "communications.view",
+  ],
+  ward_woman_leader: [
+    "dashboard.view", "volunteers.view", "training.view", "events.view", "polling_units.view",
+    "maps.view", "communications.view",
+  ],
+  unit_woman_leader: [
+    "dashboard.view", "volunteers.view", "training.view", "events.view", "polling_units.view",
+    "maps.view", "communications.view",
+  ],
+  lga_woman_leader: [
+    "dashboard.view", "volunteers.view", "training.view", "events.view", "polling_units.view",
+    "maps.view", "communications.view",
+  ],
+  senatorial_woman_leader: [
     "dashboard.view", "volunteers.view", "training.view", "events.view", "polling_units.view",
     "maps.view", "communications.view",
   ],

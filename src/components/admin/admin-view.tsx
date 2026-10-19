@@ -20,6 +20,7 @@ import {
   getPurgeNonEdoMigrationSql,
   getInviteRepairSql,
   getAlsoFieldAgentMigrationSql,
+  getWomanLeaderRolesMigrationSql,
   updateCampaignDates,
   updateCampaignWebsite,
   getCampaignDatesMigrationSql,
@@ -458,6 +459,18 @@ export function AdminView({
         toast.success("SQL copied. Paste it in the Supabase SQL editor and click Run.");
       } catch {
         toast.error("Could not copy the also-field-agent SQL");
+      }
+    });
+  }
+
+  function copyWomanLeaderRolesSql() {
+    startTransition(async () => {
+      try {
+        const sql = await getWomanLeaderRolesMigrationSql();
+        await navigator.clipboard.writeText(sql);
+        toast.success("SQL copied. Paste it in the Supabase SQL editor and click Run.");
+      } catch {
+        toast.error("Could not copy the woman-leader roles SQL");
       }
     });
   }
@@ -999,6 +1012,11 @@ export function AdminView({
             For ward coordinator + PU agent,{" "}
             <button type="button" className="underline" onClick={copyAlsoFieldAgentSql} disabled={pending}>
               Copy also-field-agent SQL
+            </button>
+            {" · "}
+            For woman leader roles,{" "}
+            <button type="button" className="underline" onClick={copyWomanLeaderRolesSql} disabled={pending}>
+              Copy woman-leader roles SQL
             </button>
             {" · "}
             <a

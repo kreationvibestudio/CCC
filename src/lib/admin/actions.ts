@@ -14,6 +14,10 @@ import {
   readAlsoFieldAgentFlag,
   resolveAlsoFieldAgent,
 } from "@/lib/auth/also-field-agent";
+import {
+  WOMAN_LEADER_ROLES_MIGRATION_SQL,
+  isWomanLeaderRoleError,
+} from "@/lib/auth/woman-leader-roles";
 import { appBaseUrl } from "@/lib/campaign";
 import { toErrorMessage, isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { adminDeleteAuthUser } from "@/lib/auth/admin-users";
@@ -100,6 +104,12 @@ export async function inviteUser(formData: FormData) {
           error: `${raw}. Paste supabase/migrations/20260823000002_handle_new_user_never_abort.sql in the Supabase SQL editor and run it, then invite again.`,
         };
       }
+      if (isWomanLeaderRoleError(raw)) {
+        return {
+          error:
+            "Woman leader roles need a one-time SQL update. Use Copy woman-leader roles SQL on Admin, run it in Supabase, then invite again.",
+        };
+      }
       return { error: raw };
     }
 
@@ -125,7 +135,16 @@ export async function inviteUser(formData: FormData) {
       delete profilePayload.also_field_agent;
       profileError = (await admin.from("profiles").upsert(profilePayload, { onConflict: "id" })).error;
     }
-    if (profileError) return { error: toErrorMessage(profileError, "Could not save the team profile") };
+    if (profileError) {
+      const raw = toErrorMessage(profileError, "Could not save the team profile");
+      if (isWomanLeaderRoleError(raw)) {
+        return {
+          error:
+            "Woman leader roles need a one-time SQL update. Use Copy woman-leader roles SQL on Admin, run it in Supabase, then invite again.",
+        };
+      }
+      return { error: raw };
+    }
 
     await logAudit("admin.invite", "user", created.userId, {
       email: emailProvided ? email : null,
@@ -333,7 +352,16 @@ export async function updateUserRole(formData: FormData) {
         .eq("id", userId)
         .eq("tenant_id", adminUser.profile.tenant_id));
     }
-    if (error) return { error: toErrorMessage(error, "Could not update that role") };
+    if (error) {
+      const raw = toErrorMessage(error, "Could not update that role");
+      if (isWomanLeaderRoleError(raw)) {
+        return {
+          error:
+            "Woman leader roles need a one-time SQL update. Use Copy woman-leader roles SQL on Admin, run it in Supabase, then save again.",
+        };
+      }
+      return { error: raw };
+    }
 
     await logAudit("admin.role_change", "user", userId, {
       email: existing.email,
@@ -352,6 +380,11 @@ export async function updateUserRole(formData: FormData) {
 export async function getAlsoFieldAgentMigrationSql() {
   await requirePermission("admin.users");
   return ALSO_FIELD_AGENT_MIGRATION_SQL;
+}
+
+export async function getWomanLeaderRolesMigrationSql() {
+  await requirePermission("admin.users");
+  return WOMAN_LEADER_ROLES_MIGRATION_SQL;
 }
 
 async function clearProfileReferences(admin: ReturnType<typeof createServiceClient>, userId: string, tenantId: string) {

@@ -67,6 +67,11 @@ export async function getAgentRegistrationStates(): Promise<string[]> {
     const key = s.trim().toUpperCase().startsWith("EDO") ? "Edo" : s.trim();
     if (!normalized.has(key.toUpperCase())) normalized.set(key.toUpperCase(), key === "Edo" ? "Edo" : s.trim());
   }
+  if (normalized.size === 0) {
+    // Campaign is Edo-scoped; keep the selector usable before PU import.
+    const { CAMPAIGN_STATE_LABEL } = await import("@/lib/polling-units/scope");
+    return [CAMPAIGN_STATE_LABEL.replace(/\s+State$/i, "") || "Edo"];
+  }
   return [...normalized.values()].sort((a, b) => a.localeCompare(b));
 }
 

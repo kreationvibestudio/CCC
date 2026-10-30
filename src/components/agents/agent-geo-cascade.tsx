@@ -17,6 +17,7 @@ type Props = {
   initialState?: string;
   initialWardValue?: string;
   initialPuCode?: string;
+  initialPuId?: string;
   /** When true, only show unassigned polling units. */
   unassignedOnly?: boolean;
   onResolved?: (geo: {
@@ -24,6 +25,7 @@ type Props = {
     lga: string;
     ward: string;
     puCode: string;
+    puId: string;
   }) => void;
 };
 
@@ -32,6 +34,7 @@ export function AgentGeoCascade({
   initialState = "",
   initialWardValue = "",
   initialPuCode = "",
+  initialPuId = "",
   unassignedOnly = true,
   onResolved,
 }: Props) {
@@ -41,6 +44,7 @@ export function AgentGeoCascade({
   const [units, setUnits] = useState<AgentPuOption[]>([]);
   const [state, setState] = useState(initialState);
   const [wardValue, setWardValue] = useState(initialWardValue);
+  const [puId, setPuId] = useState(initialPuId);
   const [puCode, setPuCode] = useState(initialPuCode);
 
   useEffect(() => {
@@ -58,6 +62,7 @@ export function AgentGeoCascade({
       setWards([]);
       setWardValue("");
       setUnits([]);
+      setPuId("");
       setPuCode("");
       return;
     }
@@ -68,6 +73,7 @@ export function AgentGeoCascade({
       setWards(list);
       if (wardValue && !list.some((w) => w.value === wardValue)) {
         setWardValue("");
+        setPuId("");
         setPuCode("");
         setUnits([]);
       }
@@ -80,6 +86,7 @@ export function AgentGeoCascade({
   useEffect(() => {
     if (!state || !wardValue) {
       setUnits([]);
+      setPuId("");
       setPuCode("");
       return;
     }
@@ -92,7 +99,16 @@ export function AgentGeoCascade({
       });
       if (cancelled) return;
       setUnits(list);
-      setPuCode((current) => (current && list.some((u) => u.code === current) ? current : ""));
+      setPuId((current) => {
+        const still = current && list.some((u) => u.id === current);
+        if (still) {
+          const match = list.find((u) => u.id === current);
+          setPuCode(match?.code ?? "");
+          return current;
+        }
+        setPuCode("");
+        return "";
+      });
     });
     return () => {
       cancelled = true;
@@ -106,8 +122,9 @@ export function AgentGeoCascade({
       lga: decoded?.lga ?? "",
       ward: decoded?.ward ?? "",
       puCode,
+      puId,
     });
-  }, [state, wardValue, puCode, onResolved]);
+  }, [state, wardValue, puCode, puId, onResolved]);
 
   const busy = disabled || pending;
 
@@ -124,6 +141,7 @@ export function AgentGeoCascade({
           onChange={(e) => {
             setState(e.target.value);
             setWardValue("");
+            setPuId("");
             setPuCode("");
             setUnits([]);
           }}
@@ -146,6 +164,7 @@ export function AgentGeoCascade({
           value={wardValue}
           onChange={(e) => {
             setWardValue(e.target.value);
+            setPuId("");
             setPuCode("");
           }}
         >
@@ -163,21 +182,26 @@ export function AgentGeoCascade({
         <Label htmlFor="agent_pu">Polling unit</Label>
         <NativeSelect
           id="agent_pu"
-          name="pu_code"
+          name="polling_unit_id"
           required
           disabled={busy || !wardValue}
-          value={puCode}
-          onChange={(e) => setPuCode(e.target.value)}
+          value={puId}
+          onChange={(e) => {
+            const nextId = e.target.value;
+            setPuId(nextId);
+            setPuCode(units.find((u) => u.id === nextId)?.code ?? "");
+          }}
         >
           <option value="">{wardValue ? "Select polling unit" : "Select ward first"}</option>
           {units.map((u) => (
-            <option key={u.id} value={u.code}>
+            <option key={u.id} value={u.id}>
               {u.code}
               {u.name ? ` — ${u.name}` : ""}
               {u.assigned ? " (assigned)" : ""}
             </option>
           ))}
         </NativeSelect>
+        <input type="hidden" name="pu_code" value={puCode} />
         {wardValue && units.length === 0 && !pending ? (
           <p className="text-xs text-muted-foreground">
             No {unassignedOnly ? "unassigned " : ""}polling units in this ward.

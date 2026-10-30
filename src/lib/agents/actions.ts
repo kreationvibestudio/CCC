@@ -545,7 +545,8 @@ export async function provisionPinnedPollingUnits(input?: { limit?: number }): P
 }
 
 export async function assignPollingAgent(input: {
-  puCode: string;
+  puCode?: string;
+  pollingUnitId?: string;
   email?: string;
   fullName?: string;
   phone?: string;
@@ -579,7 +580,8 @@ export async function assignPollingAgent(input: {
     if (blocked) return { error: blocked };
 
     const emailInput = (input.email ?? "").trim().toLowerCase();
-    const puCode = input.puCode.trim();
+    const puCode = (input.puCode ?? "").trim();
+    const pollingUnitId = (input.pollingUnitId ?? "").trim();
     const phone = (input.phone ?? "").trim() || null;
     const membershipCardNumber = (input.membershipCardNumber ?? "").trim() || null;
     const votersCardNumber = (input.votersCardNumber ?? "").trim() || null;
@@ -594,13 +596,29 @@ export async function assignPollingAgent(input: {
       isLgaCollationAgent: Boolean(input.isLgaCollationAgent),
       isWardCollationAgent: Boolean(input.isWardCollationAgent),
     });
-    if (!puCode) return { error: "Polling unit is required" };
+    if (!puCode && !pollingUnitId) return { error: "Polling unit is required" };
     if (emailInput && !emailInput.includes("@")) return { error: "Valid email is required" };
 
     const supabase = db();
     const tenantId = auth.user.profile.tenant_id;
-    const pu = await findPuByCode(supabase, tenantId, puCode);
-    if (!pu) return { error: `No polling unit matches ${puCode}` };
+    let pu =
+      pollingUnitId.length > 0
+        ? await (async () => {
+            const { data } = await supabase
+              .from("polling_units")
+              .select(PU_COLS)
+              .eq("tenant_id", tenantId)
+              .eq("id", pollingUnitId)
+              .maybeSingle();
+            return data ? withDisplayCode(data) : null;
+          })()
+        : null;
+    if (!pu && puCode) pu = await findPuByCode(supabase, tenantId, puCode);
+    if (!pu) {
+      return {
+        error: `No polling unit matches ${pollingUnitId || puCode}`,
+      };
+    }
 
     if (wardInput && pu.ward && wardInput.toLowerCase() !== String(pu.ward).toLowerCase()) {
       return {

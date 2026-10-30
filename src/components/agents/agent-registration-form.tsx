@@ -86,6 +86,7 @@ export function AgentRegistrationForm({
         lga: String(formData.get("lga") ?? ""),
         ward: String(formData.get("ward") ?? ""),
         puCode: String(formData.get("pu_code") ?? ""),
+        pollingUnitId: String(formData.get("polling_unit_id") ?? ""),
         phone: String(formData.get("phone") ?? ""),
         votersCardNumber: String(formData.get("voters_card_number") ?? ""),
         passportPhotoUrl: String(formData.get("passport_photo_url") ?? ""),

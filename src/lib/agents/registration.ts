@@ -287,7 +287,8 @@ export async function getAgent(id: string): Promise<{
 }
 
 export async function createAgentRegistration(input: {
-  puCode: string;
+  puCode?: string;
+  pollingUnitId?: string;
   fullName: string;
   phone: string;
   state?: string;
@@ -318,14 +319,15 @@ export async function createAgentRegistration(input: {
 
   const fullName = input.fullName.trim();
   const phone = input.phone.trim();
-  const puCode = input.puCode.trim();
+  const puCode = (input.puCode ?? "").trim();
+  const pollingUnitId = (input.pollingUnitId ?? "").trim();
   const votersCardNumber = (input.votersCardNumber ?? "").trim() || null;
   const ninRaw = (input.nin ?? "").trim();
   const nin = ninRaw ? normalizeNin(ninRaw) : null;
   const dateOfBirth = (input.dateOfBirth ?? "").trim() || null;
   if (fullName.length < 2) return { error: "Agent name is required" };
   if (!phone) return { error: "Phone number is required" };
-  if (!puCode) return { error: "Polling unit is required" };
+  if (!puCode && !pollingUnitId) return { error: "Polling unit is required" };
   if (!votersCardNumber) return { error: "Voter's card number is required" };
   if (!nin) return { error: "NIN is required (11 digits)" };
   if (!dateOfBirth) return { error: "Date of birth is required for NIN verification" };
@@ -357,7 +359,8 @@ export async function createAgentRegistration(input: {
   const email = (input.email ?? "").trim().toLowerCase() || null;
 
   const provisioned = await assignPollingAgent({
-    puCode,
+    puCode: puCode || undefined,
+    pollingUnitId: pollingUnitId || undefined,
     fullName,
     phone,
     ward: ward ?? undefined,

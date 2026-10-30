@@ -543,7 +543,7 @@ export async function updateAgentRegistration(
       : row.voters_card_number ?? null;
   if (!votersCardNumber) return { error: "Voter's card number is required" };
 
-  let nin =
+  const nin =
     input.nin !== undefined
       ? input.nin.trim()
         ? normalizeNin(input.nin)

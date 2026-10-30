@@ -556,6 +556,10 @@ export async function assignPollingAgent(input: {
   collationRole?: string;
   isLgaCollationAgent?: boolean;
   isWardCollationAgent?: boolean;
+  nin?: string;
+  dateOfBirth?: string;
+  ninVerifiedAt?: string;
+  ninVerification?: Record<string, unknown> | null;
 }): Promise<{
       error?: string;
       created?: boolean;
@@ -581,6 +585,10 @@ export async function assignPollingAgent(input: {
     const votersCardNumber = (input.votersCardNumber ?? "").trim() || null;
     const passportPhotoUrl = (input.passportPhotoUrl ?? "").trim() || null;
     const wardInput = (input.ward ?? "").trim();
+    const nin = (input.nin ?? "").trim() || null;
+    const dateOfBirth = (input.dateOfBirth ?? "").trim() || null;
+    const ninVerifiedAt = (input.ninVerifiedAt ?? "").trim() || null;
+    const ninVerification = input.ninVerification ?? null;
     const collationRole = normalizeCollationRole({
       collationRole: input.collationRole,
       isLgaCollationAgent: Boolean(input.isLgaCollationAgent),
@@ -672,6 +680,10 @@ export async function assignPollingAgent(input: {
       membership_card_number: membershipCardNumber,
       voters_card_number: votersCardNumber,
       passport_photo_url: passportPhotoUrl,
+      nin,
+      date_of_birth: dateOfBirth,
+      nin_verified_at: ninVerifiedAt,
+      nin_verification: ninVerification,
       ...identity,
     };
 

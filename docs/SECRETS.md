@@ -83,6 +83,7 @@ npm run dev
 | `TERMII_WHATSAPP_DEVICE_ID` / `TERMII_WHATSAPP_TEMPLATE_ID` | WhatsApp training codes (signup + HQ Send codes) |
 | `TERMII_EMAIL_CONFIGURATION_ID` | Email training codes via Termii Email Token (TOKEN → Email Setup). Template ID is optional. |
 | `PAYSTACK_SECRET_KEY` | Optional: auto-record Paystack charges into CRM |
+| `VERIFYME_API_KEY` | Agent NIN verification (VerifyMe / NIMC). Optional `VERIFYME_DEMO_MODE=true` for John Doe test persona |
 | `FACEBOOK_*` | Social sync / comments |
 | `OPENAI_API_KEY` | AI assistant (optional) |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Campaign maps (Leaflet tiles) |

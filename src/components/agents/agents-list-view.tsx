@@ -27,7 +27,7 @@ export function AgentsListView({
     const q = search.trim().toLowerCase();
     if (!q) return agents;
     return agents.filter((a) =>
-      [a.full_name, a.phone, a.pu_code, a.ward, a.membership_card_number, a.voters_card_number]
+      [a.full_name, a.phone, a.pu_code, a.ward, a.membership_card_number, a.voters_card_number, a.nin]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q))
     );
@@ -94,7 +94,7 @@ export function AgentsListView({
           title={agents.length === 0 ? "No agents registered yet" : "No agents match"}
           description={
             agents.length === 0
-              ? "Register an agent to capture membership, ward, polling unit, phone, photo, and collation role."
+              ? "Register an agent with state → ward → polling unit, NIN verification, voter card, phone, and optional membership card."
               : "Try a different search."
           }
           action={
@@ -136,15 +136,19 @@ export function AgentsListView({
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {[
+                        agent.nin ? `NIN ${agent.nin}` : null,
                         agent.membership_card_number
                           ? `Membership ${agent.membership_card_number}`
                           : null,
                         agent.voters_card_number ? `PVC ${agent.voters_card_number}` : null,
                       ]
                         .filter(Boolean)
-                        .join(" · ") || "No membership / PVC on file"}
+                        .join(" · ") || "No NIN / membership / PVC on file"}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-2">
+                      {agent.nin_verified_at ? (
+                        <Badge variant="secondary">NIN verified</Badge>
+                      ) : null}
                       {agent.collation_label ? (
                         <Badge variant="secondary">{agent.collation_label}</Badge>
                       ) : null}

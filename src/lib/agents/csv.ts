@@ -8,6 +8,8 @@ export type AgentCsvRow = {
   ward: string;
   membershipCardNumber: string;
   votersCardNumber: string;
+  nin: string;
+  dateOfBirth: string;
   collationRole: AgentCollationRole;
 };
 
@@ -56,6 +58,8 @@ export function parseAgentAssignmentCsv(text: string): AgentCsvRow[] {
     "pvc",
     "vin",
   ]);
+  const ninIdx = idx(["nin", "national_id", "national_identification_number"]);
+  const dobIdx = idx(["date_of_birth", "dob", "birthdate", "birth_date"]);
   const collationIdx = idx(["collation_role", "collation", "collation_agent"]);
   if (puIdx < 0) return [];
 
@@ -76,6 +80,8 @@ export function parseAgentAssignmentCsv(text: string): AgentCsvRow[] {
       ward: (wardIdx >= 0 ? cols[wardIdx] : "")?.trim() || "",
       membershipCardNumber: (membershipIdx >= 0 ? cols[membershipIdx] : "")?.trim() || "",
       votersCardNumber: (votersIdx >= 0 ? cols[votersIdx] : "")?.trim() || "",
+      nin: (ninIdx >= 0 ? cols[ninIdx] : "")?.trim() || "",
+      dateOfBirth: (dobIdx >= 0 ? cols[dobIdx] : "")?.trim() || "",
       collationRole: normalizeCollationRole({
         collationRole: collationIdx >= 0 ? cols[collationIdx] : "",
       }),
@@ -84,7 +90,7 @@ export function parseAgentAssignmentCsv(text: string): AgentCsvRow[] {
   return rows;
 }
 
-export const AGENT_CSV_TEMPLATE = `full_name,membership_card_number,ward,pu_code,phone,voters_card_number,collation_role
-Jane Agent,MC-10001,Ward 1,EDO/ESAN-WEST/01/001,08030000001,90F5B123456789012,ward
-John Agent,MC-10002,Ward 1,EDO/ESAN-WEST/01/002,08030000002,90F5B123456789013,lga
+export const AGENT_CSV_TEMPLATE = `full_name,membership_card_number,ward,pu_code,phone,voters_card_number,nin,date_of_birth,collation_role
+Jane Agent,MC-10001,Ward 1,EDO/ESAN-WEST/01/001,08030000001,90F5B123456789012,10000000001,1944-04-04,ward
+John Agent,,Ward 1,EDO/ESAN-WEST/01/002,08030000002,90F5B123456789013,10000000001,1944-04-04,lga
 `;

@@ -99,9 +99,12 @@ export function NinVerifyField({
           <Input
             id="date_of_birth"
             name="date_of_birth"
-            type="date"
+            type="text"
+            inputMode="numeric"
+            autoComplete="bday"
             required
             disabled={disabled || pending}
+            placeholder="YYYY-MM-DD or DD-MM-YYYY"
             value={dateOfBirth}
             onChange={(e) => {
               onDateOfBirthChange?.(e.target.value);

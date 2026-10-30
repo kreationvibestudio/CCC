@@ -601,18 +601,16 @@ export async function assignPollingAgent(input: {
 
     const supabase = db();
     const tenantId = auth.user.profile.tenant_id;
-    let pu =
-      pollingUnitId.length > 0
-        ? await (async () => {
-            const { data } = await supabase
-              .from("polling_units")
-              .select(PU_COLS)
-              .eq("tenant_id", tenantId)
-              .eq("id", pollingUnitId)
-              .maybeSingle();
-            return data ? withDisplayCode(data) : null;
-          })()
-        : null;
+    let pu: Awaited<ReturnType<typeof findPuByCode>> = null;
+    if (pollingUnitId.length > 0) {
+      const { data } = await supabase
+        .from("polling_units")
+        .select(PU_COLS)
+        .eq("tenant_id", tenantId)
+        .eq("id", pollingUnitId)
+        .maybeSingle();
+      pu = data ? withDisplayCode(data) : null;
+    }
     if (!pu && puCode) pu = await findPuByCode(supabase, tenantId, puCode);
     if (!pu) {
       return {

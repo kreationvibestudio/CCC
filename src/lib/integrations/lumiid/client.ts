@@ -238,7 +238,8 @@ export async function verifyNinWithLumiId(input: {
     const res = await fetch(`${LUMIID_BASE}/ng/nin-basic/`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ nin }),
+      // Docs vary between `nin` and `id_number` — send both.
+      body: JSON.stringify({ nin, id_number: nin }),
       cache: "no-store",
     });
     const text = await res.text();
@@ -249,21 +250,22 @@ export async function verifyNinWithLumiId(input: {
       json = null;
     }
 
-    const code =
-      json && typeof json === "object" && "code" in json
-        ? String((json as { code: unknown }).code)
-        : "";
+    const root =
+      json && typeof json === "object" ? (json as Record<string, unknown>) : null;
+    const code = root?.code != null ? String(root.code) : "";
+    const detail = root?.detail != null ? String(root.detail) : "";
     const message =
-      json && typeof json === "object" && "message" in json
-        ? String((json as { message: unknown }).message)
-        : "";
+      (root?.message != null ? String(root.message) : "") || detail;
 
-    if (res.status === 401) {
+    if (
+      res.status === 401 ||
+      code === "INVALID_API_KEY" ||
+      /invalid or inactive api key/i.test(message)
+    ) {
       return {
         ok: false,
         error:
-          message ||
-          "LumiID unauthorized — check LUMIID_SECRET_KEY (and LUMIID_APP_ID if your dashboard requires it).",
+          "LumiID API key is invalid or inactive. Paste a fresh Secret Key into Vercel as LUMIID_SECRET_KEY and redeploy.",
       };
     }
     if (
@@ -278,12 +280,31 @@ export async function verifyNinWithLumiId(input: {
           "LumiID wallet has insufficient funds. Top up your wallet in the LumiID console, then retry Verify NIN.",
       };
     }
-    if (res.status === 403 || code === "SUBSCRIPTION_REQUIRED") {
+    if (code === "SUBSCRIPTION_REQUIRED") {
       return {
         ok: false,
         error:
           message ||
           "LumiID NIN product is not enabled on this account. Enable NIN Verification in the LumiID console.",
+      };
+    }
+    if (res.status === 403) {
+      return {
+        ok: false,
+        error:
+          message ||
+          "LumiID rejected the request (403). Check the API key, wallet, and that NIN Verification is enabled.",
+      };
+    }
+    if (
+      code === "NIN_NOT_FOUND" ||
+      /identity record not found/i.test(message) ||
+      /nin.?not.?found/i.test(message)
+    ) {
+      return {
+        ok: false,
+        error:
+          "No NIMC record for that NIN. Re-check all 11 digits. Live keys only work with real NINs — sandbox test NIN 89184072280 needs a sandbox Secret Key.",
       };
     }
     if (!res.ok) {
@@ -294,14 +315,10 @@ export async function verifyNinWithLumiId(input: {
     }
 
     const summaryVerified =
-      json &&
-      typeof json === "object" &&
-      "summary" in json &&
-      (json as { summary?: { verified?: unknown } }).summary?.verified === true;
-    const successFlag =
-      json && typeof json === "object" && "success" in json
-        ? Boolean((json as { success?: unknown }).success)
-        : true;
+      root?.summary &&
+      typeof root.summary === "object" &&
+      (root.summary as { verified?: unknown }).verified === true;
+    const successFlag = root && "success" in root ? Boolean(root.success) : true;
     if (code && code !== "NIN_VERIFIED" && !summaryVerified) {
       return {
         ok: false,

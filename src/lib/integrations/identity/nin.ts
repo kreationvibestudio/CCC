@@ -79,19 +79,28 @@ export async function verifyNinIdentityUnified(input: {
     };
   }
 
-  const result = await verifyNinWithVerifyMe(input);
-  if (!result.ok || !result.data) {
+  if (verifyMeConfigured() || verifyMeDemoModeEnabled() || process.env.NODE_ENV !== "production") {
+    const result = await verifyNinWithVerifyMe(input);
+    if (!result.ok || !result.data) {
+      return {
+        ok: false,
+        error: result.error ?? "NIN verification failed",
+        provider: result.demo ? "demo" : "verifyme",
+      };
+    }
     return {
-      ok: false,
-      error: result.error ?? "NIN verification failed",
+      ok: true,
+      data: result.data,
+      demo: result.demo,
       provider: result.demo ? "demo" : "verifyme",
+      storage: sanitizeNinVerificationForStorage(result.data, { demo: result.demo }),
     };
   }
+
   return {
-    ok: true,
-    data: result.data,
-    demo: result.demo,
-    provider: result.demo ? "demo" : "verifyme",
-    storage: sanitizeNinVerificationForStorage(result.data, { demo: result.demo }),
+    ok: false,
+    provider: "demo",
+    error:
+      "NIN verification is not configured. Add QOREID_CLIENT_ID and QOREID_SECRET_KEY in Vercel (preferred), then redeploy. Optionally set VERIFYME_API_KEY as a fallback.",
   };
 }

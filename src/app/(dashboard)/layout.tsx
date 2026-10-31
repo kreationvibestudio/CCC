@@ -6,6 +6,8 @@ import { hasPermission, isFieldAgentRole } from "@/types/auth";
 import { NAV_ITEMS } from "@/lib/navigation";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { LicenseCountdownChip } from "@/components/admin/license-status-card";
+import { getTenantLicense } from "@/lib/licensing/service";
 
 export default async function DashboardGroupLayout({
   children,
@@ -38,9 +40,32 @@ export default async function DashboardGroupLayout({
     redirect(fallback?.href ?? "/login");
   }
 
+  const license = user.profile.tenant_id
+    ? await getTenantLicense(user.profile.tenant_id).catch(() => null)
+    : null;
+
+  // Expired/suspended licenses stay on Admin so HQ can renew; support sessions skip the gate.
+  const onAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
+  if (
+    !user.supportAccess &&
+    license &&
+    (license.status === "expired" || license.status === "suspended") &&
+    !onAdmin
+  ) {
+    redirect("/admin#license");
+  }
+
+  const showLicenseChip =
+    hasPermission(user.role, "admin.users") ||
+    license?.status === "grace" ||
+    license?.status === "expired" ||
+    license?.status === "missing" ||
+    !license;
+
   return (
     <AuthProvider user={user}>
       <DashboardLayout>{children}</DashboardLayout>
+      {showLicenseChip ? <LicenseCountdownChip license={license} /> : null}
     </AuthProvider>
   );
 }

@@ -6,6 +6,8 @@ import { AdminView } from "@/components/admin/admin-view";
 import { appBaseUrl, paystackPaymentLinkFromSetting } from "@/lib/campaign";
 import { createClient } from "@/lib/supabase/server";
 import { isMissingColumnError } from "@/lib/public-error";
+import { getTenantLicense } from "@/lib/licensing/service";
+import { annualLicenseAmountNaira } from "@/lib/licensing/keys";
 
 function settingText(value: unknown): string {
   if (typeof value === "string") return value.trim();
@@ -20,16 +22,18 @@ function settingText(value: unknown): string {
 export default async function AdminPage() {
   const user = await requirePermission("admin.users");
   const supabase = await createClient();
-  const [{ profiles, auditCount }, secrets, { data: settings }, systemLog] = await Promise.all([
-    getAdminData(user.profile.tenant_id),
-    getSecretsStatus(),
-    supabase
-      .from("tenant_settings")
-      .select("key, value")
-      .eq("tenant_id", user.profile.tenant_id)
-      .in("key", ["paystack_payment_link", "campaign_website"]),
-    getAdminSystemLog(user.profile.tenant_id),
-  ]);
+  const [{ profiles, auditCount }, secrets, { data: settings }, systemLog, license] =
+    await Promise.all([
+      getAdminData(user.profile.tenant_id),
+      getSecretsStatus(),
+      supabase
+        .from("tenant_settings")
+        .select("key, value")
+        .eq("tenant_id", user.profile.tenant_id)
+        .in("key", ["paystack_payment_link", "campaign_website"]),
+      getAdminSystemLog(user.profile.tenant_id),
+      getTenantLicense(user.profile.tenant_id).catch(() => null),
+    ]);
   const byKey = new Map((settings ?? []).map((row) => [row.key as string, row.value]));
   const storedLink = settingText(byKey.get("paystack_payment_link"));
   const campaignWebsite = settingText(byKey.get("campaign_website"));
@@ -75,6 +79,8 @@ export default async function AdminPage() {
       currentUserId={user.id}
       systemLogCount={systemLog.length}
       systemWarningCount={systemLog.filter((e) => e.level === "warning" || e.level === "error").length}
+      license={license}
+      licenseAmountNaira={annualLicenseAmountNaira()}
     />
   );
 }

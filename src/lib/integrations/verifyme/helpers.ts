@@ -18,21 +18,32 @@ export function normalizeNin(raw: string): string | null {
 }
 
 /**
- * VerifyMe expects DOB as DD-MM-YYYY.
+ * Normalize DOB to ISO YYYY-MM-DD.
  * Accepts ISO (YYYY-MM-DD), DD/MM/YYYY, DD-MM-YYYY.
  */
-export function toVerifyMeDob(raw: string): string | null {
+export function toIsoDob(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  if (iso) return `${iso[3]}-${iso[2]}-${iso[1]}`;
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(trimmed);
   if (dmy) {
     const dd = dmy[1].padStart(2, "0");
     const mm = dmy[2].padStart(2, "0");
-    return `${dd}-${mm}-${dmy[3]}`;
+    return `${dmy[3]}-${mm}-${dd}`;
   }
   return null;
+}
+
+/**
+ * VerifyMe expects DOB as DD-MM-YYYY.
+ * Accepts ISO (YYYY-MM-DD), DD/MM/YYYY, DD-MM-YYYY.
+ */
+export function toVerifyMeDob(raw: string): string | null {
+  const iso = toIsoDob(raw);
+  if (!iso) return null;
+  const [yyyy, mm, dd] = iso.split("-");
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 /** Split "Ada Okoro" → firstname Ada, lastname Okoro. */

@@ -266,10 +266,16 @@ export async function verifyNinWithLumiId(input: {
           "LumiID unauthorized — check LUMIID_SECRET_KEY (and LUMIID_APP_ID if your dashboard requires it).",
       };
     }
-    if (res.status === 402) {
+    if (
+      res.status === 402 ||
+      code === "INSUFFICIENT_CREDITS" ||
+      code === "INSUFFICIENT_FUNDS"
+    ) {
       return {
         ok: false,
-        error: message || "LumiID wallet has insufficient funds. Top up in the LumiID console.",
+        error:
+          message ||
+          "LumiID wallet has insufficient funds. Top up your wallet in the LumiID console, then retry Verify NIN.",
       };
     }
     if (res.status === 403 || code === "SUBSCRIPTION_REQUIRED") {
@@ -284,6 +290,28 @@ export async function verifyNinWithLumiId(input: {
       return {
         ok: false,
         error: message || `LumiID returned HTTP ${res.status}`,
+      };
+    }
+
+    const summaryVerified =
+      json &&
+      typeof json === "object" &&
+      "summary" in json &&
+      (json as { summary?: { verified?: unknown } }).summary?.verified === true;
+    const successFlag =
+      json && typeof json === "object" && "success" in json
+        ? Boolean((json as { success?: unknown }).success)
+        : true;
+    if (code && code !== "NIN_VERIFIED" && !summaryVerified) {
+      return {
+        ok: false,
+        error: message || `LumiID NIN verification failed (${code})`,
+      };
+    }
+    if (!successFlag && !summaryVerified) {
+      return {
+        ok: false,
+        error: message || "LumiID NIN verification failed",
       };
     }
 

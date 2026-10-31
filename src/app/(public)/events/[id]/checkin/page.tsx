@@ -27,7 +27,7 @@ export default async function EventCheckInPage({
     );
   }
 
-  if (code && event.qr_code && code !== event.qr_code) {
+  if (!code || !event.qr_code || code !== event.qr_code) {
     return (
       <div className="mx-auto flex min-h-screen max-w-md items-center p-4">
         <p className="w-full text-center">Invalid check-in code</p>
@@ -37,9 +37,10 @@ export default async function EventCheckInPage({
 
   async function action(formData: FormData) {
     "use server";
+    formData.set("qr_code", code!);
     const r = await checkInAttendee(id, formData);
     if (r.error) throw new Error(r.error);
-    redirect(`/events/${id}/checkin?success=1`);
+    redirect(`/events/${id}/checkin?code=${encodeURIComponent(code!)}&success=1`);
   }
 
   if (success) {

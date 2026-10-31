@@ -12,6 +12,7 @@ import {
   fetchPageInfo,
 } from "@/lib/integrations/facebook/client";
 import { syncFacebookToDatabase } from "@/lib/integrations/facebook/sync";
+import { CAMPAIGN_TENANT_ID } from "@/lib/campaign";
 
 function settingString(value: unknown) {
   return normalizeTokenFromSetting(value);
@@ -91,13 +92,19 @@ export async function getFacebookConnectionStatus(tenantId: string) {
     if (row.key === "facebook_last_live_sync_at") lastLiveSyncAt = v;
   }
 
-  pageId = pageId || account?.account_id?.trim() || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+  pageId = pageId || account?.account_id?.trim() || "";
   if (isUsableFacebookToken(account?.access_token_encrypted)) {
     hasPageToken = true;
   }
 
-  const envPageToken = isUsableFacebookToken(process.env.FACEBOOK_PAGE_ACCESS_TOKEN);
-  const envUserToken = isUsableFacebookToken(process.env.FACEBOOK_USER_ACCESS_TOKEN);
+  // Seed workspace may still bootstrap from Vercel env; other workspaces must
+  // store their own page id/token so Facebook data never crosses tenants.
+  const allowEnv = tenantId === CAMPAIGN_TENANT_ID;
+  const envPageToken = allowEnv && isUsableFacebookToken(process.env.FACEBOOK_PAGE_ACCESS_TOKEN);
+  const envUserToken = allowEnv && isUsableFacebookToken(process.env.FACEBOOK_USER_ACCESS_TOKEN);
+  if (allowEnv) {
+    pageId = pageId || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+  }
 
   const configured = Boolean(
     pageId &&

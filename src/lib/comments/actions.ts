@@ -69,28 +69,44 @@ export async function replyToComment(commentId: string, replyText: string) {
     .from("comments")
     .select("id, platform, platform_comment_id, tenant_id")
     .eq("id", commentId)
-    .single();
+    .eq("tenant_id", user.profile.tenant_id)
+    .maybeSingle();
 
   if (!comment) return { error: "Comment not found" };
 
   if (comment.platform === "facebook") {
-    const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
-    if (!pageId) return { error: "FACEBOOK_PAGE_ID not configured" };
-
-    const { data: account } = await supabase
-      .from("social_accounts")
-      .select("access_token_encrypted")
-      .eq("tenant_id", comment.tenant_id)
-      .eq("platform", "facebook")
-      .eq("account_id", pageId)
-      .maybeSingle();
+    const tenantId = comment.tenant_id || user.profile.tenant_id;
+    const [{ data: account }, { data: pageSetting }] = await Promise.all([
+      supabase
+        .from("social_accounts")
+        .select("account_id, access_token_encrypted")
+        .eq("tenant_id", tenantId)
+        .eq("platform", "facebook")
+        .neq("account_id", "demo-hon-akhakon")
+        .order("last_synced_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("tenant_settings")
+        .select("value")
+        .eq("tenant_id", tenantId)
+        .eq("key", "facebook_page_id")
+        .maybeSingle(),
+    ]);
+    const pageId =
+      (typeof pageSetting?.value === "string" ? pageSetting.value.trim() : "") ||
+      account?.account_id?.trim() ||
+      "";
+    if (!pageId) {
+      return { error: "Connect Facebook for this workspace before replying to page comments." };
+    }
 
     try {
       const { getWorkingPageToken } = await import("@/lib/integrations/facebook/client");
       const { pageToken } = await getWorkingPageToken({
         pageId,
-        envPageToken: process.env.FACEBOOK_PAGE_ACCESS_TOKEN,
-        envUserToken: process.env.FACEBOOK_USER_ACCESS_TOKEN,
+        envPageToken: null,
+        envUserToken: null,
         storedPageToken: account?.access_token_encrypted,
       });
       await postFacebookCommentReply(comment.platform_comment_id, replyText, pageToken);
@@ -99,14 +115,20 @@ export async function replyToComment(commentId: string, replyText: string) {
     }
   }
 
-  await supabase.from("comment_responses").insert({
-    comment_id: commentId,
-    responder_id: user.id,
-    content: replyText,
-    is_ai_generated: false,
-  });
+  await supabase
+    .from("comment_responses")
+    .insert({
+      comment_id: commentId,
+      responder_id: user.id,
+      content: replyText,
+      is_ai_generated: false,
+    });
 
-  await supabase.from("comments").update({ status: "replied" }).eq("id", commentId);
+  await supabase
+    .from("comments")
+    .update({ status: "replied" })
+    .eq("id", commentId)
+    .eq("tenant_id", user.profile.tenant_id);
 
   await supabase.from("activities").insert({
     tenant_id: comment.tenant_id,

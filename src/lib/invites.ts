@@ -82,6 +82,17 @@ export async function createInvitedAuthUser(
       return { error: toErrorMessage(created.error, "Could not create login") };
     }
 
+    // Auth emails are globally unique. If the user already existed, refuse to
+    // move their profile into this workspace (service-role upsert would steal).
+    const { data: afterCreate } = await admin
+      .from("profiles")
+      .select("id, tenant_id")
+      .eq("id", created.userId)
+      .maybeSingle();
+    if (afterCreate && afterCreate.tenant_id && afterCreate.tenant_id !== input.tenantId) {
+      return { error: "This email already belongs to another campaign workspace" };
+    }
+
     let inviteToken: string | undefined;
     try {
       const invited = await createTenantInvite(admin, {

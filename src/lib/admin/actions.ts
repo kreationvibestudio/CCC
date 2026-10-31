@@ -394,6 +394,7 @@ async function clearProfileReferences(admin: ReturnType<typeof createServiceClie
   const revoked = await admin
     .from("agent_access_codes")
     .update({ revoked_at: new Date().toISOString() })
+    .eq("tenant_id", tenantId)
     .eq("profile_id", userId)
     .is("revoked_at", null);
   if (revoked.error && !isMissingRelationError(revoked.error.message, "agent_access_codes")) {
@@ -562,6 +563,20 @@ const OPERATIONAL_TABLES = [
   "election_results",
   "agent_report_media",
   "agent_reports",
+  "agent_checkins",
+  "agent_access_codes",
+  "agent_device_tokens",
+  "agents",
+  "media_content",
+  "lms_activity_logs",
+  "lms_session_attendees",
+  "lms_certificates",
+  "lms_quiz_attempts",
+  "lms_module_progress",
+  "lms_enrollments",
+  "lms_live_sessions",
+  "lms_modules",
+  "lms_courses",
   "polling_unit_status",
   "messages",
   "message_campaigns",

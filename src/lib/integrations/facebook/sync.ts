@@ -62,20 +62,25 @@ async function getFacebookConfig(tenantId: string) {
     if (row.key === "facebook_user_access_token") userToken = v;
   }
 
-  pageId = pageId || account?.account_id?.trim() || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+  pageId = pageId || account?.account_id?.trim() || "";
   // Prefer TEXT token on social_accounts over JSONB tenant_settings
   const stored = account?.access_token_encrypted?.trim() ?? "";
   if (isUsableFacebookToken(stored)) {
     pageToken = stored;
   }
-  userToken = userToken || process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() || "";
-  if (!isUsableFacebookToken(pageToken)) {
-    pageToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
+  // Env Facebook credentials are seed-workspace only — never reuse them for
+  // another tenant (that would mix social data across campaigns).
+  if (tenantId === DEFAULT_TENANT_ID) {
+    pageId = pageId || process.env.FACEBOOK_PAGE_ID?.trim() || "";
+    userToken = userToken || process.env.FACEBOOK_USER_ACCESS_TOKEN?.trim() || "";
+    if (!isUsableFacebookToken(pageToken)) {
+      pageToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
+    }
   }
 
   if (!pageId || pageId.length < 5 || /^your[_-]/i.test(pageId) || pageId === "[SENSITIVE]") {
     throw new FacebookApiError(
-      "Facebook page ID is missing. Paste it under Page posts → Connect Facebook (or set FACEBOOK_PAGE_ID)."
+      "Facebook page ID is missing for this workspace. Paste it under Page posts → Connect Facebook."
     );
   }
 
@@ -493,7 +498,7 @@ export async function syncFacebookForConfiguredTenants(): Promise<
     .select("tenant_id, key")
     .in("key", ["facebook_page_id", "facebook_page_access_token"]);
   const ids = new Set((settings ?? []).map((s) => s.tenant_id as string));
-  ids.add(DEFAULT_TENANT_ID);
+  // Only sync workspaces that actually configured Facebook (no silent seed fallback).
   const results = [];
   for (const tenantId of ids) {
     try {

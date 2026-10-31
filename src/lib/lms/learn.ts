@@ -117,7 +117,12 @@ export async function completeLearnModule(input: {
     const gate = await requireLearner();
     if (!gate.ok) return { error: gate.error };
     const { volunteer, admin } = gate;
-    const { data: courseModule } = await admin.from("lms_modules").select("*").eq("id", input.moduleId).maybeSingle();
+    const { data: courseModule } = await admin
+      .from("lms_modules")
+      .select("*")
+      .eq("id", input.moduleId)
+      .eq("tenant_id", volunteer.tenant_id)
+      .maybeSingle();
     if (!courseModule) return { error: "Module not found." };
     const row = courseModule as ModuleRow;
     if (row.kind === "quiz") return { error: "Submit the quiz to complete this module." };
@@ -128,7 +133,12 @@ export async function completeLearnModule(input: {
       return { error: "Add a short practice note to continue." };
     }
 
-    const { data: course } = await admin.from("lms_courses").select("*").eq("id", row.course_id).maybeSingle();
+    const { data: course } = await admin
+      .from("lms_courses")
+      .select("*")
+      .eq("id", row.course_id)
+      .eq("tenant_id", volunteer.tenant_id)
+      .maybeSingle();
     if (!course) return { error: "Course not found." };
     await markEnrollmentStarted(admin, volunteer.tenant_id, volunteer.id, row.course_id);
     const saved = await upsertProgress(admin, {
@@ -158,10 +168,20 @@ export async function submitLearnQuiz(input: { moduleId: string; answers: Record
     const gate = await requireLearner();
     if (!gate.ok) return { error: gate.error };
     const { volunteer, admin } = gate;
-    const { data: courseModule } = await admin.from("lms_modules").select("*").eq("id", input.moduleId).maybeSingle();
+    const { data: courseModule } = await admin
+      .from("lms_modules")
+      .select("*")
+      .eq("id", input.moduleId)
+      .eq("tenant_id", volunteer.tenant_id)
+      .maybeSingle();
     if (!courseModule) return { error: "Quiz not found." };
     const row = courseModule as ModuleRow;
-    const { data: course } = await admin.from("lms_courses").select("*").eq("id", row.course_id).maybeSingle();
+    const { data: course } = await admin
+      .from("lms_courses")
+      .select("*")
+      .eq("id", row.course_id)
+      .eq("tenant_id", volunteer.tenant_id)
+      .maybeSingle();
     if (!course) return { error: "Course not found." };
     const questions = ((row.quiz as { questions?: Array<{ id: string; answer: number }> } | null)?.questions) ?? [];
     const { data: existing } = await admin
@@ -270,13 +290,19 @@ export async function rsvpLearnSession(sessionId: string) {
     const gate = await requireLearner();
     if (!gate.ok) return { error: gate.error };
     const { volunteer, admin } = gate;
-    const { data: session } = await admin.from("lms_live_sessions").select("*").eq("id", sessionId).maybeSingle();
+    const { data: session } = await admin
+      .from("lms_live_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .eq("tenant_id", volunteer.tenant_id)
+      .maybeSingle();
     if (!session) return { error: "Session not found." };
     if (session.capacity) {
       const { count } = await admin
         .from("lms_session_attendees")
         .select("id", { count: "exact", head: true })
-        .eq("session_id", sessionId);
+        .eq("session_id", sessionId)
+        .eq("tenant_id", volunteer.tenant_id);
       if ((count ?? 0) >= session.capacity) return { error: "This session is full." };
     }
     const { error } = await admin.from("lms_session_attendees").upsert(

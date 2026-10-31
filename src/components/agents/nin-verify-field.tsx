@@ -62,13 +62,15 @@ export function NinVerifyField({
 
   useEffect(() => {
     void getVerifyMeStatus().then((s) => {
-      if (s.provider === "qoreid") {
+      if (s.provider === "lumiid") {
+        setProviderHint("LumiID connected — live NIMC checks use LUMIID_SECRET_KEY.");
+      } else if (s.provider === "qoreid") {
         setProviderHint("QoreID connected — live NIMC checks use your QoreID test/live keys.");
       } else if (s.provider === "verifyme") {
         setProviderHint("VerifyMe connected — live NIMC checks use VERIFYME_API_KEY.");
       } else if (s.demoMode) {
         setProviderHint(
-          "Demo mode: QoreID test persona NIN 63184876213 / Bunch Dillon, or VerifyMe 10000000001 / John Doe."
+          "Demo mode: LumiID sandbox NIN 89184072280 / Adaeze Okonkwo (set LUMIID_DEMO_MODE=true)."
         );
       } else {
         setProviderHint(null);

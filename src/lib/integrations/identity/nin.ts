@@ -1,4 +1,10 @@
 import {
+  lumiIdConfigured,
+  lumiIdDemoModeEnabled,
+  sanitizeLumiIdNinForStorage,
+  verifyNinWithLumiId,
+} from "@/lib/integrations/lumiid/client";
+import {
   qoreIdConfigured,
   sanitizeQoreIdNinForStorage,
   verifyNinWithQoreId,
@@ -26,20 +32,25 @@ export type NinMatch = {
   matchStatus?: string | null;
 };
 
+export type NinProvider = "lumiid" | "qoreid" | "verifyme" | "demo";
+
 export type NinVerifyResult = {
   ok: boolean;
   error?: string;
   data?: NinMatch;
   demo?: boolean;
-  provider?: "qoreid" | "verifyme" | "demo";
+  provider?: NinProvider;
   storage?: Record<string, unknown>;
 };
 
 export function ninProviderStatus(): {
-  provider: "qoreid" | "verifyme" | "demo";
+  provider: NinProvider;
   configured: boolean;
   demoMode: boolean;
 } {
+  if (lumiIdConfigured()) {
+    return { provider: "lumiid", configured: true, demoMode: false };
+  }
   if (qoreIdConfigured()) {
     return { provider: "qoreid", configured: true, demoMode: false };
   }
@@ -47,13 +58,14 @@ export function ninProviderStatus(): {
     return { provider: "verifyme", configured: true, demoMode: false };
   }
   const demo =
+    lumiIdDemoModeEnabled() ||
     verifyMeDemoModeEnabled() ||
     process.env.NODE_ENV !== "production" ||
     (process.env.QOREID_DEMO_MODE ?? "").toLowerCase() === "true";
   return { provider: "demo", configured: false, demoMode: demo };
 }
 
-/** Prefer QoreID when credentials exist; otherwise VerifyMe / local demo. */
+/** Prefer LumiID when credentials exist; then QoreID / VerifyMe / local demo. */
 export async function verifyNinIdentityUnified(input: {
   nin: string;
   firstname: string;
@@ -63,6 +75,24 @@ export async function verifyNinIdentityUnified(input: {
 }): Promise<NinVerifyResult> {
   if (!toIsoDob(input.dob)) {
     return { ok: false, error: "Enter a valid date of birth before verifying NIN" };
+  }
+
+  if (lumiIdConfigured()) {
+    const result = await verifyNinWithLumiId(input);
+    if (!result.ok || !result.data) {
+      return {
+        ok: false,
+        error: result.error ?? "LumiID NIN verification failed",
+        provider: "lumiid",
+      };
+    }
+    return {
+      ok: true,
+      data: result.data,
+      demo: result.demo,
+      provider: "lumiid",
+      storage: sanitizeLumiIdNinForStorage(result.data, { demo: result.demo }),
+    };
   }
 
   if (qoreIdConfigured()) {
@@ -79,7 +109,30 @@ export async function verifyNinIdentityUnified(input: {
     };
   }
 
-  if (verifyMeConfigured() || verifyMeDemoModeEnabled() || process.env.NODE_ENV !== "production") {
+  if (
+    verifyMeConfigured() ||
+    verifyMeDemoModeEnabled() ||
+    lumiIdDemoModeEnabled() ||
+    process.env.NODE_ENV !== "production"
+  ) {
+    if (lumiIdDemoModeEnabled() && !verifyMeConfigured()) {
+      const result = await verifyNinWithLumiId(input);
+      if (!result.ok || !result.data) {
+        return {
+          ok: false,
+          error: result.error ?? "LumiID demo NIN verification failed",
+          provider: "demo",
+        };
+      }
+      return {
+        ok: true,
+        data: result.data,
+        demo: true,
+        provider: "demo",
+        storage: sanitizeLumiIdNinForStorage(result.data, { demo: true }),
+      };
+    }
+
     const result = await verifyNinWithVerifyMe(input);
     if (!result.ok || !result.data) {
       return {
@@ -101,6 +154,6 @@ export async function verifyNinIdentityUnified(input: {
     ok: false,
     provider: "demo",
     error:
-      "NIN verification is not configured. Add QOREID_CLIENT_ID and QOREID_SECRET_KEY in Vercel (preferred), then redeploy. Optionally set VERIFYME_API_KEY as a fallback.",
+      "NIN verification is not configured. Add LUMIID_SECRET_KEY (preferred) in Vercel / .env.local, then redeploy. Optionally set LUMIID_APP_ID if your LumiID dashboard requires it.",
   };
 }

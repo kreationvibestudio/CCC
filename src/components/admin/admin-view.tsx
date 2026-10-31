@@ -268,6 +268,7 @@ const SECRET_LABELS: { key: keyof SecretsStatus; label: string; critical?: boole
   { key: "facebookAppCredentials", label: "Facebook app ID + secret (auto-refresh)" },
   { key: "cronSecret", label: "Cron secret (Facebook sync)", critical: true },
   { key: "paystackSecret", label: "Paystack secret key (optional CRM auto-record)" },
+  { key: "lumiidSecret", label: "LumiID secret key (agent NIN verification)" },
   { key: "appUrlProduction", label: "App URL is production (not localhost)", critical: true },
   { key: "openaiApiKey", label: "OpenAI API key" },
   { key: "mapboxToken", label: "Mapbox token (maps)" },

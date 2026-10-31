@@ -16,11 +16,63 @@ import {
 import { isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
 import { verifyNinIdentityUnified } from "@/lib/integrations/identity/nin";
-import { normalizeNin, splitPersonName } from "@/lib/integrations/verifyme/helpers";
+import { normalizeNin, photoDataUrl, splitPersonName } from "@/lib/integrations/verifyme/helpers";
 import type { Agent } from "@/types/database";
 
 function canStaffAgents(role: UserRole) {
   return hasPermission(role, "polling_units.manage") || hasPermission(role, "admin.users");
+}
+
+/**
+ * Prefer an existing passport URL; otherwise upload the NIMC photo from
+ * `nin_verification` into Storage and return a signed URL for list thumbnails.
+ */
+async function resolveAgentPhotoUrl(opts: {
+  tenantId: string;
+  preferredUrl?: string | null;
+  ninVerification?: Record<string, unknown> | null;
+}): Promise<string | null> {
+  const preferred = (opts.preferredUrl ?? "").trim();
+  if (preferred) return preferred;
+
+  const raw =
+    opts.ninVerification && typeof opts.ninVerification.photo === "string"
+      ? opts.ninVerification.photo.trim()
+      : "";
+  if (!raw) return null;
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+
+  let contentType = "image/jpeg";
+  let base64 = raw;
+  if (raw.startsWith("data:")) {
+    const match = /^data:([^;]+);base64,([\s\S]+)$/.exec(raw);
+    if (!match) return photoDataUrl(raw);
+    contentType = match[1] || contentType;
+    base64 = match[2];
+  }
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(base64, "base64");
+  } catch {
+    return photoDataUrl(raw);
+  }
+  if (buffer.length < 64) return null;
+
+  const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+  const path = `${opts.tenantId}/agent-passports/${crypto.randomUUID()}.${ext}`;
+  const admin = db();
+  const { error } = await admin.storage.from("election-media").upload(path, buffer, {
+    contentType,
+    upsert: false,
+  });
+  if (error) {
+    // Keep a data-URL fallback so the photo is still visible when Storage upload fails.
+    return photoDataUrl(raw);
+  }
+  const { data: signed } = await admin.storage
+    .from("election-media")
+    .createSignedUrl(path, 60 * 60 * 24 * 365);
+  return signed?.signedUrl ?? photoDataUrl(raw);
 }
 
 async function requireStaff() {
@@ -349,11 +401,16 @@ export async function createAgentRegistration(input: {
   const collationRole = normalizeCollationRole({ collationRole: input.collationRole });
   const identity = collationFlags(collationRole);
   const membershipCardNumber = (input.membershipCardNumber ?? "").trim() || null;
-  const passportPhotoUrl = (input.passportPhotoUrl ?? "").trim() || null;
   const ward = (input.ward ?? "").trim() || null;
   const state = (input.state ?? "").trim() || null;
   const lga = (input.lga ?? "").trim() || null;
   const email = (input.email ?? "").trim().toLowerCase() || null;
+  const tenantId = auth.user.profile.tenant_id;
+  const passportPhotoUrl = await resolveAgentPhotoUrl({
+    tenantId,
+    preferredUrl: input.passportPhotoUrl,
+    ninVerification,
+  });
 
   const provisioned = await assignPollingAgent({
     puCode: puCode || undefined,
@@ -382,7 +439,6 @@ export async function createAgentRegistration(input: {
   }
 
   const supabase = db();
-  const tenantId = auth.user.profile.tenant_id;
 
   const agentPayload = {
     profile_id: provisioned.profileId,
@@ -576,6 +632,25 @@ export async function updateAgentRegistration(
       : collationRole
   );
 
+  const ninVerifiedAt =
+    input.ninVerifiedAt !== undefined ? input.ninVerifiedAt : row.nin_verified_at ?? null;
+  const ninVerification =
+    input.ninVerification !== undefined
+      ? input.ninVerification
+      : ((row.nin_verification as Record<string, unknown> | null) ?? null);
+
+  const preferredPassport =
+    input.passportPhotoUrl !== undefined && input.passportPhotoUrl.trim()
+      ? input.passportPhotoUrl.trim()
+      : input.ninVerification
+        ? null // rematerialize from the new NIMC photo
+        : row.passport_photo_url ?? null;
+  const passportPhotoUrl = await resolveAgentPhotoUrl({
+    tenantId,
+    preferredUrl: preferredPassport,
+    ninVerification,
+  });
+
   const payload = {
     full_name: fullName,
     phone,
@@ -591,20 +666,11 @@ export async function updateAgentRegistration(
         ? input.membershipCardNumber.trim() || null
         : row.membership_card_number ?? null,
     voters_card_number: votersCardNumber,
-    passport_photo_url:
-      input.passportPhotoUrl !== undefined
-        ? input.passportPhotoUrl.trim() || null
-        : row.passport_photo_url ?? null,
+    passport_photo_url: passportPhotoUrl,
     nin,
     date_of_birth: dateOfBirth,
-    nin_verified_at:
-      input.ninVerifiedAt !== undefined
-        ? input.ninVerifiedAt
-        : row.nin_verified_at ?? null,
-    nin_verification:
-      input.ninVerification !== undefined
-        ? input.ninVerification
-        : row.nin_verification ?? null,
+    nin_verified_at: ninVerifiedAt,
+    nin_verification: ninVerification,
     ...identity,
     updated_at: new Date().toISOString(),
   };

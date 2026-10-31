@@ -94,7 +94,7 @@ export function AgentsListView({
           title={agents.length === 0 ? "No agents registered yet" : "No agents match"}
           description={
             agents.length === 0
-              ? "Register an agent with state → ward → polling unit, NIN verification, voter card, phone, and optional membership card."
+              ? "Register an agent with state → ward → polling unit, NIN verification (photo included), voter card, phone, and optional membership card."
               : "Try a different search."
           }
           action={
@@ -111,18 +111,28 @@ export function AgentsListView({
             <Card key={agent.id}>
               <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <Link href={`/agents/${agent.id}`} className="flex min-w-0 flex-1 items-start gap-3">
-                  {agent.passport_photo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={agent.passport_photo_url}
-                      alt=""
-                      className="h-14 w-11 shrink-0 rounded object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-14 w-11 shrink-0 items-center justify-center rounded border border-dashed border-input text-[10px] text-muted-foreground">
-                      No photo
-                    </div>
-                  )}
+                  {(() => {
+                    const ninPhoto =
+                      typeof agent.nin_verification?.photo === "string"
+                        ? agent.nin_verification.photo.startsWith("data:") ||
+                          agent.nin_verification.photo.startsWith("http")
+                          ? agent.nin_verification.photo
+                          : `data:image/jpeg;base64,${agent.nin_verification.photo}`
+                        : null;
+                    const photoUrl = agent.passport_photo_url || ninPhoto;
+                    return photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={photoUrl}
+                        alt=""
+                        className="h-14 w-11 shrink-0 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-11 shrink-0 items-center justify-center rounded border border-dashed border-input text-[10px] text-muted-foreground">
+                        No photo
+                      </div>
+                    );
+                  })()}
                   <div className="min-w-0">
                     <p className="font-medium">{agent.full_name}</p>
                     <p className="text-xs text-muted-foreground">

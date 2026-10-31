@@ -22,6 +22,7 @@ import {
   normalizeCollationRole,
   type AgentCollationRole,
 } from "@/lib/agents/identity-fields";
+import { assertProfileInTenant } from "@/lib/tenancy";
 
 const PU_COLS =
   "id, code, pu_code, name, ward, lga, state, assigned_agent_id, latitude, longitude, state_code, lg_code, ward_code";
@@ -682,6 +683,9 @@ export async function assignPollingAgent(input: {
       userId = invited.userId;
       created = Boolean(invited.created);
     }
+
+    const profileTenantError = await assertProfileInTenant(tenantId, userId);
+    if (profileTenantError) return { error: profileTenantError };
 
     const identity = collationFlags(collationRole);
     const profilePayload: Record<string, unknown> = {

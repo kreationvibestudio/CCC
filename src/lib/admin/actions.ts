@@ -506,6 +506,7 @@ export async function getSecretsStatus() {
     mapboxToken: isLiveSecret(process.env.NEXT_PUBLIC_MAPBOX_TOKEN, 20),
     cronSecret: isLiveSecret(process.env.CRON_SECRET, 16),
     paystackSecret: isLiveSecret(process.env.PAYSTACK_SECRET_KEY, 20),
+    lumiidSecret: isLiveSecret(process.env.LUMIID_SECRET_KEY, 16),
   };
 }
 

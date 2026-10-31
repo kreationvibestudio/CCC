@@ -58,10 +58,22 @@ export function NinVerifyField({
       demo: Boolean(v.demo),
     };
   });
-  const [demoHint, setDemoHint] = useState(false);
+  const [providerHint, setProviderHint] = useState<string | null>(null);
 
   useEffect(() => {
-    void getVerifyMeStatus().then((s) => setDemoHint(s.demoMode && !s.configured));
+    void getVerifyMeStatus().then((s) => {
+      if (s.provider === "qoreid") {
+        setProviderHint("QoreID connected — live NIMC checks use your QoreID test/live keys.");
+      } else if (s.provider === "verifyme") {
+        setProviderHint("VerifyMe connected — live NIMC checks use VERIFYME_API_KEY.");
+      } else if (s.demoMode) {
+        setProviderHint(
+          "Demo mode: QoreID test persona NIN 63184876213 / Bunch Dillon, or VerifyMe 10000000001 / John Doe."
+        );
+      } else {
+        setProviderHint(null);
+      }
+    });
   }, []);
 
   function clearVerification() {
@@ -144,7 +156,9 @@ export function NinVerifyField({
         </Button>
         {preview ? (
           <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-            Verified{preview.demo ? " (demo)" : ""}
+            Verified
+            {preview.provider ? ` · ${preview.provider}` : ""}
+            {preview.demo ? " (demo)" : ""}
             {verifiedAt ? ` · ${new Date(verifiedAt).toLocaleString()}` : ""}
           </span>
         ) : (
@@ -154,12 +168,7 @@ export function NinVerifyField({
         )}
       </div>
 
-      {demoHint ? (
-        <p className="text-xs text-muted-foreground">
-          Demo mode: use NIN <code>10000000001</code>, name John Doe, DOB{" "}
-          <code>1944-04-04</code>. Set <code>VERIFYME_API_KEY</code> for live NIMC checks.
-        </p>
-      ) : null}
+      {providerHint ? <p className="text-xs text-muted-foreground">{providerHint}</p> : null}
 
       <input type="hidden" name="nin_verified_at" value={preview ? String(verifiedAt ?? "") : ""} />
       <input
@@ -192,6 +201,12 @@ export function NinVerifyField({
               <p className="text-muted-foreground">Birthdate · {preview.birthdate}</p>
             ) : null}
             {preview.phone ? <p className="text-muted-foreground">NIMC phone · {preview.phone}</p> : null}
+            {preview.address ? (
+              <p className="text-muted-foreground">Address · {preview.address}</p>
+            ) : null}
+            {preview.matchStatus ? (
+              <p className="text-xs text-muted-foreground">Match status · {preview.matchStatus}</p>
+            ) : null}
             {preview.fieldMatches ? (
               <p className="text-xs text-muted-foreground">
                 Matches · name{" "}

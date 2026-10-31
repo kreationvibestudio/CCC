@@ -15,12 +15,8 @@ import {
 } from "@/lib/agents/identity-fields";
 import { isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
-import {
-  normalizeNin,
-  sanitizeNinVerificationForStorage,
-  splitPersonName,
-  verifyNinIdentity,
-} from "@/lib/integrations/verifyme/client";
+import { verifyNinIdentityUnified } from "@/lib/integrations/identity/nin";
+import { normalizeNin, splitPersonName } from "@/lib/integrations/verifyme/helpers";
 import type { Agent } from "@/types/database";
 
 function canStaffAgents(role: UserRole) {
@@ -336,16 +332,17 @@ export async function createAgentRegistration(input: {
   let ninVerification = input.ninVerification ?? null;
   if (!ninVerifiedAt || !ninVerification) {
     const { firstname, lastname } = splitPersonName(fullName);
-    const verified = await verifyNinIdentity({
+    const verified = await verifyNinIdentityUnified({
       nin,
       firstname,
       lastname,
       dob: dateOfBirth,
+      phone,
     });
-    if (!verified.ok || !verified.data) {
+    if (!verified.ok || !verified.data || !verified.storage) {
       return { error: verified.error ?? "Verify the NIN before saving this agent" };
     }
-    ninVerification = sanitizeNinVerificationForStorage(verified.data, { demo: verified.demo });
+    ninVerification = verified.storage;
     ninVerifiedAt = String(ninVerification.verified_at ?? new Date().toISOString());
   }
 

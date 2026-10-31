@@ -545,7 +545,7 @@ export function AdminView({
   function handlePurgeNonEdo() {
     if (
       !window.confirm(
-        "This removes non-Edo polling units and Lagos/Abuja sample volunteers, contacts, events, comments, and related rows. Large registers are cleared in batches. Edo polling units and team accounts stay. Continue?"
+        "Legacy cleanup: removes sample non-campaign CRM/events and historically pruned PUs in batches. The shared Nigeria PU catalog is not deleted. Team accounts stay. Continue?"
       )
     ) {
       return;
@@ -570,7 +570,7 @@ export function AdminView({
           if (pruned === 0) {
             toast.success(
               totalPruned > 0
-                ? `Removed ${totalPruned.toLocaleString()} non-Edo polling units (and Lagos/Abuja sample CRM/events). Edo register kept.`
+                ? `Removed ${totalPruned.toLocaleString()} legacy sample/local PU rows (and Lagos/Abuja sample CRM/events). National catalog kept.`
                 : sampleMessage || "Non-Edo sample data removed"
             );
             router.refresh();
@@ -782,19 +782,17 @@ export function AdminView({
       <>
       <Card className="border-destructive/40">
         <CardHeader>
-          <CardTitle>Edo-only data</CardTitle>
+          <CardTitle>Legacy sample cleanup</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Removes polling units outside Edo State (in batches, so large national registers finish
-            under deploy timeouts) and Lagos/Abuja sample volunteers, CRM contacts, events,
-            comments, activities, and linked donations. Keeps the Edo INEC register and team
-            accounts. Situation Room voter totals only count Edo units. You can also use Polling
-            Units → Refresh from INEC CVR to prune other states.
+            Optional ops tool for old demos: clears Lagos/Abuja sample CRM/events and historically
+            local non-campaign PU copies in batches. Does not delete the shared Nigeria polling-unit
+            catalog. Prefer Polling Units → State filter for day-to-day narrowing.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="destructive" disabled={pending} onClick={handlePurgeNonEdo}>
-              {pending ? "Purging…" : "Remove non-Edo sample data"}
+              {pending ? "Purging…" : "Remove legacy sample data"}
             </Button>
             <Button type="button" variant="outline" disabled={pending} onClick={copyPurgeNonEdoSql}>
               Copy purge SQL

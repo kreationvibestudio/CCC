@@ -610,6 +610,25 @@ export async function assignPollingAgent(input: {
         .eq("id", pollingUnitId)
         .maybeSingle();
       pu = data ? withDisplayCode(data) : null;
+
+      // Cascade passes national catalog ids — materialize a tenant-local row.
+      if (!pu) {
+        const { ensureTenantPollingUnitFromNational } = await import("@/lib/polling-units/national");
+        const ensured = await ensureTenantPollingUnitFromNational({
+          tenantId,
+          nationalId: pollingUnitId,
+        });
+        if ("error" in ensured) {
+          return { error: ensured.error };
+        }
+        const { data: local } = await supabase
+          .from("polling_units")
+          .select(PU_COLS)
+          .eq("tenant_id", tenantId)
+          .eq("id", ensured.id)
+          .maybeSingle();
+        pu = local ? withDisplayCode(local) : null;
+      }
     }
     if (!pu && puCode) pu = await findPuByCode(supabase, tenantId, puCode);
     if (!pu) {
@@ -630,11 +649,7 @@ export async function assignPollingAgent(input: {
       `Agent ${pu.code}`;
     if (fullName.length < 2) return { error: "Agent name is required" };
 
-    if (pu.latitude == null || pu.longitude == null) {
-      return {
-        error: `Polling unit ${pu.code} has no map pin yet. Run Fill missing map pins (or npm run pu:pins) before assigning an agent.`,
-      };
-    }
+    // Nationwide catalog rows may lack pins; field GPS soft-checks still work when present.
 
     let existing: { id: string; role: string; email: string } | undefined;
     if (emailInput) {

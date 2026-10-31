@@ -134,16 +134,23 @@ export async function createWorkspace(formData: FormData) {
       role: "super_administrator",
     }, { onConflict: "id" });
 
-    let cloneNote = "Polling units were not copied.";
-    const clone = await admin.rpc("clone_polling_units", {
-      p_source: cloneSource,
-      p_dest: tenant.id,
-    });
-    if (clone.error) {
-      cloneNote = `Polling unit copy needs a retry (${clone.error.message}).`;
-    } else {
-      const copied = Number((clone.data as { copied?: number } | null)?.copied ?? 0);
-      cloneNote = `Copied ${copied.toLocaleString()} polling units.`;
+    // Nationwide geography lives in national_polling_units — every workspace can cascade-narrow
+    // State → Ward → PU without cloning tens of thousands of rows. Optional legacy clone remains
+    // available from the workspace list ("Retry PU copy") for tenants that still want a local copy.
+    const wantClone = String(formData.get("clone_polling_units") ?? "").trim() === "1";
+    let geoNote =
+      "HQ can use the shared Nigeria polling-unit catalog (pick state → ward → PU when registering agents).";
+    if (wantClone) {
+      const clone = await admin.rpc("clone_polling_units", {
+        p_source: cloneSource,
+        p_dest: tenant.id,
+      });
+      if (clone.error) {
+        geoNote = `National catalog is available; local PU copy needs a retry (${clone.error.message}).`;
+      } else {
+        const copied = Number((clone.data as { copied?: number } | null)?.copied ?? 0);
+        geoNote = `National catalog ready; also copied ${copied.toLocaleString()} local polling units.`;
+      }
     }
 
     await logAudit("platform.create_workspace", "tenant", tenant.id, { slug, party, hqEmail });
@@ -155,7 +162,7 @@ export async function createWorkspace(formData: FormData) {
       tenantId: tenant.id,
       temporaryPassword: invited.created ? password : undefined,
       joinUrl: joinToken && base ? `${base}/join/${joinToken}` : "",
-      message: `${name} is ready. ${cloneNote}`,
+      message: `${name} is ready. ${geoNote}`,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Create failed" };

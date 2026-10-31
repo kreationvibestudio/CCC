@@ -41,7 +41,9 @@ import { usePermissions } from "@/components/providers/auth-provider";
 import { TermiiWalletDial } from "@/components/integrations/termii-wallet-dial";
 import { formatTermiiWallet } from "@/lib/integrations/termii/wallet";
 import { InstallHqHint } from "@/components/pwa/install-hq-hint";
+import { LicenseStatusCard } from "@/components/admin/license-status-card";
 import { AlertTriangle, Copy, ScrollText, Smartphone } from "lucide-react";
+import type { TenantLicenseInfo } from "@/lib/licensing/status";
 
 function TestTermiiButton() {
   const [pending, start] = useTransition();
@@ -290,6 +292,8 @@ export function AdminView({
   currentUserId,
   systemLogCount = 0,
   systemWarningCount = 0,
+  license = null,
+  licenseAmountNaira = 500000,
 }: {
   profiles: ProfileRow[];
   auditCount: number;
@@ -305,6 +309,8 @@ export function AdminView({
   currentUserId: string;
   systemLogCount?: number;
   systemWarningCount?: number;
+  license?: TenantLicenseInfo | null;
+  licenseAmountNaira?: number;
 }) {
   const router = useRouter();
   const { canCreate, canDelete } = usePermissions();
@@ -615,6 +621,12 @@ export function AdminView({
             ? "Invite team members, assign roles, and check production secrets"
             : "View-only Admin access — team, roles, and production secrets"
         }
+      />
+
+      <LicenseStatusCard
+        license={license}
+        canManage={canCreate}
+        amountNaira={licenseAmountNaira}
       />
 
       <Card>

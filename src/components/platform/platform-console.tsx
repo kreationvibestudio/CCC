@@ -18,20 +18,26 @@ import {
   startSupportAccess,
   type PlatformWorkspace,
 } from "@/lib/platform/actions";
+import { generatePlatformLicenseKeys } from "@/lib/licensing/actions";
 
 export function PlatformConsole({
   workspaces,
   parties,
   defaultCloneSource,
+  availableLicenseKeys = [],
+  licenseAmountNaira = 500000,
 }: {
   workspaces: PlatformWorkspace[];
   parties: Array<{ code: string; name: string }>;
   defaultCloneSource: string;
+  availableLicenseKeys?: Array<{ license_key: string; created_at: string }>;
+  licenseAmountNaira?: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
+  const [freshKeys, setFreshKeys] = useState<string[]>([]);
 
   function run<T extends { error?: string; success?: boolean; message?: string; temporaryPassword?: string; joinUrl?: string }>(
     action: () => Promise<T>,
@@ -77,6 +83,78 @@ export function PlatformConsole({
 
       <Card>
         <CardHeader>
+          <CardTitle>Annual license keys</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Each workspace needs a one-year CCC license (₦{licenseAmountNaira.toLocaleString()}).
+            Generate keys here, then redeem one when creating a workspace. Renewals happen inside
+            Admin via Paystack and email a new key copy.
+          </p>
+          <form
+            className="flex flex-wrap items-end gap-2"
+            action={(formData) =>
+              startTransition(async () => {
+                const result = await generatePlatformLicenseKeys(formData);
+                if (result.error) {
+                  toast.error(result.error);
+                  return;
+                }
+                setFreshKeys(result.keys ?? []);
+                toast.success(`Generated ${(result.keys ?? []).length} license key(s)`);
+                router.refresh();
+              })
+            }
+          >
+            <div className="space-y-1">
+              <Label htmlFor="count">How many</Label>
+              <Input id="count" name="count" type="number" min={1} max={50} defaultValue={1} className="w-24" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="notes">Notes</Label>
+              <Input id="notes" name="notes" placeholder="Batch for PDP Edo" className="min-w-[12rem]" />
+            </div>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Generating…" : "Generate keys"}
+            </Button>
+          </form>
+          {(freshKeys.length > 0 || availableLicenseKeys.length > 0) && (
+            <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
+              {freshKeys.length > 0 ? (
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Just generated — copy now
+                  </p>
+                  <ul className="space-y-1 font-mono text-xs">
+                    {freshKeys.map((k) => (
+                      <li key={k}>
+                        <code>{k}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {availableLicenseKeys.length > 0 ? (
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Available inventory ({availableLicenseKeys.length})
+                  </p>
+                  <ul className="max-h-40 space-y-1 overflow-y-auto font-mono text-xs">
+                    {availableLicenseKeys.map((k) => (
+                      <li key={k.license_key}>
+                        <code>{k.license_key}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>New party workspace</CardTitle>
         </CardHeader>
         <CardContent>
@@ -119,6 +197,19 @@ export function PlatformConsole({
             <div className="space-y-1">
               <Label htmlFor="hq_name">HQ admin name</Label>
               <Input id="hq_name" name="hq_name" />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="license_key">Annual license key</Label>
+              <Input
+                id="license_key"
+                name="license_key"
+                required
+                placeholder="CCC-XXXX-XXXX-XXXX-XXXX"
+                autoComplete="off"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Required to open the workspace. Generate unused keys in the section above.
+              </p>
             </div>
             <div className="sm:col-span-2">
               <Button type="submit" disabled={pending}>

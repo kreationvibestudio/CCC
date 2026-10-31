@@ -76,11 +76,15 @@ export async function createWorkspace(formData: FormData) {
     const hqEmail = String(formData.get("hq_email") ?? "").trim().toLowerCase();
     const hqName = String(formData.get("hq_name") ?? "").trim() || hqEmail.split("@")[0];
     const cloneSource = String(formData.get("clone_source") ?? "").trim() || CAMPAIGN_TENANT_ID;
+    const licenseKey = String(formData.get("license_key") ?? "").trim();
 
     if (!name) return { error: "Workspace name is required" };
     if (!slug || slug.length < 2) return { error: "Slug must be at least 2 characters" };
     if (!partyAllowed(party)) return { error: "Choose a valid party code" };
     if (!hqEmail.includes("@")) return { error: "HQ admin email is required" };
+    if (!licenseKey) {
+      return { error: "An annual CCC license key is required to open a workspace" };
+    }
 
     const admin = createServiceClient();
     const { data: tenant, error } = await admin
@@ -89,6 +93,19 @@ export async function createWorkspace(formData: FormData) {
       .select("id, name, slug")
       .single();
     if (error || !tenant) return { error: error?.message ?? "Could not create workspace" };
+
+    const { redeemLicenseKeyForTenant } = await import("@/lib/licensing/service");
+    const licensed = await redeemLicenseKeyForTenant({
+      tenantId: tenant.id,
+      licenseKey,
+      issuedToEmail: hqEmail,
+      issuedToName: hqName,
+      sendEmail: true,
+    });
+    if (licensed.error) {
+      await admin.from("tenants").delete().eq("id", tenant.id);
+      return { error: `License key rejected: ${licensed.error}` };
+    }
 
     await admin.from("tenant_settings").upsert({
       tenant_id: tenant.id,

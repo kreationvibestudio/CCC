@@ -44,6 +44,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignored: "not_success" });
   }
 
+  const purpose =
+    charge.metadata && typeof charge.metadata === "object"
+      ? String((charge.metadata as { purpose?: unknown }).purpose ?? "")
+      : "";
+  if (purpose === "tenant_license") {
+    const { applyLicenseRenewalPayment } = await import("@/lib/licensing/service");
+    const tenantId =
+      typeof charge.metadata?.tenant_id === "string" ? charge.metadata.tenant_id.trim() : "";
+    if (!tenantId) {
+      return NextResponse.json({ error: "Missing tenant_id on license payment" }, { status: 400 });
+    }
+    const applied = await applyLicenseRenewalPayment({
+      tenantId,
+      reference: charge.reference,
+      amountNaira: charge.amount / 100,
+      payerEmail: charge.customer?.email || "",
+      payerName: typeof charge.metadata?.full_name === "string" ? charge.metadata.full_name : null,
+      channel: charge.channel,
+    });
+    if (applied.error) return NextResponse.json({ error: applied.error }, { status: 500 });
+    return NextResponse.json({ ok: true, purpose: "tenant_license", licenseKey: applied.licenseKey });
+  }
+
   const recorded = await recordSuccessfulPaystackCharge({
     reference: charge.reference,
     amountKobo: charge.amount,

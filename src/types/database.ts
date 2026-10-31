@@ -89,6 +89,10 @@ export interface Profile {
   membership_card_number?: string | null;
   voters_card_number?: string | null;
   passport_photo_url?: string | null;
+  nin?: string | null;
+  date_of_birth?: string | null;
+  nin_verified_at?: string | null;
+  nin_verification?: Record<string, unknown> | null;
   is_lga_collation_agent?: boolean;
   is_ward_collation_agent?: boolean;
   /** Ward coordinator also gets Field Agent / polling-unit portal access. */
@@ -105,10 +109,16 @@ export interface Agent {
   full_name: string;
   phone: string;
   email?: string | null;
+  state?: string | null;
+  lga?: string | null;
   ward?: string | null;
   membership_card_number?: string | null;
   voters_card_number?: string | null;
   passport_photo_url?: string | null;
+  nin?: string | null;
+  date_of_birth?: string | null;
+  nin_verified_at?: string | null;
+  nin_verification?: Record<string, unknown> | null;
   is_lga_collation_agent: boolean;
   is_ward_collation_agent: boolean;
   created_by?: string | null;

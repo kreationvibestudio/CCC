@@ -8,9 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AgentGeoCascade } from "@/components/agents/agent-geo-cascade";
+import { NinVerifyField } from "@/components/agents/nin-verify-field";
 import { PassportPhotoField } from "@/components/agents/passport-photo-field";
 import {
   createAgentRegistration,
+  getAgentNinMigrationSql,
   getAgentsTableMigrationSql,
 } from "@/lib/agents/registration";
 import { getAgentIdentityMigrationSql } from "@/lib/agents/actions";
@@ -25,8 +28,12 @@ export function AgentRegistrationForm({
   const [pending, startTransition] = useTransition();
   const [collationRole, setCollationRole] = useState<"none" | "ward" | "lga">("none");
   const [photoFieldKey, setPhotoFieldKey] = useState(0);
+  const [fullName, setFullName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [ninKey, setNinKey] = useState(0);
   const [showAgentsSql, setShowAgentsSql] = useState(needsAgentsMigration);
   const [showIdentitySql, setShowIdentitySql] = useState(false);
+  const [showNinSql, setShowNinSql] = useState(false);
 
   async function copyAgentsSql() {
     const result = await getAgentsTableMigrationSql();
@@ -48,21 +55,51 @@ export function AgentRegistrationForm({
     toast.success("Identity-fields SQL copied. Paste in Supabase SQL editor, then Run.");
   }
 
+  async function copyNinSql() {
+    const result = await getAgentNinMigrationSql();
+    if ("error" in result && result.error) {
+      toast.error(result.error);
+      return;
+    }
+    await navigator.clipboard.writeText(result.sql);
+    toast.success("NIN columns SQL copied. Paste in Supabase SQL editor, then Run.");
+  }
+
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
+      const verificationRaw = String(formData.get("nin_verification_json") ?? "");
+      let ninVerification: Record<string, unknown> | null = null;
+      if (verificationRaw) {
+        try {
+          ninVerification = JSON.parse(verificationRaw) as Record<string, unknown>;
+        } catch {
+          toast.error("NIN verification data is invalid — verify again");
+          return;
+        }
+      }
+      const ninVerifiedAt = String(formData.get("nin_verified_at") ?? "").trim();
+
       const result = await createAgentRegistration({
         fullName: String(formData.get("full_name") ?? ""),
         membershipCardNumber: String(formData.get("membership_card_number") ?? ""),
+        state: String(formData.get("state") ?? ""),
+        lga: String(formData.get("lga") ?? ""),
         ward: String(formData.get("ward") ?? ""),
         puCode: String(formData.get("pu_code") ?? ""),
+        pollingUnitId: String(formData.get("polling_unit_id") ?? ""),
         phone: String(formData.get("phone") ?? ""),
         votersCardNumber: String(formData.get("voters_card_number") ?? ""),
         passportPhotoUrl: String(formData.get("passport_photo_url") ?? ""),
         collationRole: String(formData.get("collation_role") ?? "none"),
         email: String(formData.get("email") ?? ""),
+        nin: String(formData.get("nin") ?? ""),
+        dateOfBirth: String(formData.get("date_of_birth") ?? ""),
+        ninVerifiedAt: ninVerifiedAt || undefined,
+        ninVerification,
       });
       if (result.needsAgentsMigration) setShowAgentsSql(true);
       if (result.needsIdentityMigration) setShowIdentitySql(true);
+      if (result.needsNinMigration) setShowNinSql(true);
       if (result.error) {
         toast.error(result.error);
         return;
@@ -74,7 +111,10 @@ export function AgentRegistrationForm({
         toast.success(`Registered agent for ${result.puCode}`);
       }
       setCollationRole("none");
+      setFullName("");
+      setDateOfBirth("");
       setPhotoFieldKey((k) => k + 1);
+      setNinKey((k) => k + 1);
       formRef.current?.reset();
       if (result.id) router.push(`/agents/${result.id}`);
       else router.push("/agents");
@@ -101,11 +141,24 @@ export function AgentRegistrationForm({
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
           <p className="font-medium">Optional: unlock profile identity columns</p>
           <p className="mt-1 text-muted-foreground">
-            Membership / PVC / photo / collation also sync onto the system polling-agent profile.
+            Membership / PVC / photo / collation / NIN also sync onto the system polling-agent profile.
           </p>
           <div className="mt-3">
             <Button type="button" size="sm" onClick={() => void copyIdentitySql()}>
               Copy identity-fields SQL
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {showNinSql ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <p className="font-medium">NIN columns are missing on agents / profiles</p>
+          <p className="mt-1 text-muted-foreground">
+            Apply this once in Supabase so NIN verification results can be stored.
+          </p>
+          <div className="mt-3">
+            <Button type="button" size="sm" onClick={() => void copyNinSql()}>
+              Copy NIN SQL
             </Button>
           </div>
         </div>
@@ -119,40 +172,39 @@ export function AgentRegistrationForm({
           <form ref={formRef} action={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="full_name">Name</Label>
-              <Input id="full_name" name="full_name" required disabled={pending} />
+              <Input
+                id="full_name"
+                name="full_name"
+                required
+                disabled={pending}
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="membership_card_number">Membership card number</Label>
+              <Label htmlFor="membership_card_number">Membership card number (optional)</Label>
               <Input id="membership_card_number" name="membership_card_number" disabled={pending} />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="ward">Ward</Label>
-              <Input
-                id="ward"
-                name="ward"
-                required
-                disabled={pending}
-                placeholder="Must match the polling unit ward"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="pu_code">Polling unit</Label>
-              <Input
-                id="pu_code"
-                name="pu_code"
-                placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
-                required
-                disabled={pending}
-              />
-            </div>
+
+            <AgentGeoCascade disabled={pending} unassignedOnly />
+
             <div className="space-y-1">
               <Label htmlFor="phone">Phone number</Label>
               <Input id="phone" name="phone" required disabled={pending} />
             </div>
             <div className="space-y-1">
               <Label htmlFor="voters_card_number">Voter&apos;s card number</Label>
-              <Input id="voters_card_number" name="voters_card_number" disabled={pending} />
+              <Input id="voters_card_number" name="voters_card_number" required disabled={pending} />
             </div>
+
+            <NinVerifyField
+              key={ninKey}
+              disabled={pending}
+              fullName={fullName}
+              dateOfBirth={dateOfBirth}
+              onDateOfBirthChange={setDateOfBirth}
+            />
+
             <PassportPhotoField key={photoFieldKey} disabled={pending} />
             <fieldset className="space-y-2 sm:col-span-2">
               <legend className="text-sm font-medium">Collation agent role</legend>

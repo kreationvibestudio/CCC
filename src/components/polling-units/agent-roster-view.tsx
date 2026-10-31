@@ -215,6 +215,8 @@ export function AgentRosterView({
         ward: row.ward,
         membershipCardNumber: row.membershipCardNumber,
         votersCardNumber: row.votersCardNumber,
+        nin: row.nin,
+        dateOfBirth: row.dateOfBirth,
         collationRole: row.collationRole,
       });
       if (result.error) failed += 1;
@@ -446,7 +448,9 @@ export function AgentRosterView({
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Upload a sheet with{" "}
-            <code>full_name,membership_card_number,ward,pu_code,phone,voters_card_number,collation_role</code>
+            <code>
+              full_name,membership_card_number,ward,pu_code,phone,voters_card_number,nin,date_of_birth,collation_role
+            </code>
             . Each row creates an Agents registration and issues a field code. Passport photos are added
             on the{" "}
             <Link href="/agents/new" className="underline">

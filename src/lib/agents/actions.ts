@@ -545,7 +545,8 @@ export async function provisionPinnedPollingUnits(input?: { limit?: number }): P
 }
 
 export async function assignPollingAgent(input: {
-  puCode: string;
+  puCode?: string;
+  pollingUnitId?: string;
   email?: string;
   fullName?: string;
   phone?: string;
@@ -556,6 +557,10 @@ export async function assignPollingAgent(input: {
   collationRole?: string;
   isLgaCollationAgent?: boolean;
   isWardCollationAgent?: boolean;
+  nin?: string;
+  dateOfBirth?: string;
+  ninVerifiedAt?: string;
+  ninVerification?: Record<string, unknown> | null;
 }): Promise<{
       error?: string;
       created?: boolean;
@@ -575,24 +580,43 @@ export async function assignPollingAgent(input: {
     if (blocked) return { error: blocked };
 
     const emailInput = (input.email ?? "").trim().toLowerCase();
-    const puCode = input.puCode.trim();
+    const puCode = (input.puCode ?? "").trim();
+    const pollingUnitId = (input.pollingUnitId ?? "").trim();
     const phone = (input.phone ?? "").trim() || null;
     const membershipCardNumber = (input.membershipCardNumber ?? "").trim() || null;
     const votersCardNumber = (input.votersCardNumber ?? "").trim() || null;
     const passportPhotoUrl = (input.passportPhotoUrl ?? "").trim() || null;
     const wardInput = (input.ward ?? "").trim();
+    const nin = (input.nin ?? "").trim() || null;
+    const dateOfBirth = (input.dateOfBirth ?? "").trim() || null;
+    const ninVerifiedAt = (input.ninVerifiedAt ?? "").trim() || null;
+    const ninVerification = input.ninVerification ?? null;
     const collationRole = normalizeCollationRole({
       collationRole: input.collationRole,
       isLgaCollationAgent: Boolean(input.isLgaCollationAgent),
       isWardCollationAgent: Boolean(input.isWardCollationAgent),
     });
-    if (!puCode) return { error: "Polling unit is required" };
+    if (!puCode && !pollingUnitId) return { error: "Polling unit is required" };
     if (emailInput && !emailInput.includes("@")) return { error: "Valid email is required" };
 
     const supabase = db();
     const tenantId = auth.user.profile.tenant_id;
-    const pu = await findPuByCode(supabase, tenantId, puCode);
-    if (!pu) return { error: `No polling unit matches ${puCode}` };
+    let pu: Awaited<ReturnType<typeof findPuByCode>> = null;
+    if (pollingUnitId.length > 0) {
+      const { data } = await supabase
+        .from("polling_units")
+        .select(PU_COLS)
+        .eq("tenant_id", tenantId)
+        .eq("id", pollingUnitId)
+        .maybeSingle();
+      pu = data ? withDisplayCode(data) : null;
+    }
+    if (!pu && puCode) pu = await findPuByCode(supabase, tenantId, puCode);
+    if (!pu) {
+      return {
+        error: `No polling unit matches ${pollingUnitId || puCode}`,
+      };
+    }
 
     if (wardInput && pu.ward && wardInput.toLowerCase() !== String(pu.ward).toLowerCase()) {
       return {
@@ -672,6 +696,10 @@ export async function assignPollingAgent(input: {
       membership_card_number: membershipCardNumber,
       voters_card_number: votersCardNumber,
       passport_photo_url: passportPhotoUrl,
+      nin,
+      date_of_birth: dateOfBirth,
+      nin_verified_at: ninVerifiedAt,
+      nin_verification: ninVerification,
       ...identity,
     };
 

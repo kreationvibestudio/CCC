@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NinVerifyField } from "@/components/agents/nin-verify-field";
 import { PassportPhotoField } from "@/components/agents/passport-photo-field";
 import { updateAgentRegistration, type AgentDetail } from "@/lib/agents/registration";
 import { usePermissions } from "@/components/providers/auth-provider";
@@ -20,9 +21,23 @@ export function AgentDetailView({ agent }: { agent: AgentDetail }) {
   const { canCreate } = usePermissions();
   const [pending, startTransition] = useTransition();
   const [collationRole, setCollationRole] = useState<"none" | "ward" | "lga">(agent.collation_role);
+  const [fullName, setFullName] = useState(agent.full_name);
+  const [dateOfBirth, setDateOfBirth] = useState(agent.date_of_birth ?? "");
 
   function handleSave(formData: FormData) {
     startTransition(async () => {
+      const verificationRaw = String(formData.get("nin_verification_json") ?? "");
+      let ninVerification: Record<string, unknown> | null | undefined = undefined;
+      if (verificationRaw) {
+        try {
+          ninVerification = JSON.parse(verificationRaw) as Record<string, unknown>;
+        } catch {
+          toast.error("NIN verification data is invalid — verify again");
+          return;
+        }
+      }
+      const ninVerifiedAtRaw = String(formData.get("nin_verified_at") ?? "").trim();
+
       const result = await updateAgentRegistration(agent.id, {
         fullName: String(formData.get("full_name") ?? ""),
         membershipCardNumber: String(formData.get("membership_card_number") ?? ""),
@@ -32,6 +47,10 @@ export function AgentDetailView({ agent }: { agent: AgentDetail }) {
         passportPhotoUrl: String(formData.get("passport_photo_url") ?? ""),
         collationRole: String(formData.get("collation_role") ?? "none"),
         email: String(formData.get("email") ?? ""),
+        nin: String(formData.get("nin") ?? ""),
+        dateOfBirth: String(formData.get("date_of_birth") ?? ""),
+        ninVerifiedAt: ninVerifiedAtRaw || null,
+        ninVerification: ninVerification ?? null,
       });
       if (result.error) {
         toast.error(result.error);
@@ -41,6 +60,14 @@ export function AgentDetailView({ agent }: { agent: AgentDetail }) {
       router.refresh();
     });
   }
+
+  const geoLabel = [
+    agent.state || agent.pu_state,
+    agent.lga || agent.pu_lga,
+    agent.ward || agent.pu_ward,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -67,7 +94,7 @@ export function AgentDetailView({ agent }: { agent: AgentDetail }) {
           </p>
           <p>
             <span className="text-muted-foreground">Geography · </span>
-            {[agent.ward || agent.pu_ward, agent.pu_lga].filter(Boolean).join(", ") || "—"}
+            {geoLabel || "—"}
           </p>
           <p className="flex flex-wrap items-center gap-2">
             <span className="text-muted-foreground">Agent code · </span>
@@ -87,6 +114,11 @@ export function AgentDetailView({ agent }: { agent: AgentDetail }) {
               </Button>
             ) : null}
           </p>
+          {agent.nin_verified_at ? (
+            <Badge variant="secondary">NIN verified</Badge>
+          ) : (
+            <Badge variant="outline">NIN not verified</Badge>
+          )}
           {agent.collation_label ? <Badge variant="secondary">{agent.collation_label}</Badge> : null}
           <Button type="button" size="sm" variant="ghost" asChild>
             <Link href="/polling-units/agents">Open PU Agents (codes &amp; check-ins)</Link>
@@ -105,13 +137,14 @@ export function AgentDetailView({ agent }: { agent: AgentDetail }) {
               <Input
                 id="full_name"
                 name="full_name"
-                defaultValue={agent.full_name}
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
                 required
                 disabled={pending || !canCreate}
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="membership_card_number">Membership card number</Label>
+              <Label htmlFor="membership_card_number">Membership card number (optional)</Label>
               <Input
                 id="membership_card_number"
                 name="membership_card_number"
@@ -148,9 +181,21 @@ export function AgentDetailView({ agent }: { agent: AgentDetail }) {
                 id="voters_card_number"
                 name="voters_card_number"
                 defaultValue={agent.voters_card_number ?? ""}
+                required
                 disabled={pending || !canCreate}
               />
             </div>
+
+            <NinVerifyField
+              disabled={pending || !canCreate}
+              fullName={fullName}
+              dateOfBirth={dateOfBirth}
+              onDateOfBirthChange={setDateOfBirth}
+              initialNin={agent.nin ?? ""}
+              initialVerifiedAt={agent.nin_verified_at}
+              initialVerification={agent.nin_verification}
+            />
+
             <PassportPhotoField
               disabled={pending || !canCreate}
               initialUrl={agent.passport_photo_url}

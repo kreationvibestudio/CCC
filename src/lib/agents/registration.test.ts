@@ -11,14 +11,16 @@ describe("agents registration support", () => {
   });
 
   it("CSV rows carry fields needed for registration", () => {
-    const rows = parseAgentAssignmentCsv(`full_name,membership_card_number,ward,pu_code,phone,voters_card_number,collation_role
-Ada Agent,MC-9,Ward 3,12/03/009,08031112222,90F5B9,ward
+    const rows = parseAgentAssignmentCsv(`full_name,membership_card_number,ward,pu_code,phone,voters_card_number,nin,date_of_birth,collation_role
+Ada Agent,MC-9,Ward 3,12/03/009,08031112222,90F5B9,10000000001,1944-04-04,ward
 `);
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.fullName, "Ada Agent");
     assert.equal(rows[0]?.membershipCardNumber, "MC-9");
     assert.equal(rows[0]?.ward, "Ward 3");
     assert.equal(rows[0]?.phone, "08031112222");
+    assert.equal(rows[0]?.nin, "10000000001");
+    assert.equal(rows[0]?.dateOfBirth, "1944-04-04");
     assert.equal(rows[0]?.collationRole, "ward");
   });
 });

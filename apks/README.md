@@ -1,11 +1,29 @@
 # CCC Android APKs
 
-Sideloadable builds for HQ (and future Agent drops). Copy a file to the phone and open it to install (allow “Install unknown apps” for your Files app if prompted).
+Sideloadable builds. Copy a file to the phone and open it to install (allow “Install unknown apps” for your Files app if prompted).
 
 | File | Package | Min Android | Who |
 |------|---------|-------------|-----|
 | `ccc-hq-v1.0.1-android9.apk` | `ng.ccc.hq` | **9+** (API 28+; also installs on 5.0+ / API 21) | HQ staff — full war room via Trusted Web Activity |
-| *(Agent APKs, when added)* | `ng.ccc.agent` | see Agent docs | Field Agents only |
+| `ccc-agent-v1.1.0-9deb920.apk` | `ng.ccc.agent` | **7+** (API 24+) | Field Agents — Expo native app (git `9deb920`) |
+| `ccc-agent-latest.apk` | symlink → Agent APK above | | |
+
+## CCC Agent (field)
+
+1. Install `ccc-agent-v1.1.0-9deb920.apk` (or `ccc-agent-latest.apk`).
+2. Open **CCC Agent** → sign in with the **HQ-issued agent code** at the polling unit.
+3. GPS must be within **100 ft** of the unit pin. Soft GPS is lab-only.
+4. Do **not** use HQ Super Admin emails in the Agent app.
+
+Built from git ref `9deb920` (“Accept 10-character agent codes…”). Points at production `https://ccc-three-kappa.vercel.app`.
+
+Direct download (after merge to `main`):
+
+```
+https://raw.githubusercontent.com/kreationvibestudio/CCC/main/apks/ccc-agent-v1.1.0-9deb920.apk
+```
+
+Until merge, use the branch raw URL from the PR.
 
 ## CCC HQ on Android 9
 

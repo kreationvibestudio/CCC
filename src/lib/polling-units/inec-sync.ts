@@ -289,8 +289,8 @@ export async function syncInecRegisterBatch(
     };
   }
   const meta = resolveInecState(options?.state || CAMPAIGN_STATE) ?? resolveInecState(CAMPAIGN_STATE);
-  if (!meta || meta.token !== CAMPAIGN_STATE) {
-    throw new Error("Polling units are confined to Edo State");
+  if (!meta) {
+    throw new Error(`Unknown INEC state: ${options?.state || CAMPAIGN_STATE}`);
   }
   const limit = Math.min(Math.max(options?.limit ?? 250, 1), 400);
   const offset = Math.max(options?.offset ?? 0, 0);
@@ -364,15 +364,25 @@ export async function syncInecRegisterBatch(
     }
   }
 
+  // Mirror this batch into the shared national catalog.
+  const { upsertNationalPollingUnits } = await import("@/lib/polling-units/national");
+  await upsertNationalPollingUnits(
+    batch.map((unit) => ({
+      code: unit.displayCode,
+      name: unit.name,
+      ward: unit.wardName,
+      lga: unit.lgaName,
+      state: unit.stateToken,
+      pu_code: unit.puCode,
+      state_code: unit.stateCode,
+      lg_code: unit.lgCode,
+      ward_code: unit.wardCode,
+      address: unit.name,
+    }))
+  );
+
   const nextOffset = offset + batch.length;
   const stateRemaining = Math.max(units.length - nextOffset, 0);
-  let pruned = 0;
-  let pruneRemaining = 0;
-  if (stateRemaining === 0) {
-    const prune = await pruneNonCampaignPollingUnits(supabase, tenantId, 2000);
-    pruned = prune.pruned;
-    pruneRemaining = prune.remaining;
-  }
   return {
     state: meta.token,
     fileName,
@@ -387,8 +397,8 @@ export async function syncInecRegisterBatch(
     stateRemaining,
     nextState: stateRemaining > 0 ? meta.token : null,
     catalogStates: 1,
-    pruned,
-    pruneRemaining,
-    done: stateRemaining === 0 && pruneRemaining === 0,
+    pruned: 0,
+    pruneRemaining: 0,
+    done: stateRemaining === 0,
   };
 }

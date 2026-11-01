@@ -9,6 +9,8 @@ import { DataTable } from "@/components/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Plus, Upload } from "lucide-react";
 import { GeocodePinsButton } from "@/components/polling-units/geocode-pins-button";
 import {
@@ -17,13 +19,17 @@ import {
 } from "@/components/polling-units/issue-pinned-codes-button";
 import { FormatPuCodesButton } from "@/components/polling-units/format-pu-codes-button";
 import { SyncInecRegisterButton } from "@/components/polling-units/sync-inec-button";
+import { SeedNationalCatalogButton } from "@/components/polling-units/seed-national-button";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { importPollingUnitsClient } from "@/lib/polling-units/import-client";
 import {
+  getPollingUnitLgas,
+  getPollingUnitSummary,
   getPollingUnitWards,
   queryPollingUnits,
+  savePollingUnitFocusState,
   type PollingUnitListItem,
   type PollingUnitSummary,
 } from "@/lib/polling-units/actions";
@@ -37,12 +43,18 @@ const CampaignMap = dynamic(() => import("@/components/maps/campaign-map").then(
 const PAGE_SIZE = 40;
 
 export function PollingUnitsView({
-  lgas,
-  summary,
+  states,
+  initialState,
+  focusState,
+  lgas: initialLgas,
+  summary: initialSummary,
   votingActive,
   tenantId,
   canManageAgents = false,
 }: {
+  states: string[];
+  initialState: string;
+  focusState: string | null;
   lgas: string[];
   summary: PollingUnitSummary;
   votingActive: number;
@@ -51,12 +63,15 @@ export function PollingUnitsView({
 }) {
   const router = useRouter();
   const { canCreate } = usePermissions();
+  const [state, setState] = useState(initialState);
   const [lga, setLga] = useState("");
   const [ward, setWard] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [lgas, setLgas] = useState(initialLgas);
   const [wards, setWards] = useState<string[]>([]);
+  const [summary, setSummary] = useState(initialSummary);
   const [rows, setRows] = useState<PollingUnitListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [pending, startTransition] = useTransition();
@@ -69,20 +84,40 @@ export function PollingUnitsView({
   }, [search]);
 
   useEffect(() => {
-    if (!lga) {
+    if (!state) {
+      setLgas([]);
+      setWards([]);
+      setSummary({ puCount: 0, registeredVoters: 0, mapped: 0 });
+      return;
+    }
+    startTransition(async () => {
+      const [nextLgas, nextSummary] = await Promise.all([
+        getPollingUnitLgas(state),
+        getPollingUnitSummary({ state }),
+      ]);
+      setLgas(nextLgas);
+      setSummary(nextSummary);
+      setLga("");
+      setWard("");
+      setWards([]);
+    });
+  }, [state]);
+
+  useEffect(() => {
+    if (!state || !lga) {
       setWards([]);
       return;
     }
     startTransition(async () => {
-      setWards(await getPollingUnitWards(lga));
+      setWards(await getPollingUnitWards(lga, state));
     });
-  }, [lga]);
+  }, [state, lga]);
 
-  const canQuery = true;
+  const canQuery = Boolean(state) || debouncedSearch.length >= 2;
 
   useEffect(() => {
     setPage(0);
-  }, [lga, ward, debouncedSearch]);
+  }, [state, lga, ward, debouncedSearch]);
 
   useEffect(() => {
     if (!canQuery) {
@@ -92,6 +127,7 @@ export function PollingUnitsView({
     }
     startTransition(async () => {
       const result = await queryPollingUnits({
+        state,
         lga,
         ward,
         search: debouncedSearch,
@@ -101,7 +137,7 @@ export function PollingUnitsView({
       setRows(result.rows);
       setTotal(result.total);
     });
-  }, [canQuery, lga, ward, debouncedSearch, page, summary.puCount]);
+  }, [canQuery, state, lga, ward, debouncedSearch, page, summary.puCount]);
 
   const withCoords = useMemo(() => rows.filter((u) => u.latitude && u.longitude), [rows]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -137,10 +173,28 @@ export function PollingUnitsView({
     }
   }
 
+  function saveFocus() {
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("focus_state", state);
+      const result = await savePollingUnitFocusState(fd);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Default focus set to ${state || "none"}`);
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Polling Units" description="Edo State register — search by LGA, ward, or PU code">
+      <PageHeader
+        title="Polling Units"
+        description="Nationwide register — pick a state, then narrow by LGA / ward or PU code"
+      >
         <div className="flex flex-wrap gap-2">
+          {canCreate ? <SeedNationalCatalogButton /> : null}
           {canCreate ? <SyncInecRegisterButton /> : null}
           {canCreate ? <FormatPuCodesButton /> : null}
           {canCreate ? <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} /> : null}
@@ -171,13 +225,29 @@ export function PollingUnitsView({
       {canCreate && canManageAgents ? <IssueCodesCallout /> : null}
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard title="Total PUs" value={summary.puCount.toLocaleString()} />
+        <StatCard title="PUs in filter" value={summary.puCount.toLocaleString()} />
         <StatCard title="Mapped" value={`${summary.mapped.toLocaleString()} / ${summary.puCount.toLocaleString()}`} />
         <StatCard title="Registered Voters" value={summary.registeredVoters.toLocaleString()} />
         <StatCard title="Voting Active" value={votingActive.toLocaleString()} />
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="pu-state">State</Label>
+          <NativeSelect
+            id="pu-state"
+            value={state}
+            onChange={(e) => setState(e.target.value)}
+            className="min-w-[160px]"
+          >
+            <option value="">Select state</option>
+            {states.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
         <GeoFilters
           lgas={lgas.map((name) => ({ value: name, label: name }))}
           wards={wards.map((name) => ({ value: name, label: name }))}
@@ -192,14 +262,21 @@ export function PollingUnitsView({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="EDO/ESAN-WEST/01/001 or 12/03/01/001"
+          placeholder="PU code search (any state)"
           className="max-w-xs"
         />
+        {canCreate && state ? (
+          <Button type="button" variant="secondary" size="sm" onClick={saveFocus} disabled={pending}>
+            {focusState && focusState.toLowerCase() === state.toLowerCase()
+              ? "Focus state saved"
+              : `Set ${state} as default focus`}
+          </Button>
+        ) : null}
       </div>
 
       {!canQuery ? (
         <p className="text-sm text-muted-foreground">
-          Select an LGA or type at least 2 characters of a PU code.
+          Select a state (or type at least 2 characters of a PU code) to load polling units.
         </p>
       ) : pending && rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Loading polling units…</p>
@@ -234,6 +311,7 @@ export function PollingUnitsView({
               { key: "name", header: "Location" },
               { key: "ward", header: "Ward" },
               { key: "lga", header: "LGA" },
+              { key: "state", header: "State" },
               {
                 key: "registered_voters",
                 header: "Voters",

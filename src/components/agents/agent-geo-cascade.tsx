@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { decodeWardValue } from "@/lib/agents/geo-encode";
 import {
+  getAgentRegistrationFocusState,
   getAgentRegistrationPollingUnits,
   getAgentRegistrationStates,
   getAgentRegistrationWards,
@@ -49,11 +50,20 @@ export function AgentGeoCascade({
 
   useEffect(() => {
     startTransition(async () => {
-      const list = await getAgentRegistrationStates();
+      const [list, focus] = await Promise.all([
+        getAgentRegistrationStates(),
+        getAgentRegistrationFocusState(),
+      ]);
       setStates(list);
-      if (!initialState && list.length === 1) {
-        setState(list[0]);
+      if (initialState) return;
+      if (focus) {
+        const match = list.find((s) => s.toLowerCase() === focus.toLowerCase());
+        if (match) {
+          setState(match);
+          return;
+        }
       }
+      if (list.length === 1) setState(list[0]);
     });
   }, [initialState]);
 

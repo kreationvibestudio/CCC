@@ -2,9 +2,14 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { authorize } from "@/lib/auth/session";
-import { applyCampaignStateFilter } from "@/lib/polling-units/scope";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
 import { decodeWardValue, encodeWardValue } from "@/lib/agents/geo-encode";
+import {
+  listNationalPollingUnits,
+  listNationalStates,
+  listNationalWards,
+} from "@/lib/polling-units/national";
+import { getCampaignFocusState, defaultFocusFallback } from "@/lib/polling-units/focus-state";
 
 export type AgentWardOption = {
   /** Encoded as `lga::ward` so duplicate ward names across LGAs stay unique. */
@@ -15,6 +20,7 @@ export type AgentWardOption = {
 };
 
 export type AgentPuOption = {
+  /** National catalog id (materialized to tenant-local on save). */
   id: string;
   code: string;
   name: string;
@@ -24,55 +30,19 @@ export type AgentPuOption = {
   assigned: boolean;
 };
 
-async function distinctColumn(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  tenantId: string,
-  column: "state" | "ward" | "lga",
-  filters?: { state?: string; lga?: string; ward?: string }
-): Promise<string[]> {
-  const names = new Set<string>();
-  const pageSize = 1000;
-  for (let from = 0; from < 30000; from += pageSize) {
-    let q = applyCampaignStateFilter(
-      supabase.from("polling_units").select(column).eq("tenant_id", tenantId)
-    )
-      .not(column, "is", null)
-      .order("code");
-    if (filters?.state) {
-      const state = filters.state.trim();
-      q = q.or(`state.eq.${state},state.ilike."${state}%"`);
-    }
-    if (filters?.lga) q = q.eq("lga", filters.lga);
-    if (filters?.ward) q = q.eq("ward", filters.ward);
-    const { data } = await q.range(from, from + pageSize - 1);
-    const rows = (data ?? []) as Array<Record<string, string | null>>;
-    for (const row of rows) {
-      const value = row[column];
-      if (value) names.add(value);
-    }
-    if (rows.length < pageSize) break;
-  }
-  return [...names].sort((a, b) => a.localeCompare(b));
-}
-
-/** Distinct campaign states available for agent registration. */
+/** Distinct states from the national catalog for agent registration. */
 export async function getAgentRegistrationStates(): Promise<string[]> {
   const gate = await authorize("polling_units.view", "polling_units.manage", "admin.users");
   if (!gate.ok) return [];
-  const supabase = await createClient();
-  const states = await distinctColumn(supabase, gate.user.profile.tenant_id, "state");
-  // Prefer canonical Edo label when present under variants.
-  const normalized = new Map<string, string>();
-  for (const s of states) {
-    const key = s.trim().toUpperCase().startsWith("EDO") ? "Edo" : s.trim();
-    if (!normalized.has(key.toUpperCase())) normalized.set(key.toUpperCase(), key === "Edo" ? "Edo" : s.trim());
-  }
-  if (normalized.size === 0) {
-    // Campaign is Edo-scoped; keep the selector usable before PU import.
-    const { CAMPAIGN_STATE_LABEL } = await import("@/lib/polling-units/scope");
-    return [CAMPAIGN_STATE_LABEL.replace(/\s+State$/i, "") || "Edo"];
-  }
-  return [...normalized.values()].sort((a, b) => a.localeCompare(b));
+  const states = await listNationalStates();
+  if (states.length === 0) return [defaultFocusFallback()];
+  return states;
+}
+
+export async function getAgentRegistrationFocusState(): Promise<string | null> {
+  const gate = await authorize("polling_units.view", "polling_units.manage", "admin.users");
+  if (!gate.ok) return null;
+  return getCampaignFocusState(gate.user.profile.tenant_id);
 }
 
 /**
@@ -84,36 +54,16 @@ export async function getAgentRegistrationWards(state: string): Promise<AgentWar
   if (!trimmed) return [];
   const gate = await authorize("polling_units.view", "polling_units.manage", "admin.users");
   if (!gate.ok) return [];
-  const supabase = await createClient();
-  const tenantId = gate.user.profile.tenant_id;
 
-  const pairs = new Map<string, { ward: string; lga: string }>();
-  const pageSize = 1000;
-  for (let from = 0; from < 30000; from += pageSize) {
-    let q = applyCampaignStateFilter(
-      supabase.from("polling_units").select("ward, lga, state").eq("tenant_id", tenantId)
-    )
-      .not("ward", "is", null)
-      .not("lga", "is", null)
-      .order("code");
-    q = q.or(`state.eq.${trimmed},state.ilike."${trimmed}%",state.eq.${trimmed.toUpperCase()}`);
-    const { data } = await q.range(from, from + pageSize - 1);
-    const rows = (data ?? []) as Array<{ ward: string | null; lga: string | null }>;
-    for (const row of rows) {
-      if (!row.ward || !row.lga) continue;
-      pairs.set(encodeWardValue(row.lga, row.ward), { ward: row.ward, lga: row.lga });
-    }
-    if (rows.length < pageSize) break;
-  }
-
+  const pairs = await listNationalWards(trimmed);
   const wardNameCounts = new Map<string, number>();
-  for (const { ward } of pairs.values()) {
+  for (const { ward } of pairs) {
     wardNameCounts.set(ward, (wardNameCounts.get(ward) ?? 0) + 1);
   }
 
-  return [...pairs.entries()]
-    .map(([value, { ward, lga }]) => ({
-      value,
+  return pairs
+    .map(({ ward, lga }) => ({
+      value: encodeWardValue(lga, ward),
       ward,
       lga,
       label: (wardNameCounts.get(ward) ?? 0) > 1 ? `${ward} (${lga})` : ward,
@@ -132,36 +82,57 @@ export async function getAgentRegistrationPollingUnits(input: {
   if (!state || !decoded) return [];
   const gate = await authorize("polling_units.view", "polling_units.manage", "admin.users");
   if (!gate.ok) return [];
-  const supabase = await createClient();
+
+  const units = await listNationalPollingUnits({
+    state,
+    lga: decoded.lga,
+    ward: decoded.ward,
+  });
+
   const tenantId = gate.user.profile.tenant_id;
+  const supabase = await createClient();
+  const codes = units.map((u) => u.code);
+  const assignedCodes = new Set<string>();
+  if (codes.length > 0) {
+    const { data: local } = await supabase
+      .from("polling_units")
+      .select("code, assigned_agent_id")
+      .eq("tenant_id", tenantId)
+      .in("code", codes);
+    for (const row of local ?? []) {
+      if (row.assigned_agent_id && row.code) assignedCodes.add(String(row.code).toUpperCase());
+    }
+    // Also treat agents table occupancy as assigned for this tenant.
+    const { data: agents } = await supabase
+      .from("agents")
+      .select("polling_unit_id")
+      .eq("tenant_id", tenantId);
+    const puIds = [...new Set((agents ?? []).map((a) => a.polling_unit_id).filter(Boolean))];
+    if (puIds.length > 0) {
+      const { data: occupied } = await supabase
+        .from("polling_units")
+        .select("code")
+        .eq("tenant_id", tenantId)
+        .in("id", puIds);
+      for (const row of occupied ?? []) {
+        if (row.code) assignedCodes.add(String(row.code).toUpperCase());
+      }
+    }
+  }
 
   const out: AgentPuOption[] = [];
-  const pageSize = 500;
-  for (let from = 0; from < 10000; from += pageSize) {
-    let q = applyCampaignStateFilter(
-      supabase
-        .from("polling_units")
-        .select("id, name, code, pu_code, ward, lga, state, assigned_agent_id")
-        .eq("tenant_id", tenantId)
-        .eq("lga", decoded.lga)
-        .eq("ward", decoded.ward)
-    ).order("code");
-    q = q.or(`state.eq.${state},state.ilike."${state}%",state.eq.${state.toUpperCase()}`);
-    if (input.unassignedOnly) q = q.is("assigned_agent_id", null);
-    const { data } = await q.range(from, from + pageSize - 1);
-    const rows = data ?? [];
-    for (const row of rows) {
-      out.push({
-        id: row.id,
-        code: formatPollingUnitCode(row),
-        name: row.name,
-        ward: row.ward,
-        lga: row.lga,
-        state: row.state,
-        assigned: Boolean(row.assigned_agent_id),
-      });
-    }
-    if (rows.length < pageSize) break;
+  for (const row of units) {
+    const assigned = assignedCodes.has(row.code.toUpperCase());
+    if (input.unassignedOnly && assigned) continue;
+    out.push({
+      id: row.id,
+      code: formatPollingUnitCode(row),
+      name: row.name,
+      ward: row.ward,
+      lga: row.lga,
+      state: row.state,
+      assigned,
+    });
   }
   return out;
 }

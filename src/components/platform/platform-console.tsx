@@ -180,15 +180,24 @@ export function PlatformConsole({
                 ))}
               </NativeSelect>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="clone_source">Copy polling units from</Label>
-              <NativeSelect id="clone_source" name="clone_source" defaultValue={defaultCloneSource}>
-                {workspaces.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} ({w.puCount.toLocaleString()} PUs)
-                  </option>
-                ))}
-              </NativeSelect>
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="clone_source">Optional: also copy local PUs from</Label>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input type="checkbox" name="clone_polling_units" value="1" className="h-4 w-4" />
+                  Clone a local copy (legacy)
+                </label>
+                <NativeSelect id="clone_source" name="clone_source" defaultValue={defaultCloneSource}>
+                  {workspaces.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} ({w.puCount.toLocaleString()} PUs)
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                New workspaces use the shared Nigeria PU catalog by default — no clone required.
+              </p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="hq_email">First HQ admin email</Label>

@@ -19,26 +19,39 @@ async function universeStats(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string
 ) {
-  // Prefer Edo-scoped summary (already filters campaign_polling_unit).
+  // Prefer tenant-local summary (assigned / cloned units for this workspace).
   const summary = await supabase.rpc("polling_units_summary", { p_lga: null, p_ward: null });
   if (!summary.error && summary.data && typeof summary.data === "object") {
     const payload = summary.data as { pu_count?: number; registered_voters?: number };
-    return {
-      puCount: Number(payload.pu_count ?? 0),
-      registeredVoters: Number(payload.registered_voters ?? 0),
-    };
+    const puCount = Number(payload.pu_count ?? 0);
+    if (puCount > 0) {
+      return {
+        puCount,
+        registeredVoters: Number(payload.registered_voters ?? 0),
+      };
+    }
   }
 
   const rpc = await supabase.rpc("election_universe_stats");
   if (!rpc.error && rpc.data && typeof rpc.data === "object") {
     const payload = rpc.data as { pu_count?: number; registered_voters?: number };
-    return {
-      puCount: Number(payload.pu_count ?? 0),
-      registeredVoters: Number(payload.registered_voters ?? 0),
-    };
+    const puCount = Number(payload.pu_count ?? 0);
+    if (puCount > 0) {
+      return {
+        puCount,
+        registeredVoters: Number(payload.registered_voters ?? 0),
+      };
+    }
   }
 
-  // Last resort: count Edo rows only (paginated voter sum).
+  // Fall back to national catalog size, then tenant-local rows.
+  const national = await supabase
+    .from("national_polling_units")
+    .select("id", { count: "exact", head: true });
+  if (!national.error && (national.count ?? 0) > 0) {
+    return { puCount: national.count ?? 0, registeredVoters: 0 };
+  }
+
   const { count } = await applyCampaignStateFilter(
     supabase.from("polling_units").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
   );

@@ -12,7 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { usePollingUnitStatusRealtime } from "@/hooks/use-tenant-realtime";
-import { getPollingUnitWards } from "@/lib/polling-units/actions";
+import { getPollingUnitLgas, getPollingUnitWards } from "@/lib/polling-units/actions";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { PU_STATUS_VALUES } from "@/lib/agent/pu-status";
 import {
   getFieldStatusMapData,
@@ -73,15 +75,21 @@ function countStatuses(pins: FieldMapPin[]): FieldStatusCounts {
 }
 
 export function VotersMapView({
-  lgas,
+  states = [],
+  initialState = "",
+  lgas: initialLgas,
   initial,
 }: {
+  states?: string[];
+  initialState?: string;
   lgas: string[];
   initial: Awaited<ReturnType<typeof getFieldStatusMapData>>;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [state, setState] = useState(initialState);
+  const [lgas, setLgas] = useState(initialLgas);
   const [lga, setLga] = useState("");
   const [ward, setWard] = useState("");
   const [wards, setWards] = useState<string[]>([]);
@@ -221,19 +229,41 @@ export function VotersMapView({
   }
 
   useEffect(() => {
-    if (!lga) {
+    if (!state) {
+      setLgas([]);
+      setLga("");
+      setWard("");
       setWards([]);
       return;
     }
     let cancelled = false;
     startTransition(async () => {
-      const next = await getPollingUnitWards(lga);
+      const next = await getPollingUnitLgas(state);
+      if (cancelled) return;
+      setLgas(next);
+      setLga("");
+      setWard("");
+      setWards([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [state]);
+
+  useEffect(() => {
+    if (!state || !lga) {
+      setWards([]);
+      return;
+    }
+    let cancelled = false;
+    startTransition(async () => {
+      const next = await getPollingUnitWards(lga, state);
       if (!cancelled) setWards(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [lga]);
+  }, [state, lga]);
 
   // Refresh the full pin catalog on live status changes (never keyed by LGA/ward).
   useEffect(() => {
@@ -260,23 +290,30 @@ export function VotersMapView({
     setLiveTick((n) => n + 1);
   });
 
-  const geoFocused = Boolean(lga || ward || debouncedSearch.length >= 2);
-  const focusToken = `${lga}|${ward}|${debouncedSearch}`;
+  const geoFocused = Boolean(state || lga || ward || debouncedSearch.length >= 2);
+  const focusToken = `${state}|${lga}|${ward}|${debouncedSearch}`;
 
   const filteredPins = useMemo(() => {
+    const stateKey = state ? normKey(state) : "";
     const lgaKey = lga ? normKey(lga) : "";
     const wardKey = ward ? normKey(ward) : "";
     const q = debouncedSearch.length >= 2 ? debouncedSearch.toLowerCase() : "";
     return allPins.filter((p) => {
+      if (stateKey && !normKey(p.state || "").startsWith(stateKey) && normKey(p.state || "") !== stateKey) {
+        // Allow "Edo" to match "Edo State"
+        if (!normKey(p.state || "").includes(stateKey) && !stateKey.includes(normKey(p.state || ""))) {
+          return false;
+        }
+      }
       if (lgaKey && normKey(p.lga) !== lgaKey) return false;
       if (wardKey && normKey(p.ward) !== wardKey) return false;
       if (q) {
-        const hay = `${p.code} ${p.name} ${p.ward} ${p.lga}`.toLowerCase();
+        const hay = `${p.code} ${p.name} ${p.ward} ${p.lga} ${p.state ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [allPins, lga, ward, debouncedSearch]);
+  }, [allPins, state, lga, ward, debouncedSearch]);
 
   const counts = useMemo(() => countStatuses(filteredPins), [filteredPins]);
 
@@ -376,6 +413,22 @@ export function VotersMapView({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="map-state">State</Label>
+          <NativeSelect
+            id="map-state"
+            value={state}
+            onChange={(e) => setState(e.target.value)}
+            className="min-w-[140px]"
+          >
+            <option value="">All states</option>
+            {states.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -393,12 +446,13 @@ export function VotersMapView({
           }}
           onWardChange={setWard}
         />
-        {(lga || ward || debouncedSearch) && (
+        {(state || lga || ward || debouncedSearch) && (
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={() => {
+              setState("");
               setLga("");
               setWard("");
               setSearch("");

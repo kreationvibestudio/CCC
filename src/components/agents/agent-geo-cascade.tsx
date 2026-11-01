@@ -50,20 +50,25 @@ export function AgentGeoCascade({
 
   useEffect(() => {
     startTransition(async () => {
-      const [list, focus] = await Promise.all([
-        getAgentRegistrationStates(),
-        getAgentRegistrationFocusState(),
-      ]);
-      setStates(list);
-      if (initialState) return;
-      if (focus) {
-        const match = list.find((s) => s.toLowerCase() === focus.toLowerCase());
-        if (match) {
-          setState(match);
-          return;
+      try {
+        const [list, focus] = await Promise.all([
+          getAgentRegistrationStates(),
+          getAgentRegistrationFocusState(),
+        ]);
+        setStates(list);
+        if (initialState) return;
+        if (focus) {
+          const match = list.find((s) => s.toLowerCase() === focus.toLowerCase());
+          if (match) {
+            setState(match);
+            return;
+          }
         }
+        if (list.length === 1) setState(list[0]!);
+      } catch (e) {
+        console.error("[AgentGeoCascade] states", e);
+        setStates([]);
       }
-      if (list.length === 1) setState(list[0]);
     });
   }, [initialState]);
 
@@ -78,14 +83,19 @@ export function AgentGeoCascade({
     }
     let cancelled = false;
     startTransition(async () => {
-      const list = await getAgentRegistrationWards(state);
-      if (cancelled) return;
-      setWards(list);
-      if (wardValue && !list.some((w) => w.value === wardValue)) {
-        setWardValue("");
-        setPuId("");
-        setPuCode("");
-        setUnits([]);
+      try {
+        const list = await getAgentRegistrationWards(state);
+        if (cancelled) return;
+        setWards(list);
+        if (wardValue && !list.some((w) => w.value === wardValue)) {
+          setWardValue("");
+          setPuId("");
+          setPuCode("");
+          setUnits([]);
+        }
+      } catch (e) {
+        console.error("[AgentGeoCascade] wards", e);
+        if (!cancelled) setWards([]);
       }
     });
     return () => {
@@ -102,23 +112,30 @@ export function AgentGeoCascade({
     }
     let cancelled = false;
     startTransition(async () => {
-      const list = await getAgentRegistrationPollingUnits({
-        state,
-        wardValue,
-        unassignedOnly,
-      });
-      if (cancelled) return;
-      setUnits(list);
-      setPuId((current) => {
-        const still = current && list.some((u) => u.id === current);
+      try {
+        const list = await getAgentRegistrationPollingUnits({
+          state,
+          wardValue,
+          unassignedOnly,
+        });
+        if (cancelled) return;
+        setUnits(list);
+        const still = puId && list.some((u) => u.id === puId);
         if (still) {
-          const match = list.find((u) => u.id === current);
+          const match = list.find((u) => u.id === puId);
           setPuCode(match?.code ?? "");
-          return current;
+        } else {
+          setPuId("");
+          setPuCode("");
         }
-        setPuCode("");
-        return "";
-      });
+      } catch (e) {
+        console.error("[AgentGeoCascade] polling units", e);
+        if (!cancelled) {
+          setUnits([]);
+          setPuId("");
+          setPuCode("");
+        }
+      }
     });
     return () => {
       cancelled = true;

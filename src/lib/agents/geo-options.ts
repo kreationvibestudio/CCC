@@ -77,94 +77,75 @@ export async function getAgentRegistrationPollingUnits(input: {
   wardValue: string;
   unassignedOnly?: boolean;
 }): Promise<AgentPuOption[]> {
-  const state = input.state.trim();
-  const decoded = decodeWardValue(input.wardValue);
-  if (!state || !decoded) return [];
-  const gate = await authorize("polling_units.view", "polling_units.manage", "admin.users");
-  if (!gate.ok) return [];
+  try {
+    const state = input.state.trim();
+    const decoded = decodeWardValue(input.wardValue);
+    if (!state || !decoded) return [];
+    const gate = await authorize("polling_units.view", "polling_units.manage", "admin.users");
+    if (!gate.ok) return [];
 
-  const units = await listNationalPollingUnits({
-    state,
-    lga: decoded.lga,
-    ward: decoded.ward,
-  });
+    const units = await listNationalPollingUnits({
+      state,
+      lga: decoded.lga,
+      ward: decoded.ward,
+    });
 
-  const tenantId = gate.user.profile.tenant_id;
-  const supabase = await createClient();
+    const tenantId = gate.user.profile.tenant_id;
+    const supabase = await createClient();
 
-  // When catalog is missing, listNationalPollingUnits returns code-as-id rows from INEC.
-  // Materialize them into tenant-local polling_units so save can assign a real UUID.
-  const needsMaterialize = units.some(
-    (u) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(u.id)
-  );
-  let resolved = units;
-  if (needsMaterialize && units.length > 0) {
-    const { listInecUnits, materializeInecUnitsForTenant } = await import(
-      "@/lib/polling-units/inec-geo"
-    );
-    const inec = await listInecUnits({ state, lga: decoded.lga, ward: decoded.ward });
-    const local = await materializeInecUnitsForTenant(tenantId, inec);
-    resolved = local.map((row) => ({
-      id: row.id,
-      code: row.code,
-      pu_code: null,
-      name: row.name,
-      ward: row.ward,
-      lga: row.lga,
-      state: row.state,
-      state_code: null,
-      lg_code: null,
-      ward_code: null,
-      registered_voters: null,
-      latitude: null,
-      longitude: null,
-      address: null,
-      geocode_status: null,
-    }));
-  }
+    // INEC fallback may return delimitation codes as `id`. Do not eager-upsert the
+    // whole ward here (that crashed prod when `updated_at` was sent to polling_units).
+    // Save path materializes a single PU via ensureTenantPollingUnitFromNational.
+    const resolved = units;
 
-  const codes = resolved.map((u) => u.code);
-  const assignedCodes = new Set<string>();
-  if (codes.length > 0) {
-    const { data: local } = await supabase
-      .from("polling_units")
-      .select("code, assigned_agent_id")
-      .eq("tenant_id", tenantId)
-      .in("code", codes);
-    for (const row of local ?? []) {
-      if (row.assigned_agent_id && row.code) assignedCodes.add(String(row.code).toUpperCase());
-    }
-    // Also treat agents table occupancy as assigned for this tenant.
-    const { data: agents } = await supabase
-      .from("agents")
-      .select("polling_unit_id")
-      .eq("tenant_id", tenantId);
-    const puIds = [...new Set((agents ?? []).map((a) => a.polling_unit_id).filter(Boolean))];
-    if (puIds.length > 0) {
-      const { data: occupied } = await supabase
+    const codes = resolved.map((u) => u.code);
+    const assignedCodes = new Set<string>();
+    if (codes.length > 0) {
+      const { data: local } = await supabase
         .from("polling_units")
-        .select("code")
+        .select("code, assigned_agent_id")
         .eq("tenant_id", tenantId)
-        .in("id", puIds);
-      for (const row of occupied ?? []) {
-        if (row.code) assignedCodes.add(String(row.code).toUpperCase());
+        .in("code", codes);
+      for (const row of local ?? []) {
+        if (row.assigned_agent_id && row.code) assignedCodes.add(String(row.code).toUpperCase());
+      }
+      // Also treat agents table occupancy as assigned for this tenant.
+      const { data: agents, error: agentsError } = await supabase
+        .from("agents")
+        .select("polling_unit_id")
+        .eq("tenant_id", tenantId);
+      if (!agentsError) {
+        const puIds = [...new Set((agents ?? []).map((a) => a.polling_unit_id).filter(Boolean))];
+        if (puIds.length > 0) {
+          const { data: occupied } = await supabase
+            .from("polling_units")
+            .select("code")
+            .eq("tenant_id", tenantId)
+            .in("id", puIds);
+          for (const row of occupied ?? []) {
+            if (row.code) assignedCodes.add(String(row.code).toUpperCase());
+          }
+        }
       }
     }
-  }
 
-  const out: AgentPuOption[] = [];
-  for (const row of resolved) {
-    const assigned = assignedCodes.has(row.code.toUpperCase());
-    if (input.unassignedOnly && assigned) continue;
-    out.push({
-      id: row.id,
-      code: formatPollingUnitCode(row),
-      name: row.name,
-      ward: row.ward,
-      lga: row.lga,
-      state: row.state,
-      assigned,
-    });
+    const out: AgentPuOption[] = [];
+    for (const row of resolved) {
+      const assigned = assignedCodes.has(row.code.toUpperCase());
+      if (input.unassignedOnly && assigned) continue;
+      out.push({
+        id: row.id,
+        code: formatPollingUnitCode(row),
+        name: row.name,
+        ward: row.ward,
+        lga: row.lga,
+        state: row.state,
+        assigned,
+      });
+    }
+    return out;
+  } catch (e) {
+    console.error("[getAgentRegistrationPollingUnits]", e);
+    return [];
   }
-  return out;
 }

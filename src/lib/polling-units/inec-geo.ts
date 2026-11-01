@@ -80,7 +80,8 @@ export async function materializeInecUnitsForTenant(
 > {
   if (units.length === 0) return [];
   const admin = createServiceClient();
-  const now = new Date().toISOString();
+  // Do not send `updated_at` — tenant `polling_units` has no such column
+  // (only `national_polling_units` does). PostgREST rejects unknown columns.
   const payload = units.map((u) => ({
     tenant_id: tenantId,
     code: u.displayCode || u.delimitation,
@@ -93,7 +94,6 @@ export async function materializeInecUnitsForTenant(
     lg_code: u.lgCode,
     ward_code: u.wardCode,
     address: u.name,
-    updated_at: now,
   }));
 
   const out: Array<{

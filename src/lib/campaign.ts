@@ -12,9 +12,18 @@ export function paystackPaymentLink() {
   return paystackPaymentLinkFromSetting(null);
 }
 
+/**
+ * Per-workspace checkout only. Never fall back to another campaign's shop URL —
+ * that would mix donations across tenants.
+ */
 export function paystackPaymentLinkFromSetting(stored: string | null | undefined) {
   const fromTenant = stored?.trim() ?? "";
   if (fromTenant && isPaystackCheckoutUrl(fromTenant)) return fromTenant.replace(/\/$/, "");
+  return "";
+}
+
+/** Seed-campaign helper for ops scripts only — not for multi-tenant donate pages. */
+export function legacySeedPaystackPaymentLink() {
   const fromEnv = process.env.NEXT_PUBLIC_PAYSTACK_PAYMENT_LINK?.trim() ?? "";
   if (fromEnv && isPaystackCheckoutUrl(fromEnv)) return fromEnv.replace(/\/$/, "");
   return DEFAULT_PAYSTACK_PAYMENT_LINK;

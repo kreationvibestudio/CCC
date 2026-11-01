@@ -17,6 +17,24 @@ export async function assertPollingUnitInTenant(
   return null;
 }
 
+/** Profiles belong to exactly one workspace — refuse cross-tenant linkage. */
+export async function assertProfileInTenant(
+  tenantId: string,
+  profileId: string | null | undefined
+): Promise<string | null> {
+  const id = profileId?.trim() || "";
+  if (!id) return null;
+  const admin = createServiceClient();
+  const { data } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!data) return "User profile is not in this campaign workspace";
+  return null;
+}
+
 export async function assertContactInTenant(
   tenantId: string,
   contactId: string | null | undefined

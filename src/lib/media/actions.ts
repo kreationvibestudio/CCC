@@ -196,30 +196,43 @@ export async function publishMediaToFacebook(id: string) {
   if (!row) return { error: "Post not found" };
   if (row.status === "killed") return { error: "This draft was killed" };
 
-  const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
+  const tenantId = gate.user.profile.tenant_id;
+  const [{ data: account }, { data: pageSetting }] = await Promise.all([
+    supabase
+      .from("social_accounts")
+      .select("account_id, access_token_encrypted")
+      .eq("tenant_id", tenantId)
+      .eq("platform", "facebook")
+      .neq("account_id", "demo-hon-akhakon")
+      .order("last_synced_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("tenant_settings")
+      .select("value")
+      .eq("tenant_id", tenantId)
+      .eq("key", "facebook_page_id")
+      .maybeSingle(),
+  ]);
+  const pageId =
+    (typeof pageSetting?.value === "string" ? pageSetting.value.trim() : "") ||
+    account?.account_id?.trim() ||
+    "";
   if (!pageId) {
     return {
       success: true,
       published: false,
       copyInstead: true,
-      publishError: "No Facebook page id configured. Copy the body into Meta Business Suite.",
+      publishError: "Connect Facebook for this workspace first. Copy the body into Meta Business Suite.",
     };
   }
-
-  const { data: account } = await supabase
-    .from("social_accounts")
-    .select("access_token_encrypted")
-    .eq("tenant_id", gate.user.profile.tenant_id)
-    .eq("platform", "facebook")
-    .eq("account_id", pageId)
-    .maybeSingle();
 
   try {
     const { getWorkingPageToken } = await import("@/lib/integrations/facebook/client");
     const { pageToken } = await getWorkingPageToken({
       pageId,
-      envPageToken: process.env.FACEBOOK_PAGE_ACCESS_TOKEN,
-      envUserToken: process.env.FACEBOOK_USER_ACCESS_TOKEN,
+      envPageToken: null,
+      envUserToken: null,
       storedPageToken: account?.access_token_encrypted,
     });
     const published = await publishFacebookPagePost(pageId, pageToken, row.body);

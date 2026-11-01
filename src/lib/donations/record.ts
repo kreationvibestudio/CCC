@@ -1,5 +1,4 @@
 import { createServiceClient } from "@/lib/supabase/admin";
-import { CAMPAIGN_TENANT_ID } from "@/lib/campaign";
 import { upsertPublicCrmContact } from "@/lib/crm/public-upsert";
 
 export type RecordedCharge = {
@@ -24,12 +23,22 @@ export async function recordSuccessfulPaystackCharge(input: {
   if (!email || !email.includes("@")) return { error: "Missing donor email" };
   if (!Number.isFinite(amount) || amount <= 0) return { error: "Invalid amount" };
 
-  const tenantId = input.tenantId?.trim() || CAMPAIGN_TENANT_ID;
+  const tenantId = (input.tenantId ?? "").trim();
+  if (!tenantId) {
+    return {
+      error:
+        "Donation is missing workspace id. Open the donate page for this campaign (not a shared checkout) and try again.",
+    };
+  }
+
   const admin = createServiceClient();
+  const { data: tenant } = await admin.from("tenants").select("id").eq("id", tenantId).maybeSingle();
+  if (!tenant?.id) return { error: "Unknown campaign workspace for this donation" };
 
   const { data: existing } = await admin
     .from("donations")
     .select("id, amount")
+    .eq("tenant_id", tenantId)
     .eq("payment_reference", reference)
     .maybeSingle();
   if (existing) {
@@ -53,6 +62,7 @@ export async function recordSuccessfulPaystackCharge(input: {
     .from("contacts")
     .select("total_donations")
     .eq("id", contactId)
+    .eq("tenant_id", tenantId)
     .maybeSingle();
   const previousTotal = Number(contact?.total_donations ?? 0);
 
@@ -75,6 +85,7 @@ export async function recordSuccessfulPaystackCharge(input: {
       const { data: again } = await admin
         .from("donations")
         .select("id, amount")
+        .eq("tenant_id", tenantId)
         .eq("payment_reference", reference)
         .maybeSingle();
       if (again) {
@@ -84,7 +95,11 @@ export async function recordSuccessfulPaystackCharge(input: {
     return { error: donationError.message };
   }
 
-  await admin.from("contacts").update({ total_donations: previousTotal + amount }).eq("id", contactId);
+  await admin
+    .from("contacts")
+    .update({ total_donations: previousTotal + amount })
+    .eq("id", contactId)
+    .eq("tenant_id", tenantId);
 
   return { data: { alreadyRecorded: false, donationId: donation.id, amount } };
 }

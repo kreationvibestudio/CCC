@@ -79,10 +79,17 @@ export async function startPublicDonation(
         full_name: fullName,
         phone: phone || undefined,
         tenant_id: tenant.id,
+        tenant_slug: tenant.slug,
       },
     });
     if ("data" in started) return { checkoutUrl: started.data.authorization_url };
   }
 
+  if (!shopUrl) {
+    return {
+      error:
+        "Online donations are not configured for this campaign yet. Set this workspace’s Paystack payment link in Admin.",
+    };
+  }
   return { checkoutUrl: shopUrl };
 }

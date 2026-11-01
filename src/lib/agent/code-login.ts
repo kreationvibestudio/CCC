@@ -43,6 +43,7 @@ export async function issueAgentAccessCode(input: IssueInput): Promise<{ code?: 
   await admin
     .from("agent_access_codes")
     .update({ revoked_at: new Date().toISOString() })
+    .eq("tenant_id", input.tenantId)
     .eq("profile_id", input.profileId)
     .is("revoked_at", null);
 
@@ -227,7 +228,10 @@ export async function loginWithAgentCode(input: {
   if (!profile || (profile.role !== "polling_agent" && !alsoAgent)) {
     return { error: "That code is not a Field Agent login" };
   }
-  if (!pu || pu.tenant_id !== profile.tenant_id) {
+  if (row.tenant_id !== profile.tenant_id) {
+    return { error: "That agent code is not valid for this workspace" };
+  }
+  if (!pu || pu.tenant_id !== profile.tenant_id || pu.tenant_id !== row.tenant_id) {
     return { error: "This code is not tied to a polling unit" };
   }
   if (pu.assigned_agent_id !== profile.id) {

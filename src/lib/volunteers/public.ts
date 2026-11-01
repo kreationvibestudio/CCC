@@ -136,7 +136,11 @@ export async function registerVolunteerPublic(
     } catch {
       if (!code) {
         code = generateTrainingCode();
-        await admin.from("volunteers").update({ training_code: code, support_roles: roles }).eq("id", volunteerId);
+        await admin
+          .from("volunteers")
+          .update({ training_code: code, support_roles: roles })
+          .eq("id", volunteerId)
+          .eq("tenant_id", tenantId);
       }
     }
     return code;

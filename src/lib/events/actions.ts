@@ -133,13 +133,14 @@ export async function createEventFormAction(formData: FormData) {
 /** True when production still has the closed event_type enum (new presets / custom blocked). */
 export async function eventTypeColumnNeedsMigration(): Promise<boolean> {
   try {
+    const gate = await authorize("events.view");
+    if (!gate.ok) return false;
     const admin = createServiceClient();
-    const { data: tenant } = await admin.from("tenants").select("id").limit(1).maybeSingle();
-    if (!tenant?.id) return false;
+    const tenantId = gate.user.profile.tenant_id;
     const probe = await admin
       .from("campaign_events")
       .insert({
-        tenant_id: tenant.id,
+        tenant_id: tenantId,
         title: "__event_type_probe__",
         event_type: "family_meeting",
         location: "probe",
@@ -149,7 +150,11 @@ export async function eventTypeColumnNeedsMigration(): Promise<boolean> {
       .select("id")
       .maybeSingle();
     if (probe.data?.id) {
-      await admin.from("campaign_events").delete().eq("id", probe.data.id);
+      await admin
+        .from("campaign_events")
+        .delete()
+        .eq("id", probe.data.id)
+        .eq("tenant_id", tenantId);
       return false;
     }
     return isInvalidEventTypeEnumError(probe.error?.message);
@@ -259,7 +264,9 @@ export async function deleteEvent(id: string) {
 export async function checkInAttendee(eventId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
+  const qrCode = String(formData.get("qr_code") ?? "").trim();
   if (!name || !phone) return { error: "Name and phone are required" };
+  if (!qrCode) return { error: "Use the event QR check-in link (missing code)" };
 
   // Public QR endpoint writing with the service role: bound it per source.
   const verdict = await checkRateLimit("eventCheckIn", `${eventId}:${clientIp(await headers())}`);
@@ -269,8 +276,15 @@ export async function checkInAttendee(eventId: string, formData: FormData) {
 
   const { createServiceClient } = await import("@/lib/supabase/admin");
   const supabase = createServiceClient();
-  const { data: event } = await supabase.from("campaign_events").select("id").eq("id", eventId).maybeSingle();
+  const { data: event } = await supabase
+    .from("campaign_events")
+    .select("id, qr_code, tenant_id")
+    .eq("id", eventId)
+    .maybeSingle();
   if (!event) return { error: "Event not found" };
+  if (!event.qr_code || event.qr_code !== qrCode) {
+    return { error: "Invalid check-in code for this event" };
+  }
 
   const { data: attendee, error: aErr } = await supabase
     .from("event_attendees")

@@ -165,7 +165,7 @@ export function NinVerifyField({
           </span>
         ) : (
           <span className="text-xs text-muted-foreground">
-            Verify NIN to unlock save — returns photo and identity match for security checks
+            Verify NIN to unlock save — NIMC photo and identity details are stored with the agent
           </span>
         )}
       </div>

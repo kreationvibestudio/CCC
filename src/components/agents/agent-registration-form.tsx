@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AgentGeoCascade } from "@/components/agents/agent-geo-cascade";
 import { NinVerifyField } from "@/components/agents/nin-verify-field";
-import { PassportPhotoField } from "@/components/agents/passport-photo-field";
 import {
   createAgentRegistration,
   getAgentNinMigrationSql,
@@ -27,7 +26,6 @@ export function AgentRegistrationForm({
   const formRef = useRef<HTMLFormElement | null>(null);
   const [pending, startTransition] = useTransition();
   const [collationRole, setCollationRole] = useState<"none" | "ward" | "lga">("none");
-  const [photoFieldKey, setPhotoFieldKey] = useState(0);
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [ninKey, setNinKey] = useState(0);
@@ -89,7 +87,6 @@ export function AgentRegistrationForm({
         pollingUnitId: String(formData.get("polling_unit_id") ?? ""),
         phone: String(formData.get("phone") ?? ""),
         votersCardNumber: String(formData.get("voters_card_number") ?? ""),
-        passportPhotoUrl: String(formData.get("passport_photo_url") ?? ""),
         collationRole: String(formData.get("collation_role") ?? "none"),
         email: String(formData.get("email") ?? ""),
         nin: String(formData.get("nin") ?? ""),
@@ -113,7 +110,6 @@ export function AgentRegistrationForm({
       setCollationRole("none");
       setFullName("");
       setDateOfBirth("");
-      setPhotoFieldKey((k) => k + 1);
       setNinKey((k) => k + 1);
       formRef.current?.reset();
       if (result.id) router.push(`/agents/${result.id}`);
@@ -141,7 +137,7 @@ export function AgentRegistrationForm({
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
           <p className="font-medium">Optional: unlock profile identity columns</p>
           <p className="mt-1 text-muted-foreground">
-            Membership / PVC / photo / collation / NIN also sync onto the system polling-agent profile.
+            Membership / PVC / NIN photo / collation also sync onto the system polling-agent profile.
           </p>
           <div className="mt-3">
             <Button type="button" size="sm" onClick={() => void copyIdentitySql()}>
@@ -205,12 +201,12 @@ export function AgentRegistrationForm({
               onDateOfBirthChange={setDateOfBirth}
             />
 
-            <PassportPhotoField key={photoFieldKey} disabled={pending} />
             <fieldset className="space-y-2 sm:col-span-2">
               <legend className="text-sm font-medium">Collation agent role</legend>
               <p className="text-xs text-muted-foreground">
                 Tick one if this person will also serve as a collation agent. Leave both unchecked for a
-                regular polling-unit agent.
+                regular polling-unit agent. The NIN photograph from Verify NIN is saved with the agent
+                record — no separate passport upload.
               </p>
               <input type="hidden" name="collation_role" value={collationRole} />
               <label className="flex items-start gap-2 text-sm">

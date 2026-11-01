@@ -91,7 +91,39 @@ export async function getAgentRegistrationPollingUnits(input: {
 
   const tenantId = gate.user.profile.tenant_id;
   const supabase = await createClient();
-  const codes = units.map((u) => u.code);
+
+  // When catalog is missing, listNationalPollingUnits returns code-as-id rows from INEC.
+  // Materialize them into tenant-local polling_units so save can assign a real UUID.
+  const needsMaterialize = units.some(
+    (u) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(u.id)
+  );
+  let resolved = units;
+  if (needsMaterialize && units.length > 0) {
+    const { listInecUnits, materializeInecUnitsForTenant } = await import(
+      "@/lib/polling-units/inec-geo"
+    );
+    const inec = await listInecUnits({ state, lga: decoded.lga, ward: decoded.ward });
+    const local = await materializeInecUnitsForTenant(tenantId, inec);
+    resolved = local.map((row) => ({
+      id: row.id,
+      code: row.code,
+      pu_code: null,
+      name: row.name,
+      ward: row.ward,
+      lga: row.lga,
+      state: row.state,
+      state_code: null,
+      lg_code: null,
+      ward_code: null,
+      registered_voters: null,
+      latitude: null,
+      longitude: null,
+      address: null,
+      geocode_status: null,
+    }));
+  }
+
+  const codes = resolved.map((u) => u.code);
   const assignedCodes = new Set<string>();
   if (codes.length > 0) {
     const { data: local } = await supabase
@@ -121,7 +153,7 @@ export async function getAgentRegistrationPollingUnits(input: {
   }
 
   const out: AgentPuOption[] = [];
-  for (const row of units) {
+  for (const row of resolved) {
     const assigned = assignedCodes.has(row.code.toUpperCase());
     if (input.unassignedOnly && assigned) continue;
     out.push({

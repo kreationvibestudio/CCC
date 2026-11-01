@@ -19,6 +19,7 @@ import {
 } from "@/components/polling-units/issue-pinned-codes-button";
 import { FormatPuCodesButton } from "@/components/polling-units/format-pu-codes-button";
 import { SyncInecRegisterButton } from "@/components/polling-units/sync-inec-button";
+import { SeedNationalCatalogButton } from "@/components/polling-units/seed-national-button";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
@@ -193,6 +194,7 @@ export function PollingUnitsView({
         description="Nationwide register — pick a state, then narrow by LGA / ward or PU code"
       >
         <div className="flex flex-wrap gap-2">
+          {canCreate ? <SeedNationalCatalogButton /> : null}
           {canCreate ? <SyncInecRegisterButton /> : null}
           {canCreate ? <FormatPuCodesButton /> : null}
           {canCreate ? <GeocodePinsButton mapped={summary.mapped} total={summary.puCount} /> : null}

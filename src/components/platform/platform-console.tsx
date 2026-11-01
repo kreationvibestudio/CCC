@@ -172,13 +172,20 @@ export function PlatformConsole({
             </div>
             <div className="space-y-1">
               <Label htmlFor="campaign_party">Their party</Label>
-              <NativeSelect id="campaign_party" name="campaign_party" required defaultValue="NDC">
+              <NativeSelect id="campaign_party" name="campaign_party" required defaultValue="">
+                <option value="" disabled>
+                  Select INEC-registered party
+                </option>
                 {parties.map((p) => (
                   <option key={p.code} value={p.code}>
                     {p.code} — {p.name}
                   </option>
                 ))}
               </NativeSelect>
+              <p className="text-xs text-muted-foreground">
+                All currently registered Nigerian political parties (INEC). New workspaces use the
+                shared national polling-unit catalog — no local PU clone required.
+              </p>
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label htmlFor="clone_source">Optional: also copy local PUs from</Label>

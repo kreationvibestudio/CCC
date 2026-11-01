@@ -1,24 +1,32 @@
 export type PartyOption = { code: string; name: string };
 
+/** Keep in sync with src/lib/elections/parties.ts FEATURED / OTHER lists. */
 export const FEATURED_PARTIES: PartyOption[] = [
   { code: "APC", name: "All Progressives Congress" },
   { code: "PDP", name: "Peoples Democratic Party" },
-  { code: "NDC", name: "National Democratic Coalition" },
+  { code: "LP", name: "Labour Party" },
+  { code: "NNPP", name: "New Nigeria Peoples Party" },
   { code: "ADC", name: "African Democratic Congress" },
+  { code: "NDC", name: "Nigeria Democratic Congress" },
 ];
 
 export const OTHER_MAJOR_PARTIES: PartyOption[] = [
-  { code: "LP", name: "Labour Party" },
-  { code: "NNPP", name: "New Nigeria Peoples Party" },
-  { code: "APGA", name: "All Progressives Grand Alliance" },
-  { code: "SDP", name: "Social Democratic Party" },
-  { code: "YPP", name: "Young Progressives Party" },
+  { code: "A", name: "Accord" },
+  { code: "AA", name: "Action Alliance" },
   { code: "AAC", name: "African Action Congress" },
   { code: "ADP", name: "Action Democratic Party" },
+  { code: "APGA", name: "All Progressives Grand Alliance" },
   { code: "APM", name: "Allied Peoples Movement" },
+  { code: "APP", name: "Action Peoples Party" },
+  { code: "BP", name: "Boot Party" },
+  { code: "DLA", name: "Democratic Leadership Alliance" },
+  { code: "NDP", name: "National Democratic Party" },
+  { code: "NRM", name: "National Rescue Movement" },
   { code: "PRP", name: "Peoples Redemption Party" },
+  { code: "SDP", name: "Social Democratic Party" },
+  { code: "YP", name: "Youth Party" },
+  { code: "YPP", name: "Young Progressives Party" },
   { code: "ZLP", name: "Zenith Labour Party" },
-  { code: "A", name: "Accord" },
 ];
 
 export function parsePartyVotes(raw: unknown): Record<string, number> {
@@ -53,3 +61,4 @@ export function votesFromFields(
   }
   return parsePartyVotes(payload);
 }
+

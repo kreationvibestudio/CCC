@@ -71,7 +71,7 @@ export function Sidebar() {
       <div className={cn("flex h-14 items-center border-b border-border px-4", collapsed && "justify-center px-2")}>
         <Link href="/dashboard" className="flex items-center gap-2 min-w-0">
           <BrandLogo size={collapsed ? 28 : 36} className="shrink-0 rounded-md" />
-          <NdcLogo size={collapsed ? 28 : 34} className="shrink-0" />
+          <NdcLogo size={collapsed ? 32 : 40} className="shrink-0" />
           {!collapsed && (
             <div className="flex flex-col min-w-0">
               <span className="text-sm font-bold leading-none truncate max-w-[9.5rem]">

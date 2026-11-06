@@ -61,9 +61,9 @@ export function LoginForm() {
       <CardHeader className="text-center">
         <div className="mx-auto mb-3 flex flex-col items-center gap-3">
           <BrandLogo size={112} priority className="mx-auto" />
-          <div className="flex items-center gap-2 rounded-full border border-emerald-600/25 bg-emerald-500/10 px-3 py-1.5">
-            <NdcLogo size={28} priority />
-            <span className="text-xs font-semibold tracking-wide text-emerald-800 dark:text-emerald-300">
+          <div className="flex items-center gap-2 rounded-full border border-[#1e3a8a]/30 bg-[#1e3a8a]/10 px-3 py-1.5">
+            <NdcLogo size={36} priority />
+            <span className="text-xs font-semibold tracking-wide text-[#1e3a8a] dark:text-[#93c5fd]">
               NDC campaign platform
             </span>
           </div>

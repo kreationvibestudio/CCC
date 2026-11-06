@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand/logo";
+import { NdcLogo } from "@/components/brand/ndc-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -72,13 +73,14 @@ export function AgentCodeLoginForm() {
         onSubmit={(e) => void onSubmit(e)}
         className="w-full max-w-md space-y-5 text-center text-white"
       >
-        <div className="flex justify-center">
-          <BrandLogo size={80} priority />
+        <div className="flex items-center justify-center gap-3">
+          <BrandLogo size={72} priority />
+          <NdcLogo size={64} priority />
         </div>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Field Agent sign-in</h1>
           <p className="mt-2 text-sm text-white/70">
-            Enter the code from HQ (Polling units → PU Agents). Turn on location — you must be within 100 feet of your polling unit.
+            NDC campaign field access. Enter the code from HQ (Polling units → PU Agents). Turn on location — you must be within 100 feet of your polling unit.
           </p>
         </div>
         <Input

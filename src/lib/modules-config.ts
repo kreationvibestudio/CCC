@@ -36,6 +36,19 @@ export const MODULES: Record<string, ModuleConfig> = {
     description: "Complete volunteer database with tasks and GPS check-in.",
     features: ["Role-based LMS", "Volunteer profiles", "Task assignment", "Training certificates", "Live briefings", "Deployment readiness"],
   },
+  members: {
+    slug: "members",
+    title: "NDC Unit Members",
+    description: "Register party members by LGA, ward, and polling unit with voter and NDC card details.",
+    features: [
+      "First & last name",
+      "Phone number",
+      "Voter's card number",
+      "NDC party card number",
+      "LGA / ward / unit",
+      "Public signup link",
+    ],
+  },
   crm: {
     slug: "crm",
     title: "Campaign CRM",

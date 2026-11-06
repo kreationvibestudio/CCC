@@ -100,6 +100,26 @@ export interface Profile {
   created_at: string;
 }
 
+/** NDC unit member registered to an LGA / ward / polling unit. */
+export interface UnitMember {
+  id: string;
+  tenant_id: string;
+  polling_unit_id?: string | null;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  voters_card_number: string;
+  membership_card_number: string;
+  state?: string | null;
+  lga: string;
+  ward: string;
+  unit_code?: string | null;
+  unit_name?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** HQ field-agent registration (source of truth for agent paperwork). */
 export interface Agent {
   id: string;

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandLogo } from "@/components/brand/logo";
+import { NdcLogo } from "@/components/brand/ndc-logo";
 import { InstallHqHint } from "@/components/pwa/install-hq-hint";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -58,11 +59,17 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md border-border/50 war-room-glow">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-3">
-          <BrandLogo size={128} priority className="mx-auto" />
+        <div className="mx-auto mb-3 flex flex-col items-center gap-3">
+          <BrandLogo size={112} priority className="mx-auto" />
+          <div className="flex items-center gap-2 rounded-full border border-emerald-600/25 bg-emerald-500/10 px-3 py-1.5">
+            <NdcLogo size={28} priority />
+            <span className="text-xs font-semibold tracking-wide text-emerald-800 dark:text-emerald-300">
+              NDC campaign platform
+            </span>
+          </div>
         </div>
         <CardTitle className="sr-only">Campaign Command Center</CardTitle>
-        <CardDescription>Sign in to your campaign war room</CardDescription>
+        <CardDescription>Sign in to your NDC campaign war room</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

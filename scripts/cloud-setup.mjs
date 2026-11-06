@@ -64,8 +64,18 @@ const MIGRATIONS = [
   "supabase/migrations/20260910000000_volunteer_training.sql",
   "supabase/migrations/20260910120000_volunteer_lms.sql",
   "supabase/migrations/20260910180000_lms_grants_and_catalog.sql",
+  "supabase/migrations/20260911120000_contact_type_supporter.sql",
   "supabase/migrations/20260913180000_media_content.sql",
   "supabase/migrations/20261001140000_campaign_event_types_text.sql",
+  "supabase/migrations/20261012160000_agent_identity_fields.sql",
+  "supabase/migrations/20261012170000_agents_table.sql",
+  "supabase/migrations/20261019190000_ward_coordinator_also_field_agent.sql",
+  "supabase/migrations/20261019230000_woman_leader_roles.sql",
+  "supabase/migrations/20261030200000_agent_nin_verification.sql",
+  "supabase/migrations/20261031210000_workspace_agent_tenant_isolation.sql",
+  "supabase/migrations/20261031220000_tenant_annual_licensing.sql",
+  "supabase/migrations/20261031230000_national_polling_units_catalog.sql",
+  "supabase/migrations/20261106120000_unit_members.sql",
 ];
 
 loadEnvLocal();

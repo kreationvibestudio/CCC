@@ -75,7 +75,7 @@ export function AgentCodeLoginForm() {
       >
         <div className="flex items-center justify-center gap-3">
           <BrandLogo size={72} priority />
-          <NdcLogo size={64} priority />
+          <NdcLogo size={72} priority />
         </div>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Field Agent sign-in</h1>

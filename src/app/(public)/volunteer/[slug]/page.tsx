@@ -27,7 +27,7 @@ export default async function VolunteerSlugPage({
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
               <BrandLogo size={40} className="rounded-md" priority />
             </div>
-            <NdcLogo size={56} priority />
+            <NdcLogo size={64} priority />
           </div>
           <div className="mx-auto flex items-center justify-center gap-2 text-primary">
             <HandHeart className="h-5 w-5" />

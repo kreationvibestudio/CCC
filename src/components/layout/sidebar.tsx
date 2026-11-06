@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { BrandLogo } from "@/components/brand/logo";
+import { NdcLogo } from "@/components/brand/ndc-logo";
 import { Shield, Layers, ChevronLeft, ChevronRight, FolderOpen } from "lucide-react";
 
 export function Sidebar() {
@@ -69,14 +70,15 @@ export function Sidebar() {
     <div className="flex h-full flex-col">
       <div className={cn("flex h-14 items-center border-b border-border px-4", collapsed && "justify-center px-2")}>
         <Link href="/dashboard" className="flex items-center gap-2 min-w-0">
-          <BrandLogo size={collapsed ? 32 : 40} className="shrink-0 rounded-md" />
+          <BrandLogo size={collapsed ? 28 : 36} className="shrink-0 rounded-md" />
+          <NdcLogo size={collapsed ? 28 : 34} className="shrink-0" />
           {!collapsed && (
             <div className="flex flex-col min-w-0">
-              <span className="text-sm font-bold leading-none truncate max-w-[11rem]">
+              <span className="text-sm font-bold leading-none truncate max-w-[9.5rem]">
                 {user?.workspace?.name ?? "CCC"}
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {user?.workspace?.party ? `${user.workspace.party} · Command Center` : "Command Center"}
+                {user?.workspace?.party ? `${user.workspace.party} · Command Center` : "NDC · Command Center"}
               </span>
             </div>
           )}

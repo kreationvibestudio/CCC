@@ -27,6 +27,7 @@ const OPERATIONAL_TABLES = [
   "volunteer_attendance",
   "volunteer_checkins",
   "volunteers",
+  "unit_members",
   "contact_interactions",
   "donations",
   "contacts",

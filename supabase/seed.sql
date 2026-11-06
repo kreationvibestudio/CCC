@@ -34,3 +34,11 @@ INSERT INTO wards (id, lga_id, code, name) VALUES
   ('d0000000-0000-0000-0000-000000000004', 'c0000000-0000-0000-0000-000000000002', 'W01', 'Ugboha'),
   ('d0000000-0000-0000-0000-000000000005', 'c0000000-0000-0000-0000-000000000002', 'W02', 'Ewohimi')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO tenant_settings (tenant_id, key, value)
+VALUES (
+  'a0000000-0000-0000-0000-000000000001',
+  'campaign_party',
+  '{"party":"NDC"}'::jsonb
+)
+ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value;

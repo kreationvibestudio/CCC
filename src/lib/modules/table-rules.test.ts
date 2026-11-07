@@ -45,7 +45,7 @@ describe("pickAllowedColumns", () => {
     const submitted = [
       "code", "name", "ward", "lga", "state", "state_code", "lg_code", "ward_code",
       "pu_code", "registered_voters", "latitude", "longitude", "address",
-      "risk_level", "security_notes", "logistics", "assigned_agent_id", "geocode_status",
+      "risk_level", "security_notes", "logistics", "assigned_agent_id", "geocode_status", "pin_source",
     ];
     const payload = Object.fromEntries(submitted.map((key) => [key, "x"]));
     const result = pickAllowedColumns("polling_units", payload);

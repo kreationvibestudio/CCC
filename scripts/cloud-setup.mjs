@@ -76,6 +76,7 @@ const MIGRATIONS = [
   "supabase/migrations/20261031220000_tenant_annual_licensing.sql",
   "supabase/migrations/20261031230000_national_polling_units_catalog.sql",
   "supabase/migrations/20261106120000_unit_members.sql",
+  "supabase/migrations/20261107220000_polling_unit_pin_source.sql",
 ];
 
 loadEnvLocal();

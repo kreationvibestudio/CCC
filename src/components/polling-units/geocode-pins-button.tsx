@@ -199,22 +199,39 @@ export function GeocodePinsButton({ mapped, total }: { mapped: number; total: nu
     <div className="flex flex-wrap items-center gap-2">
       <Button type="button" variant="default" disabled={running} onClick={() => runInec()}>
         <MapPin className="mr-2 h-4 w-4" />
-        {running ? progress || "Aligning to INEC…" : "Align to INEC GPS"}
+        {running ? progress || "Aligning to INEC…" : "Align to INEC GPS (required)"}
       </Button>
       <Button type="button" variant={missing ? "secondary" : "outline"} disabled={running} onClick={() => run(false)}>
         <MapPin className="mr-2 h-4 w-4" />
-        {running ? progress || "Filling map pins…" : missing ? `Fill ${remaining.toLocaleString()} missing pins` : "Map pins complete"}
+        {running ? progress || "Filling map pins…" : missing ? `Street-geocode ${remaining.toLocaleString()} gaps` : "Map pins complete"}
       </Button>
       {missing ? (
         <>
           <Button type="button" variant="outline" disabled={running} onClick={() => run(true)}>
             Retry failed
           </Button>
-          <Button type="button" variant="secondary" disabled={running} onClick={() => runApprox()}>
-            Drop approx pins (fast)
+          <Button
+            type="button"
+            variant="outline"
+            disabled={running}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "Approx pins are LGA centroids — often kilometres from the real polling unit. Field Agents cannot sign in on approx pins. Use only for map preview, then Align to INEC GPS. Continue?"
+                )
+              ) {
+                return;
+              }
+              void runApprox();
+            }}
+          >
+            Drop approx pins (preview only)
           </Button>
         </>
       ) : null}
+      <p className="basis-full text-xs text-muted-foreground">
+        Field Agent check-in needs pinpoint INEC CVR or HQ-pasted coordinates (100 ft). Street geocode and approx pins will not unlock sign-in.
+      </p>
     </div>
   );
 }

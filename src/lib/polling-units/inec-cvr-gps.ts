@@ -96,6 +96,24 @@ export function loadInecGpsCsv(csvPath = DEFAULT_CSV): InecGpsRow[] {
   return parseInecGpsCsv(fs.readFileSync(csvPath, "utf8"));
 }
 
+let catalogCache: Map<string, InecGpsRow> | null = null;
+
+/** Official INEC CVR pins keyed by delimitation code (`12/01/01/001`). */
+export function loadInecGpsCatalogByCode(csvPath = DEFAULT_CSV): Map<string, InecGpsRow> {
+  if (catalogCache && csvPath === DEFAULT_CSV) return catalogCache;
+  const map = new Map<string, InecGpsRow>();
+  for (const row of loadInecGpsCsv(csvPath)) {
+    map.set(row.code.trim().toUpperCase(), row);
+  }
+  if (csvPath === DEFAULT_CSV) catalogCache = map;
+  return map;
+}
+
+/** Test helper — clear the in-memory catalog cache. */
+export function clearInecGpsCatalogCache() {
+  catalogCache = null;
+}
+
 export function isApproxStoredPin(row: {
   code?: string | null;
   name?: string | null;
@@ -110,6 +128,29 @@ export function isApproxStoredPin(row: {
     Math.abs(approx.latitude - Number(row.latitude)) < 1e-5 &&
     Math.abs(approx.longitude - Number(row.longitude)) < 1e-5
   );
+}
+
+async function updateWithOptionalPinSource(
+  supabase: SupabaseClient,
+  table: "polling_units" | "national_polling_units",
+  match: { column: string; value: string },
+  payload: {
+    latitude: number;
+    longitude: number;
+    geocode_status: string;
+    pin_source: string;
+  },
+  extraEq?: { column: string; value: string }
+) {
+  let query = supabase.from(table).update(payload).eq(match.column, match.value);
+  if (extraEq) query = query.eq(extraEq.column, extraEq.value);
+  const first = await query;
+  if (!first.error) return first;
+  if (!/pin_source/i.test(first.error.message)) return first;
+  const { pin_source: _drop, ...legacy } = payload;
+  let retry = supabase.from(table).update(legacy).eq(match.column, match.value);
+  if (extraEq) retry = retry.eq(extraEq.column, extraEq.value);
+  return retry;
 }
 
 /**
@@ -212,17 +253,28 @@ export async function applyInecGpsForTenant(
           cursor += 1;
           if (i >= updates.length) break;
           const u = updates[i];
-          const { error: updErr } = await supabase
-            .from("polling_units")
-            .update({
-              latitude: u.latitude,
-              longitude: u.longitude,
-              geocode_status: "done",
-            })
-            .eq("id", u.id)
-            .eq("tenant_id", tenantId);
-          if (updErr) localErrors.push(`${u.code}: ${updErr.message}`);
+          const pinPayload = {
+            latitude: u.latitude,
+            longitude: u.longitude,
+            geocode_status: "done",
+            pin_source: "inec_cvr",
+          };
+          const localUpd = await updateWithOptionalPinSource(
+            supabase,
+            "polling_units",
+            { column: "id", value: u.id },
+            pinPayload,
+            { column: "tenant_id", value: tenantId }
+          );
+          if (localUpd.error) localErrors.push(`${u.code}: ${localUpd.error.message}`);
           else {
+            // Keep the shared national catalog in lockstep — HQ list/detail read it.
+            await updateWithOptionalPinSource(
+              supabase,
+              "national_polling_units",
+              { column: "code", value: u.code },
+              pinPayload
+            );
             localUpdated += 1;
             if (localSamples.length < 2) {
               localSamples.push({ code: u.code, lat: u.latitude, lng: u.longitude });

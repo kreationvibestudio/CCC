@@ -43,7 +43,18 @@ npm run pu:bootstrap   # import Edo CSV + approximate LGA map pins for agent che
 npm run pu:sync-inec
 ```
 
-Field Agent check-in uses a **100 ft** radius around the stored pin. Location is required. Soft check-in (`AGENT_LOGIN_SOFT_GPS=true`) is lab-only. Web login: `/agent/login`. Use official INEC GPS (`npm run pu:apply-gps`), not LGA-centroid approximations — those pins are kilometres off and will fail a 100 ft fence.
+Field Agent check-in uses a **100 ft** radius around the stored pin. Location is required. Soft check-in (`AGENT_LOGIN_SOFT_GPS=true`) is lab-only. Web login: `/agent/login`.
+
+**Pin precision is mandatory.** Only these unlock agent sign-in:
+
+| `pin_source` | Allowed for agent login? | Meaning |
+|---|---|---|
+| `inec_cvr` | Yes | Official INEC CVR survey GPS |
+| `manual` | Yes | HQ pasted Google Maps coords from the real building |
+| `street_geocode` | **No** | Photon/Google street guess — often wrong building |
+| `approx` | **No** | LGA centroid + jitter — kilometres off |
+
+After deploy: **Polling units → Align to INEC GPS (required)**. That writes the catalog in `supabase/data/edo-polling-unit-gps.csv` onto tenant + national rows and sets `pin_source=inec_cvr`. Never rely on **Drop approx pins** for Field Agents.
 
 ## Official INEC CSV columns
 
@@ -95,12 +106,13 @@ INEC’s public CSV has **names, not GPS**. The map used to drop **approximate L
 Pull coordinates from the INEC Continuous Voter Registration locator (`cvr.inecnigeria.org`) and write them into `polling_units`:
 
 ```bash
-npm run pu:fetch-gps            # scrape Edo → supabase/data/edo-polling-unit-gps.csv
+npm run pu:fetch-gps                 # scrape Edo → supabase/data/edo-polling-unit-gps.csv (strict lat/lng only)
 npm run pu:fetch-gps -- --resume
+npm run pu:fetch-gps -- --missing-only --resume --limit=500
 npm run pu:apply-gps -- --force --all
 ```
 
-On **Maps** / **Polling Units**, use **Align to INEC GPS** (same CSV apply via `/api/polling-units/geocode` with `{ inec: true }`).
+On **Maps** / **Polling Units**, use **Align to INEC GPS (required)** (same CSV apply via `/api/polling-units/geocode` with `{ inec: true }`). The fetch refuses Photon/text fallbacks so the CSV stays survey-grade.
 
 ### Street geocode / approx fallback
 

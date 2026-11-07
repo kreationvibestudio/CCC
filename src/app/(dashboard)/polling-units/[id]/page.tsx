@@ -113,7 +113,20 @@ export default async function PollingUnitDetailPage({
             </div>
             <div className="space-y-1"><Label htmlFor="security_notes">Security notes</Label><textarea id="security_notes" name="security_notes" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={(pu.security_notes as string) ?? ""} /></div>
             <div className="space-y-1"><Label htmlFor="logistics">Logistics</Label><textarea id="logistics" name="logistics" rows={2} className="flex w-full rounded-md border border-input px-3 py-2 text-sm" defaultValue={(pu.logistics as string) ?? ""} /></div>
-            {pu.geocode_status ? <Badge variant="outline">Geocode: {String(pu.geocode_status)}</Badge> : null}
+            <div className="flex flex-wrap gap-2">
+              {pu.geocode_status ? <Badge variant="outline">Geocode: {String(pu.geocode_status)}</Badge> : null}
+              {pu.pin_source ? (
+                <Badge variant={pu.pin_source === "inec_cvr" || pu.pin_source === "manual" ? "secondary" : "destructive"}>
+                  Pin source: {String(pu.pin_source)}
+                </Badge>
+              ) : (
+                <Badge variant="outline">Pin source: unverified</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Agent sign-in only works with <span className="font-medium">inec_cvr</span> or{" "}
+              <span className="font-medium">manual</span> pins. Use Align to INEC GPS, or paste Google Maps coordinates from the real building.
+            </p>
             {canWrite ? <SubmitButton label="Save changes" /> : null}
             </fieldset>
           </form>

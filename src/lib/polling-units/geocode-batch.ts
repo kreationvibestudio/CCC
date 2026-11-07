@@ -27,23 +27,22 @@ async function patchPin(
   tenantId: string,
   id: string,
   latitude: number,
-  longitude: number
+  longitude: number,
+  pinSource: "approx" | "street_geocode" | "inec_cvr" | "manual" = "street_geocode"
 ) {
-  const withStatus = await supabase
-    .from("polling_units")
-    .update({ latitude, longitude, geocode_status: "done" })
-    .eq("id", id)
-    .eq("tenant_id", tenantId);
-  if (!withStatus.error) return true;
-
-  // Older DBs may lack geocode_status — retry coords only.
-  if (/geocode_status/i.test(withStatus.error.message)) {
-    const coordsOnly = await supabase
+  const payloads: Record<string, unknown>[] = [
+    { latitude, longitude, geocode_status: "done", pin_source: pinSource },
+    { latitude, longitude, geocode_status: "done" },
+    { latitude, longitude, pin_source: pinSource },
+    { latitude, longitude },
+  ];
+  for (const payload of payloads) {
+    const result = await supabase
       .from("polling_units")
-      .update({ latitude, longitude })
+      .update(payload)
       .eq("id", id)
       .eq("tenant_id", tenantId);
-    return !coordsOnly.error;
+    if (!result.error) return true;
   }
   return false;
 }
@@ -73,7 +72,7 @@ export async function fillApproxPinsForTenant(
   const errors: string[] = [];
   const updated = await mapPool(rows, 40, async (row) => {
     const pin = approxPinForPollingUnit(row);
-    const ok = await patchPin(supabase, tenantId, row.id, pin.latitude, pin.longitude);
+    const ok = await patchPin(supabase, tenantId, row.id, pin.latitude, pin.longitude, "approx");
     if (!ok) errors.push(row.code ?? row.id);
     return ok;
   });
@@ -207,16 +206,8 @@ export async function geocodePendingForTenant(
   for (const unit of units) {
     const hit: GeocodeHit | null = await geocodePollingUnit(unit, { providers });
     if (hit) {
-      const { error: updateError } = await supabase
-        .from("polling_units")
-        .update({
-          latitude: hit.lat,
-          longitude: hit.lng,
-          geocode_status: "done",
-        })
-        .eq("id", unit.id)
-        .eq("tenant_id", tenantId);
-      if (updateError) {
+      const ok = await patchPin(supabase, tenantId, unit.id, hit.lat, hit.lng, "street_geocode");
+      if (!ok) {
         failed += 1;
         samples.push({ code: unit.code, name: unit.name, lat: null, lng: null, status: "failed" });
         continue;

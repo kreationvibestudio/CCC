@@ -21,6 +21,15 @@ import {
   setCampaignFocusState,
 } from "@/lib/polling-units/focus-state";
 import { resolvePollingUnitCoordinates } from "@/lib/maps/coordinates";
+import { loadInecGpsCatalogByCode } from "@/lib/polling-units/inec-cvr-gps";
+import { coordinatesMatchCatalog } from "@/lib/polling-units/pin-trust";
+
+function pinSourceForSavedCoords(code: string, lat: number | null, lng: number | null) {
+  if (lat == null || lng == null) return null;
+  const catalog = loadInecGpsCatalogByCode().get(code.trim().toUpperCase());
+  if (catalog && coordinatesMatchCatalog(lat, lng, catalog)) return "inec_cvr";
+  return "manual";
+}
 
 const LIST_COLS =
   "id, code, pu_code, name, ward, lga, state, state_code, lg_code, ward_code, registered_voters, latitude, longitude, address, geocode_status";
@@ -319,14 +328,39 @@ export async function getPollingUnit(id: string) {
     const code = formatPollingUnitCode(national);
     // Agent login uses the tenant-local row. Prefer that pin on the editor so HQ
     // sees the same coordinates the Field Agent app checks against.
-    const { data: local } = await supabase
+    let localQuery = await supabase
       .from("polling_units")
       .select(
-        "id, latitude, longitude, geocode_status, address, risk_level, security_notes, logistics, assigned_agent_id, registered_voters"
+        "id, latitude, longitude, geocode_status, pin_source, address, risk_level, security_notes, logistics, assigned_agent_id, registered_voters"
       )
       .eq("tenant_id", gate.user.profile.tenant_id)
       .ilike("code", code)
       .maybeSingle();
+    if (localQuery.error && /pin_source/i.test(localQuery.error.message)) {
+      localQuery = await supabase
+        .from("polling_units")
+        .select(
+          "id, latitude, longitude, geocode_status, address, risk_level, security_notes, logistics, assigned_agent_id, registered_voters"
+        )
+        .eq("tenant_id", gate.user.profile.tenant_id)
+        .ilike("code", code)
+        .maybeSingle();
+    }
+    const local = localQuery.data as
+      | {
+          id: string;
+          latitude: number | null;
+          longitude: number | null;
+          geocode_status?: string | null;
+          pin_source?: string | null;
+          address?: string | null;
+          risk_level?: string | null;
+          security_notes?: string | null;
+          logistics?: string | null;
+          assigned_agent_id?: string | null;
+          registered_voters?: number | null;
+        }
+      | null;
     return {
       ...national,
       code,
@@ -335,6 +369,7 @@ export async function getPollingUnit(id: string) {
       latitude: local?.latitude ?? national.latitude,
       longitude: local?.longitude ?? national.longitude,
       geocode_status: local?.geocode_status ?? national.geocode_status,
+      pin_source: local?.pin_source ?? (national as { pin_source?: string | null }).pin_source ?? null,
       address: local?.address ?? national.address,
       registered_voters: local?.registered_voters ?? national.registered_voters,
       risk_level: local?.risk_level ?? "low",
@@ -401,8 +436,13 @@ export async function createPollingUnit(formData: FormData) {
     logistics: (formData.get("logistics") as string) || null,
     assigned_agent_id: (formData.get("assigned_agent_id") as string) || null,
     geocode_status: lat != null && lng != null ? "done" : "pending",
+    pin_source: pinSourceForSavedCoords(code, lat, lng),
   };
-  const { error } = await supabase.from("polling_units").insert(payload);
+  let { error } = await supabase.from("polling_units").insert(payload);
+  if (error && /pin_source/i.test(error.message)) {
+    const { pin_source: _drop, ...legacy } = payload;
+    ({ error } = await supabase.from("polling_units").insert(legacy));
+  }
   if (error) return { error: error.message };
   await upsertPollingUnitRows(supabase, user.profile.tenant_id, [
     {
@@ -468,6 +508,7 @@ export async function updatePollingUnit(id: string, formData: FormData) {
     longitude: lng,
     address: (formData.get("address") as string) || null,
     geocode_status: lat != null && lng != null ? "done" : "pending",
+    pin_source: pinSourceForSavedCoords(code, lat, lng),
   };
   const tenantOnly = {
     risk_level: (formData.get("risk_level") as string) || "low",
@@ -488,12 +529,21 @@ export async function updatePollingUnit(id: string, formData: FormData) {
     .eq("id", id)
     .maybeSingle();
 
+  async function patchPinAware(run: (payload: Record<string, unknown>) => PromiseLike<{ error: { message: string } | null }>, patch: Record<string, unknown>) {
+    let result = await run(patch);
+    if (result.error && /pin_source/i.test(result.error.message)) {
+      const { pin_source: _drop, ...legacy } = patch;
+      result = await run(legacy);
+    }
+    return result;
+  }
+
   if (national) {
-    const { error: nationalError } = await admin
-      .from("national_polling_units")
-      .update({ ...shared, updated_at: new Date().toISOString() })
-      .eq("id", id);
-    if (nationalError) return { error: nationalError.message };
+    const nationalUpd = await patchPinAware(
+      (payload) => admin.from("national_polling_units").update(payload).eq("id", id),
+      { ...shared, updated_at: new Date().toISOString() }
+    );
+    if (nationalUpd.error) return { error: nationalUpd.error.message };
 
     const { data: local } = await admin
       .from("polling_units")
@@ -503,32 +553,38 @@ export async function updatePollingUnit(id: string, formData: FormData) {
       .maybeSingle();
 
     if (local?.id) {
-      const { error: localError } = await admin
-        .from("polling_units")
-        .update({ ...shared, ...tenantOnly })
-        .eq("id", local.id)
-        .eq("tenant_id", tenantId);
-      if (localError) return { error: localError.message };
+      const localUpd = await patchPinAware(
+        (payload) => admin.from("polling_units").update(payload).eq("id", local.id).eq("tenant_id", tenantId),
+        { ...shared, ...tenantOnly }
+      );
+      if (localUpd.error) return { error: localUpd.error.message };
     } else if (tenantOnly.assigned_agent_id) {
-      const { error: insertError } = await admin.from("polling_units").insert({
+      let insert = await admin.from("polling_units").insert({
         tenant_id: tenantId,
         ...shared,
         ...tenantOnly,
       });
-      if (insertError) return { error: insertError.message };
+      if (insert.error && /pin_source/i.test(insert.error.message)) {
+        const { pin_source: _drop, ...legacy } = shared;
+        insert = await admin.from("polling_units").insert({
+          tenant_id: tenantId,
+          ...legacy,
+          ...tenantOnly,
+        });
+      }
+      if (insert.error) return { error: insert.error.message };
     }
   } else {
-    const { error: localError } = await userClient
-      .from("polling_units")
-      .update({ ...shared, ...tenantOnly })
-      .eq("id", id)
-      .eq("tenant_id", tenantId);
-    if (localError) return { error: localError.message };
+    const localUpd = await patchPinAware(
+      (payload) => userClient.from("polling_units").update(payload).eq("id", id).eq("tenant_id", tenantId),
+      { ...shared, ...tenantOnly }
+    );
+    if (localUpd.error) return { error: localUpd.error.message };
 
-    await admin
-      .from("national_polling_units")
-      .update({ ...shared, updated_at: new Date().toISOString() })
-      .ilike("code", code);
+    await patchPinAware(
+      (payload) => admin.from("national_polling_units").update(payload).ilike("code", code),
+      { ...shared, updated_at: new Date().toISOString() }
+    );
   }
 
   revalidatePath("/polling-units");

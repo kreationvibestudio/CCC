@@ -36,6 +36,7 @@ export const TABLE_RULES = {
       "logistics",
       "assigned_agent_id",
       "geocode_status",
+      "pin_source",
     ],
   },
   volunteers: {

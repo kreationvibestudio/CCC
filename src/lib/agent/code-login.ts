@@ -23,6 +23,7 @@ import {
 import { omitUnmigratedAgentCodeColumns } from "@/lib/agent/code-columns";
 import { isMissingColumnError, isMissingRelationError } from "@/lib/public-error";
 import { formatPollingUnitCode } from "@/lib/polling-units/code";
+import { agentPinTrustError, isTrustedAgentPin } from "@/lib/polling-units/pin-trust";
 
 export { AGENT_LOGIN_RADIUS_FT };
 
@@ -214,13 +215,45 @@ export async function loginWithAgentCode(input: {
       .eq("id", row.profile_id)
       .maybeSingle();
   }
-  const [{ data: pu }] = await Promise.all([
-    admin
+  let puQuery = await admin
+    .from("polling_units")
+    .select(
+      "id, code, pu_code, name, ward, lga, state, latitude, longitude, pin_source, assigned_agent_id, tenant_id, state_code, lg_code, ward_code"
+    )
+    .eq("id", row.polling_unit_id)
+    .maybeSingle();
+  if (isMissingColumnError(puQuery.error?.message, "pin_source")) {
+    puQuery = await admin
       .from("polling_units")
-      .select("id, code, pu_code, name, ward, lga, state, latitude, longitude, assigned_agent_id, tenant_id, state_code, lg_code, ward_code")
+      .select(
+        "id, code, pu_code, name, ward, lga, state, latitude, longitude, assigned_agent_id, tenant_id, state_code, lg_code, ward_code"
+      )
       .eq("id", row.polling_unit_id)
-      .maybeSingle(),
-  ]);
+      .maybeSingle();
+  }
+  const pu = puQuery.data
+    ? ({
+        ...puQuery.data,
+        pin_source: "pin_source" in puQuery.data ? (puQuery.data as { pin_source?: string | null }).pin_source ?? null : null,
+      } as {
+        id: string;
+        code: string;
+        pu_code: string | null;
+        name: string;
+        ward: string;
+        lga: string;
+        state: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        pin_source: string | null;
+        assigned_agent_id: string | null;
+        tenant_id: string;
+        state_code: string | null;
+        lg_code: string | null;
+        ward_code: string | null;
+      })
+    : null;
+  if (puQuery.error && !pu) return { error: puQuery.error.message };
   const profile = profileQuery.data as
     | { id: string; email: string; full_name: string; role: string; tenant_id: string; also_field_agent?: boolean }
     | null;
@@ -244,10 +277,14 @@ export async function loginWithAgentCode(input: {
   const pinLat = pu.latitude != null ? Number(pu.latitude) : null;
   const pinLng = pu.longitude != null ? Number(pu.longitude) : null;
 
+  if (!softGps && !isTrustedAgentPin(pu)) {
+    return { error: agentPinTrustError(pu) };
+  }
+
   if (hasGps) {
     if (pinLat == null || pinLng == null || !Number.isFinite(pinLat) || !Number.isFinite(pinLng)) {
       if (!softGps) {
-        return { error: "This polling unit has no map pin. Ask HQ to geocode it, then try again." };
+        return { error: agentPinTrustError(pu) };
       }
     } else {
       distanceM = haversineMeters(lat!, lng!, pinLat, pinLng);

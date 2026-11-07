@@ -299,17 +299,33 @@ export async function pollCvrGpsForTenant(
   for (const item of pending) {
     const pin = pinByCvrId.get(item.node.id) || pinByDelimitation.get(item.node.delimitation);
     if (!pin) continue;
-    const { error: updErr } = await supabase
+    const pinPayload = {
+      latitude: pin.latitude,
+      longitude: pin.longitude,
+      geocode_status: "done",
+      pin_source: "inec_cvr",
+    };
+    let upd = await supabase
       .from("polling_units")
-      .update({
-        latitude: pin.latitude,
-        longitude: pin.longitude,
-        geocode_status: "done",
-      })
+      .update(pinPayload)
       .eq("id", item.id)
       .eq("tenant_id", tenantId);
-    if (updErr) applyErrors.push(`${item.node.displayCode}: ${updErr.message}`);
+    if (upd.error && /pin_source/i.test(upd.error.message)) {
+      const { pin_source: _drop, ...legacy } = pinPayload;
+      upd = await supabase.from("polling_units").update(legacy).eq("id", item.id).eq("tenant_id", tenantId);
+    }
+    if (upd.error) applyErrors.push(`${item.node.displayCode}: ${upd.error.message}`);
     else {
+      await supabase
+        .from("national_polling_units")
+        .update(pinPayload)
+        .eq("code", pin.code)
+        .then(async (national) => {
+          if (national.error && /pin_source/i.test(national.error.message)) {
+            const { pin_source: _drop, ...legacy } = pinPayload;
+            await supabase.from("national_polling_units").update(legacy).eq("code", pin.code);
+          }
+        });
       updated += 1;
       if (samples.length < 8) samples.push({ code: item.node.displayCode, lat: pin.latitude, lng: pin.longitude });
     }

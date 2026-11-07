@@ -518,7 +518,9 @@ export async function provisionPinnedPollingUnits(input?: { limit?: number }): P
     ),
   ]);
 
-  const batch = (pinned ?? []).slice(0, limit);
+  const { isTrustedAgentPin } = await import("@/lib/polling-units/pin-trust");
+  const trusted = (pinned ?? []).filter((pu) => isTrustedAgentPin(pu));
+  const batch = trusted.slice(0, limit);
   const codes: { name: string; code: string; puCode: string; unitName: string }[] = [];
   let created = 0;
   for (const pu of batch) {

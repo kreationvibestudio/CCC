@@ -542,6 +542,8 @@ const OPERATIONAL_TABLES = [
   "comment_notes",
   "comment_responses",
   "comments",
+  "social_watch_posts",
+  "social_watch_targets",
   "social_posts",
   "social_accounts",
   "ai_analyses",

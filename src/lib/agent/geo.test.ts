@@ -3,8 +3,10 @@ import { describe, it } from "node:test";
 import {
   AGENT_LOGIN_RADIUS_FT,
   AGENT_LOGIN_RADIUS_M,
+  formatAgentLoginDistanceError,
   formatLoginDistance,
   haversineMeters,
+  isAgentPinLikelyWrong,
   isWithinAgentLoginRadius,
   metersToFeet,
 } from "./geo.ts";
@@ -37,5 +39,21 @@ describe("100-foot agent login fence", () => {
   it("describes the miss in feet", () => {
     assert.equal(formatLoginDistance(0), "0 ft");
     assert.match(formatLoginDistance(30.48), /100 ft/);
+  });
+
+  it("flags multi-kilometre misses as a bad map pin", () => {
+    assert.equal(isAgentPinLikelyWrong(10), false);
+    assert.equal(isAgentPinLikelyWrong(90_000), true);
+    assert.match(
+      formatAgentLoginDistanceError({
+        distanceM: 85_726,
+        unitLabel: "12/12/01/001",
+        phoneLat: 6.33463,
+        phoneLng: 5.62339,
+        pinLat: 7.05,
+        pinLng: 6.25,
+      }),
+      /pin is almost certainly wrong/i
+    );
   });
 });

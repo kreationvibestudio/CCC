@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { authorize } from "@/lib/auth/session";
 import { denyCreateIfRestricted } from "@/types/auth";
-import { deleteRecord, getRecord, updateRecord } from "@/lib/modules/crud-actions";
+import { deleteRecord, getRecord } from "@/lib/modules/crud-actions";
 import { parsePollingUnitsCsv } from "@/lib/polling-units/csv";
 import { upsertPollingUnitRows } from "@/lib/polling-units/import-rows";
 import { formatPollingUnitCode, parsePollingUnitCode, withDisplayCode } from "@/lib/polling-units/code";
@@ -19,6 +20,7 @@ import {
   getCampaignFocusState,
   setCampaignFocusState,
 } from "@/lib/polling-units/focus-state";
+import { resolvePollingUnitCoordinates } from "@/lib/maps/coordinates";
 
 const LIST_COLS =
   "id, code, pu_code, name, ward, lga, state, state_code, lg_code, ward_code, registered_voters, latitude, longitude, address, geocode_status";
@@ -265,7 +267,7 @@ export async function queryPollingUnits(input: {
   if (codes.length) {
     const { data: local } = await supabase
       .from("polling_units")
-      .select("id, code, assigned_agent_id, risk_level")
+      .select("id, code, assigned_agent_id, risk_level, latitude, longitude")
       .eq("tenant_id", user.profile.tenant_id)
       .in("code", codes);
     const byCode = new Map((local ?? []).map((r) => [String(r.code).toUpperCase(), r]));
@@ -286,6 +288,11 @@ export async function queryPollingUnits(input: {
       const localRow = byCode.get(unit.code.toUpperCase());
       unit.assigned_agent_id = localRow?.assigned_agent_id ?? null;
       unit.risk_level = (localRow?.risk_level as string | null) ?? null;
+      // Prefer the tenant pin — that is what agent GPS check-in compares against.
+      if (localRow?.latitude != null && localRow?.longitude != null) {
+        unit.latitude = Number(localRow.latitude);
+        unit.longitude = Number(localRow.longitude);
+      }
       if (localRow) {
         const st = statusMap.get(localRow.id);
         unit.live_status = st?.status ?? "not_active";
@@ -304,14 +311,46 @@ export async function queryPollingUnits(input: {
 }
 
 export async function getPollingUnit(id: string) {
+  const gate = await authorize("polling_units.view");
+  if (!gate.ok) return null;
   const supabase = await createClient();
   const { data: national } = await supabase.from("national_polling_units").select("*").eq("id", id).maybeSingle();
   if (national) {
-    return { ...national, code: formatPollingUnitCode(national) } as Record<string, unknown>;
+    const code = formatPollingUnitCode(national);
+    // Agent login uses the tenant-local row. Prefer that pin on the editor so HQ
+    // sees the same coordinates the Field Agent app checks against.
+    const { data: local } = await supabase
+      .from("polling_units")
+      .select(
+        "id, latitude, longitude, geocode_status, address, risk_level, security_notes, logistics, assigned_agent_id, registered_voters"
+      )
+      .eq("tenant_id", gate.user.profile.tenant_id)
+      .ilike("code", code)
+      .maybeSingle();
+    return {
+      ...national,
+      code,
+      catalog_id: national.id,
+      local_id: local?.id ?? null,
+      latitude: local?.latitude ?? national.latitude,
+      longitude: local?.longitude ?? national.longitude,
+      geocode_status: local?.geocode_status ?? national.geocode_status,
+      address: local?.address ?? national.address,
+      registered_voters: local?.registered_voters ?? national.registered_voters,
+      risk_level: local?.risk_level ?? "low",
+      security_notes: local?.security_notes ?? null,
+      logistics: local?.logistics ?? null,
+      assigned_agent_id: local?.assigned_agent_id ?? null,
+    } as Record<string, unknown>;
   }
   const row = await getRecord<Record<string, unknown>>("polling_units", id);
   if (!row) return row;
-  return { ...row, code: formatPollingUnitCode(row as PollingUnitListItem) } as Record<string, unknown>;
+  return {
+    ...row,
+    code: formatPollingUnitCode(row as PollingUnitListItem),
+    catalog_id: null,
+    local_id: row.id,
+  } as Record<string, unknown>;
 }
 
 export async function createPollingUnit(formData: FormData) {
@@ -323,9 +362,15 @@ export async function createPollingUnit(formData: FormData) {
   const stateName = String(formData.get("state") ?? "").trim() || "Edo";
   const parsed = parsePollingUnitCode(String(formData.get("code") ?? ""));
   const stateCode = String(formData.get("state_code") ?? "").trim() || parsed?.state || null;
+  const coords = resolvePollingUnitCoordinates({
+    latitude: formData.get("latitude"),
+    longitude: formData.get("longitude"),
+    paste: formData.get("coordinates_paste"),
+  });
+  if (!coords.ok) return { error: coords.error };
   const supabase = await createClient();
-  const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
-  const lng = formData.get("longitude") ? Number(formData.get("longitude")) : null;
+  const lat = coords.latitude;
+  const lng = coords.longitude;
   const code = formatPollingUnitCode({
     code: String(formData.get("code") ?? ""),
     state: stateName,
@@ -355,7 +400,7 @@ export async function createPollingUnit(formData: FormData) {
     security_notes: (formData.get("security_notes") as string) || null,
     logistics: (formData.get("logistics") as string) || null,
     assigned_agent_id: (formData.get("assigned_agent_id") as string) || null,
-    geocode_status: lat && lng ? "done" : "pending",
+    geocode_status: lat != null && lng != null ? "done" : "pending",
   };
   const { error } = await supabase.from("polling_units").insert(payload);
   if (error) return { error: error.message };
@@ -386,45 +431,111 @@ export async function updatePollingUnit(id: string, formData: FormData) {
   if (!gate.ok) return { error: gate.error };
   const writeBlocked = denyCreateIfRestricted(gate.user.role);
   if (writeBlocked) return { error: writeBlocked };
+  const coords = resolvePollingUnitCoordinates({
+    latitude: formData.get("latitude"),
+    longitude: formData.get("longitude"),
+    paste: formData.get("coordinates_paste"),
+  });
+  if (!coords.ok) return { error: coords.error };
+
   const stateName = String(formData.get("state") ?? "").trim() || "Edo";
   const parsed = parsePollingUnitCode(String(formData.get("code") ?? ""));
   const stateCode = String(formData.get("state_code") ?? "").trim() || parsed?.state || null;
-  const lat = formData.get("latitude") ? Number(formData.get("latitude")) : null;
-  const lng = formData.get("longitude") ? Number(formData.get("longitude")) : null;
-  return updateRecord(
-    "polling_units",
-    id,
-    {
-      code: formatPollingUnitCode({
-        code: String(formData.get("code") ?? ""),
-        state: stateName,
-        lga: String(formData.get("lga") ?? ""),
-        ward: String(formData.get("ward") ?? ""),
-        state_code: stateCode,
-        lg_code: (formData.get("lg_code") as string) || null,
-        ward_code: (formData.get("ward_code") as string) || null,
-        pu_code: (formData.get("pu_code") as string) || null,
-      }),
-      name: formData.get("name"),
-      ward: formData.get("ward"),
-      lga: formData.get("lga"),
-      state: stateName,
-      state_code: stateCode,
-      lg_code: formData.get("lg_code") || null,
-      ward_code: formData.get("ward_code") || null,
-      pu_code: formData.get("pu_code") || null,
-      registered_voters: formData.get("registered_voters") ? Number(formData.get("registered_voters")) : 0,
-      latitude: lat,
-      longitude: lng,
-      address: formData.get("address") || null,
-      risk_level: formData.get("risk_level") || "low",
-      security_notes: formData.get("security_notes") || null,
-      logistics: formData.get("logistics") || null,
-      assigned_agent_id: formData.get("assigned_agent_id") || null,
-      geocode_status: lat && lng ? "done" : "pending",
-    },
-    "/polling-units"
-  );
+  const lat = coords.latitude;
+  const lng = coords.longitude;
+  const code = formatPollingUnitCode({
+    code: String(formData.get("code") ?? ""),
+    state: stateName,
+    lga: String(formData.get("lga") ?? ""),
+    ward: String(formData.get("ward") ?? ""),
+    state_code: stateCode,
+    lg_code: (formData.get("lg_code") as string) || null,
+    ward_code: (formData.get("ward_code") as string) || null,
+    pu_code: (formData.get("pu_code") as string) || null,
+  });
+  const shared = {
+    code,
+    name: String(formData.get("name") ?? "").trim(),
+    ward: String(formData.get("ward") ?? "").trim(),
+    lga: String(formData.get("lga") ?? "").trim(),
+    state: stateName,
+    state_code: stateCode,
+    lg_code: (formData.get("lg_code") as string) || null,
+    ward_code: (formData.get("ward_code") as string) || null,
+    pu_code: (formData.get("pu_code") as string) || null,
+    registered_voters: formData.get("registered_voters") ? Number(formData.get("registered_voters")) : 0,
+    latitude: lat,
+    longitude: lng,
+    address: (formData.get("address") as string) || null,
+    geocode_status: lat != null && lng != null ? "done" : "pending",
+  };
+  const tenantOnly = {
+    risk_level: (formData.get("risk_level") as string) || "low",
+    security_notes: (formData.get("security_notes") as string) || null,
+    logistics: (formData.get("logistics") as string) || null,
+    assigned_agent_id: (formData.get("assigned_agent_id") as string) || null,
+  };
+
+  const tenantId = gate.user.profile.tenant_id;
+  const userClient = await createClient();
+  const admin = createServiceClient();
+
+  // HQ list/detail use national catalog UUIDs. Agent login uses tenant-local rows.
+  // Saving must update both — a national-id write into polling_units is a silent no-op.
+  const { data: national } = await userClient
+    .from("national_polling_units")
+    .select("id, code")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (national) {
+    const { error: nationalError } = await admin
+      .from("national_polling_units")
+      .update({ ...shared, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (nationalError) return { error: nationalError.message };
+
+    const { data: local } = await admin
+      .from("polling_units")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .ilike("code", code)
+      .maybeSingle();
+
+    if (local?.id) {
+      const { error: localError } = await admin
+        .from("polling_units")
+        .update({ ...shared, ...tenantOnly })
+        .eq("id", local.id)
+        .eq("tenant_id", tenantId);
+      if (localError) return { error: localError.message };
+    } else if (tenantOnly.assigned_agent_id) {
+      const { error: insertError } = await admin.from("polling_units").insert({
+        tenant_id: tenantId,
+        ...shared,
+        ...tenantOnly,
+      });
+      if (insertError) return { error: insertError.message };
+    }
+  } else {
+    const { error: localError } = await userClient
+      .from("polling_units")
+      .update({ ...shared, ...tenantOnly })
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
+    if (localError) return { error: localError.message };
+
+    await admin
+      .from("national_polling_units")
+      .update({ ...shared, updated_at: new Date().toISOString() })
+      .ilike("code", code);
+  }
+
+  revalidatePath("/polling-units");
+  revalidatePath(`/polling-units/${id}`);
+  revalidatePath("/maps");
+  revalidatePath("/polling-units/agents");
+  return { success: true };
 }
 
 export async function deletePollingUnit(id: string) {

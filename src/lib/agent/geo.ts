@@ -31,6 +31,40 @@ export function isWithinAgentLoginRadius(distanceM: number) {
 }
 
 /**
+ * Distances this far almost never mean "walk a bit closer" — the stored pin is
+ * on the wrong building/LGA (approx centroid / bad geocode). ~1 mile.
+ */
+export const AGENT_PIN_LIKELY_WRONG_FT = 5000;
+export const AGENT_PIN_LIKELY_WRONG_M = AGENT_PIN_LIKELY_WRONG_FT / FEET_PER_METER;
+
+export function isAgentPinLikelyWrong(distanceM: number) {
+  return Number.isFinite(distanceM) && distanceM >= AGENT_PIN_LIKELY_WRONG_M;
+}
+
+export function formatAgentLoginDistanceError(input: {
+  distanceM: number;
+  unitLabel: string;
+  phoneLat: number;
+  phoneLng: number;
+  pinLat: number;
+  pinLng: number;
+}) {
+  const distance = formatLoginDistance(input.distanceM);
+  if (isAgentPinLikelyWrong(input.distanceM)) {
+    return (
+      `You are ${distance} from the map pin for ${input.unitLabel}. ` +
+      `That pin is almost certainly wrong (phone ${input.phoneLat.toFixed(5)}, ${input.phoneLng.toFixed(5)} · ` +
+      `pin ${input.pinLat.toFixed(5)}, ${input.pinLng.toFixed(5)}). ` +
+      `Ask HQ to open this polling unit and paste the Google Maps coordinates for the real location.`
+    );
+  }
+  return (
+    `You are ${distance} from ${input.unitLabel}. ` +
+    `Sign in at your assigned polling unit (within ${AGENT_LOGIN_RADIUS_FT} ft).`
+  );
+}
+
+/**
  * Soft check-in (code only, no GPS) is opt-in for labs.
  * Production must send a location that matches the unit pin.
  */

@@ -8,12 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SubmitButton } from "@/components/forms/submit-button";
+import { CoordinateFields } from "@/components/polling-units/coordinate-fields";
 import { getPollingUnit, updatePollingUnit, deletePollingUnit, getTeamForAssignment } from "@/lib/polling-units/actions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canDeleteRecords, canWriteRecords } from "@/types/auth";
 
-export default async function PollingUnitDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PollingUnitDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ error?: string; saved?: string }>;
+}) {
   const { id } = await params;
+  const query = searchParams ? await searchParams : {};
   const user = await getCurrentUser();
   const canWrite = user ? canWriteRecords(user.role) : false;
   const canDelete = user ? canDeleteRecords(user.role) : false;
@@ -25,8 +33,8 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
   async function saveAction(formData: FormData) {
     "use server";
     const result = await updatePollingUnit(id, formData);
-    if (result.error) throw new Error(result.error);
-    redirect(`/polling-units/${id}`);
+    if (result.error) redirect(`/polling-units/${id}?error=${encodeURIComponent(result.error)}`);
+    redirect(`/polling-units/${id}?saved=1`);
   }
 
   async function deleteAction() {
@@ -40,6 +48,22 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
       <PageHeader title={pu.name as string} description={pu.code as string}>
         <Button variant="outline" asChild><Link href="/polling-units">Back</Link></Button>
       </PageHeader>
+
+      {query.error ? (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {query.error}
+        </p>
+      ) : null}
+      {query.saved ? (
+        <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+          Saved. Field Agent check-in now uses these coordinates (within 100 ft).
+        </p>
+      ) : null}
+      {!canWrite ? (
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+          Your role is view-only. Ask an Admin to paste the Google Maps pin for this unit.
+        </p>
+      ) : null}
 
       <Card>
         <CardContent className="pt-6">
@@ -65,9 +89,12 @@ export default async function PollingUnitDetailPage({ params }: { params: Promis
                   <option value="critical">Critical</option>
                 </NativeSelect>
               </div>
-              <div className="space-y-1"><Label htmlFor="latitude">Latitude</Label><Input id="latitude" name="latitude" type="number" step="any" defaultValue={pu.latitude != null ? String(pu.latitude) : ""} /></div>
-              <div className="space-y-1"><Label htmlFor="longitude">Longitude</Label><Input id="longitude" name="longitude" type="number" step="any" defaultValue={pu.longitude != null ? String(pu.longitude) : ""} /></div>
             </div>
+            <CoordinateFields
+              latitude={pu.latitude != null ? Number(pu.latitude) : null}
+              longitude={pu.longitude != null ? Number(pu.longitude) : null}
+              disabled={!canWrite}
+            />
             <div className="space-y-1"><Label htmlFor="address">Address</Label><Input id="address" name="address" defaultValue={(pu.address as string) ?? ""} /></div>
             <div className="space-y-1">
               <Label htmlFor="assigned_agent_id">Assigned agent</Label>

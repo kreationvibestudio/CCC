@@ -15,7 +15,7 @@ import { encryptAgentCode } from "@/lib/agent/code-vault";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
   AGENT_LOGIN_RADIUS_FT,
-  formatLoginDistance,
+  formatAgentLoginDistanceError,
   haversineMeters,
   isAgentSoftGpsEnabled,
   isWithinAgentLoginRadius,
@@ -240,24 +240,48 @@ export async function loginWithAgentCode(input: {
 
   let distanceM: number | null = null;
   let gpsVerified = false;
+  const unitLabel = formatPollingUnitCode(pu);
+  const pinLat = pu.latitude != null ? Number(pu.latitude) : null;
+  const pinLng = pu.longitude != null ? Number(pu.longitude) : null;
 
   if (hasGps) {
-    if (pu.latitude == null || pu.longitude == null) {
+    if (pinLat == null || pinLng == null || !Number.isFinite(pinLat) || !Number.isFinite(pinLng)) {
       if (!softGps) {
         return { error: "This polling unit has no map pin. Ask HQ to geocode it, then try again." };
       }
     } else {
-      distanceM = haversineMeters(lat!, lng!, Number(pu.latitude), Number(pu.longitude));
+      distanceM = haversineMeters(lat!, lng!, pinLat, pinLng);
       if (!isWithinAgentLoginRadius(distanceM)) {
+        // Keep the attempt on the roster so HQ can see the phone GPS vs the bad pin
+        // and paste the real Google coordinates onto the unit.
+        await recordAgentCheckin(admin, {
+          codeId: row.id,
+          tenantId: profile.tenant_id,
+          profileId: profile.id,
+          pollingUnitId: pu.id,
+          unitCode: unitLabel,
+          unitName: pu.name,
+          latitude: lat,
+          longitude: lng,
+          distanceM,
+          gpsVerified: false,
+        });
         return {
-          error: `You are ${formatLoginDistance(distanceM)} from ${formatPollingUnitCode(pu)}. Sign in at your assigned polling unit (within ${AGENT_LOGIN_RADIUS_FT} ft).`,
+          error: formatAgentLoginDistanceError({
+            distanceM,
+            unitLabel,
+            phoneLat: lat!,
+            phoneLng: lng!,
+            pinLat,
+            pinLng,
+          }),
         };
       }
       gpsVerified = true;
     }
   } else if (!softGps) {
     return { error: "Turn on location so we can confirm you are at your polling unit" };
-  } else if (pu.latitude != null && pu.longitude != null) {
+  } else if (pinLat != null && pinLng != null) {
     // Soft check-in exists for units HQ has not geocoded yet. When the unit does
     // have a pin, withholding GPS would otherwise be a way to sign in from
     // anywhere, so location is required.
@@ -272,7 +296,7 @@ export async function loginWithAgentCode(input: {
     tenantId: profile.tenant_id,
     profileId: profile.id,
     pollingUnitId: pu.id,
-    unitCode: formatPollingUnitCode(pu),
+    unitCode: unitLabel,
     unitName: pu.name,
     latitude: hasGps ? lat : null,
     longitude: hasGps ? lng : null,
@@ -290,13 +314,13 @@ export async function loginWithAgentCode(input: {
     },
     unit: {
       id: pu.id,
-      code: formatPollingUnitCode(pu),
-      pu_code: formatPollingUnitCode(pu),
+      code: unitLabel,
+      pu_code: unitLabel,
       name: pu.name,
       ward: pu.ward,
       lga: pu.lga,
-      latitude: pu.latitude != null ? Number(pu.latitude) : null,
-      longitude: pu.longitude != null ? Number(pu.longitude) : null,
+      latitude: pinLat,
+      longitude: pinLng,
       distance_m: distanceM != null ? Math.round(distanceM) : null,
     },
     gpsVerified,

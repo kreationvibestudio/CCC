@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/forms/submit-button";
+import { CoordinateFields } from "@/components/polling-units/coordinate-fields";
 import { createPollingUnit } from "@/lib/polling-units/actions";
 import { requireCanCreateOrRedirect } from "@/lib/auth/session";
 
@@ -42,10 +43,7 @@ export default async function NewPollingUnitPage() {
             </div>
             <div className="space-y-1"><Label htmlFor="state">State</Label><Input id="state" name="state" defaultValue="Edo" /></div>
             <div className="space-y-1"><Label htmlFor="registered_voters">Registered voters</Label><Input id="registered_voters" name="registered_voters" type="number" /></div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1"><Label htmlFor="latitude">Latitude</Label><Input id="latitude" name="latitude" type="number" step="any" /></div>
-              <div className="space-y-1"><Label htmlFor="longitude">Longitude</Label><Input id="longitude" name="longitude" type="number" step="any" /></div>
-            </div>
+            <CoordinateFields />
             <SubmitButton label="Add polling unit" />
           </form>
         </CardContent>

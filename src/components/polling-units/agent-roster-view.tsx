@@ -68,7 +68,7 @@ function checkinSummary(input: {
     return `Checked in at unit ${when}${distance}`;
   }
   if (input.lastLoginDistanceM != null) {
-    return `Signed in ${when} · ${formatLoginDistance(input.lastLoginDistanceM)} from pin`;
+    return `Sign-in attempt ${when} · ${formatLoginDistance(input.lastLoginDistanceM)} from pin (fix the unit map pin if this is huge)`;
   }
   return `Signed in ${when}`;
 }
